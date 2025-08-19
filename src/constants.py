@@ -1,0 +1,241 @@
+# constants.py
+from definitions_loader import load_definitions
+
+# --- LOAD DYNAMIC DEFINITIONS FROM JSON ---
+_defs = load_definitions()
+
+PLAYER_ROLES = _defs['player_roles']
+ROLE_SPECIFIC_WEIGHTS = _defs['role_specific_weights']
+POSITION_TO_ROLE_MAPPING = _defs['position_to_role_mapping']
+TACTIC_ROLES = _defs['tactic_roles']
+TACTIC_LAYOUTS = _defs['tactic_layouts']
+# -----------------------------------------
+
+# Attribute mapping (HTML abbreviations to full names)
+attribute_mapping = {
+    "Reg": "Registration",
+    "Inf": "Information",
+    "Name": "Name",
+    "Age": "Age",
+    "Wage": "Wage",
+    "Transfer Value": "Transfer Value",
+    "Nat": "Nationality",
+    "2nd Nat": "Second Nationality",
+    "Position": "Position",
+    "Personality": "Personality",
+    "Media Handling": "Media Handling",
+    "Av Rat": "Average Rating",
+    "Left Foot": "Left Foot",
+    "Right Foot": "Right Foot",
+    "Height": "Height",
+    "1v1": "One vs One",
+    "Acc": "Acceleration",
+    "Aer": "Aerial Reach",
+    "Agg": "Aggression",
+    "Agi": "Agility",
+    "Ant": "Anticipation",
+    "Bal": "Balance",
+    "Bra": "Bravery",
+    "Cmd": "Command of Area",
+    "Cnt": "Concentration",
+    "Cmp": "Composure",
+    "Cro": "Crossing",
+    "Dec": "Decisions",
+    "Det": "Determination",
+    "Dri": "Dribbling",
+    "Fin": "Finishing",
+    "Fir": "First Touch",
+    "Fla": "Flair",
+    "Han": "Handling",
+    "Hea": "Heading",
+    "Jum": "Jumping Reach",
+    "Kic": "Kicking",
+    "Ldr": "Leadership",
+    "Lon": "Long Shots",
+    "Mar": "Marking",
+    "OtB": "Off the Ball",
+    "Pac": "Pace",
+    "Pas": "Passing",
+    "Pos": "Positioning",
+    "Ref": "Reflexes",
+    "Sta": "Stamina",
+    "Str": "Strength",
+    "Tck": "Tackling",
+    "Tea": "Teamwork",
+    "Tec": "Technique",
+    "Thr": "Throwing",
+    "TRO": "Rushing Out (Tendency)",
+    "Vis": "Vision",
+    "Wor": "Work Rate",
+    "Cor": "Corners",
+    "Club": "Club"
+}
+
+# Generate a flat list of all valid role abbreviations for internal use
+VALID_ROLES = sorted([role for category in PLAYER_ROLES.values() for role in category.keys()])
+
+
+# Columns available for sorting in the Assign Roles page
+SORTABLE_COLUMNS = [
+    "Name",
+    "Age",
+    "Average Rating",
+    "Position",
+    "Club",
+    "Unique ID"
+]
+
+# Filter options for the Assign Roles page
+FILTER_OPTIONS = [
+    "All Players",
+    "Unassigned Players",
+    "Players Not From My Club",
+    "Unassigned Players Not From My Club"
+]
+
+# Columns for Role Analysis page
+ROLE_ANALYSIS_COLUMNS = [
+    "Unique ID",
+    "Name",
+    "Age",
+    "Position",
+    "Left Foot",
+    "Right Foot",
+    "Height",
+    "Club",
+    "Transfer Value",
+    "DWRS Rating (Absolute)",
+    "DWRS Rating (Normalized)"
+]
+
+# Columns for Player-Role Matrix page (base columns + roles)
+PLAYER_ROLE_MATRIX_COLUMNS = [
+    "Name",
+    "Age",
+    "Position",
+    "Left Foot",
+    "Right Foot",
+    "Height",
+    "Club",
+    "Transfer Value"
+]
+
+# Global stat categories for DWRS rating
+GLOBAL_STAT_CATEGORIES = {
+    "Pace": "Extremely Important",
+    "Acceleration": "Extremely Important",
+    "Jumping Reach": "Important",
+    "Anticipation": "Important",
+    "Balance": "Important",
+    "Agility": "Important",
+    "Concentration": "Important",
+    "Finishing": "Important",
+    "Work Rate": "Good",
+    "Dribbling": "Good",
+    "Stamina": "Good",
+    "Strength": "Good",
+    "Passing": "Good",
+    "Determination": "Good",
+    "Vision": "Good",
+    "Long Shots": "Decent",
+    "Marking": "Decent",
+    "Decisions": "Decent",
+    "First Touch": "Decent",
+    "Off the Ball": "Almost Irrelevant",
+    "Tackling": "Almost Irrelevant",
+    "Teamwork": "Almost Irrelevant",
+    "Composure": "Almost Irrelevant",
+    "Technique": "Almost Irrelevant",
+    "Positioning": "Almost Irrelevant"
+}
+
+# GK stat categories for DWRS rating
+GK_STAT_CATEGORIES = {
+    "Agility": "Top Importance",
+    "Aerial Reach": "High Importance",
+    "Reflexes": "High Importance",
+    "Command of Area": "Medium Importance",
+    "Handling": "Medium Importance",
+    "One vs One": "Medium Importance",
+    "Kicking": "Key",
+    "Anticipation": "Key",
+    "Composure": "Key",
+    "Concentration": "Key",
+    "Positioning": "Key",
+    "Communication": "Preferable",
+    "Eccentricity": "Preferable",
+    "First Touch": "Preferable",
+    "Passing": "Preferable",
+    "Throwing": "Preferable",
+    "Vision": "Preferable",
+    "Acceleration": "Preferable",
+    "Decisions": "Preferable",
+    "Rushing Out (Tendency)": "Preferable",
+    "Aggression": "Other",
+    "Bravery": "Other",
+    "Determination": "Other",
+    "Flair": "Other",
+    "Leadership": "Other",
+    "Off the Ball": "Other",
+    "Work Rate": "Other",
+    "Balance": "Other",
+    "Jumping Reach": "Other",
+    "Natural Fitness": "Other",
+    "Pace": "Other",
+    "Stamina": "Other",
+    "Strength": "Other",
+    "Free Kick Taking": "Other",
+    "Penalty Taking": "Other",
+    "Technique": "Other"
+}
+
+# Default global weights for DWRS rating (field players)
+WEIGHT_DEFAULTS = {
+    "Extremely Important": 8.0,
+    "Important": 4.0,
+    "Good": 2.0,
+    "Decent": 1.0,
+    "Almost Irrelevant": 0.2
+}
+
+# Default GK weights for DWRS rating
+GK_WEIGHT_DEFAULTS = {
+    "Top Importance": 10.0,
+    "High Importance": 8.0,
+    "Medium Importance": 6.0,
+    "Key": 4.0,
+    "Preferable": 2.0,
+    "Other": 0.5
+}
+
+# Default role-specific multipliers
+ROLE_MULTIPLIERS_DEFAULTS = {
+    "key": 1.5,
+    "preferable": 1.2
+}
+
+
+# Custom CSS for visual design (dark theme, FM-inspired)
+CSS_STYLES = """
+    <style>
+    .main {
+        background-color: #1e1e1e;
+        color: white;
+    }
+    .stButton>button {
+        background-color: #0055a4;
+        color: white;
+        border-radius: 5px;
+    }
+    .stDataFrame {
+        background-color: #2e2e2e;
+        color: white;
+    }
+    h1, h2 {
+        color: #ffffff;
+    }
+    .sidebar .sidebar-content {
+        background-color: #2e2e2e;
+    }
+    </style>
+"""
