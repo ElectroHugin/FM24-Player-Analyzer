@@ -1,13 +1,13 @@
 # analytics.py
 
-from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, ROLE_SPECIFIC_WEIGHTS
+from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_role_specific_weights
 from config_handler import get_role_multiplier
 
 def calculate_dwrs(player, role, weights):
     all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
     stat_categories = GK_STAT_CATEGORIES if role in all_gk_roles else GLOBAL_STAT_CATEGORIES
     components = {cat: [] for cat in weights}
-    role_weights = ROLE_SPECIFIC_WEIGHTS.get(role, {"key": [], "preferable": []})
+    role_weights = get_role_specific_weights().get(role, {"key": [], "preferable": []})
     key_attrs, pref_attrs = role_weights["key"], role_weights["preferable"]
     key_mult, pref_mult = get_role_multiplier('key'), get_role_multiplier('preferable')
     

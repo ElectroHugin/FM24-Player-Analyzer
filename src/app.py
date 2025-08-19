@@ -9,9 +9,11 @@ import urllib.parse
 from data_parser import load_data, parse_and_update_data, get_filtered_players, get_players_by_role, get_player_role_matrix
 from sqlite_db import (update_player_roles, get_user_club, set_user_club, update_dwrs_ratings, get_all_players, 
                      get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role)
-from constants import (CSS_STYLES, VALID_ROLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLES, PLAYER_ROLE_MATRIX_COLUMNS,
-                     POSITION_TO_ROLE_MAPPING, TACTIC_ROLES, TACTIC_LAYOUTS)
+from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE_MATRIX_COLUMNS,
+                     get_player_roles, get_valid_roles, get_position_to_role_mapping, 
+                     get_tactic_roles, get_tactic_layouts)
 from config_handler import get_weight, set_weight, get_role_multiplier, set_role_multiplier, get_db_name, set_db_name
+from definitions_handler import get_definitions, save_definitions
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
 st.markdown(CSS_STYLES, unsafe_allow_html=True)
@@ -19,14 +21,20 @@ st.markdown(CSS_STYLES, unsafe_allow_html=True)
 def clear_all_caches():
     st.cache_data.clear()
 
-ROLE_DISPLAY_MAP = {role: name for category in PLAYER_ROLES.values() for role, name in category.items()}
-def format_role_display(role_abbr): return ROLE_DISPLAY_MAP.get(role_abbr, role_abbr)
-def format_role_display_with_all(role_abbr): return "All Roles" if role_abbr == "All Roles" else ROLE_DISPLAY_MAP.get(role_abbr, role_abbr)
+def get_role_display_map():
+    player_roles = get_player_roles()
+    return {role: name for category in player_roles.values() for role, name in category.items()}
+
+def format_role_display(role_abbr):
+    return get_role_display_map().get(role_abbr, role_abbr)
+
+def format_role_display_with_all(role_abbr):
+    return "All Roles" if role_abbr == "All Roles" else get_role_display_map().get(role_abbr, role_abbr)
 
 def sidebar():
     with st.sidebar:
         st.header("Navigation")
-        page_options = ["All Players", "Assign Roles", "Role Analysis", "Player-Role Matrix", "Best Position Calculator", "Player Comparison", "DWRS Progress", "Edit Player Data", "Settings"]
+        page_options = ["All Players", "Assign Roles", "Role Analysis", "Player-Role Matrix", "Best Position Calculator", "Player Comparison", "DWRS Progress", "Edit Player Data", "Create New Role", "Settings"]
         page = st.radio("Go to", page_options)
         uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
         df = load_data()
@@ -52,7 +60,7 @@ def main_page(uploaded_file):
             st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
             return
         clear_all_caches()
-        update_dwrs_ratings(df, VALID_ROLES)
+        update_dwrs_ratings(df, get_valid_roles())
         st.success("Data updated successfully!")
         st.rerun()
     df = load_data()
@@ -97,7 +105,7 @@ def assign_roles_page():
         if role_changes:
             update_player_roles(role_changes)
             affected = df[df['Unique ID'].isin(role_changes.keys())]
-            update_dwrs_ratings(affected, VALID_ROLES)
+            update_dwrs_ratings(affected, get_valid_roles())
             clear_all_caches()
             st.success(f"Successfully updated roles for {len(role_changes)} players!")
             st.rerun()
@@ -107,18 +115,18 @@ def assign_roles_page():
     c1, c2 = st.columns(2)
     if c1.button("Auto-Assign to Unassigned Players"):
         unassigned = df[df['Assigned Roles'].apply(lambda x: not x)]
-        changes = {p['Unique ID']: sorted(list(set(r for pos in parse_position_string(p['Position']) for r in POSITION_TO_ROLE_MAPPING.get(pos, [])))) for _, p in unassigned.iterrows()}
+        changes = {p['Unique ID']: sorted(list(set(r for pos in parse_position_string(p['Position']) for r in get_position_to_role_mapping().get(pos, [])))) for _, p in unassigned.iterrows()}
         handle_role_update({k: v for k, v in changes.items() if v})
     if c2.button("⚠️ Auto-Assign to ALL Players"):
-        changes = {p['Unique ID']: sorted(list(set(r for pos in parse_position_string(p['Position']) for r in POSITION_TO_ROLE_MAPPING.get(pos, [])))) for _, p in df.iterrows()}
+        changes = {p['Unique ID']: sorted(list(set(r for pos in parse_position_string(p['Position']) for r in get_position_to_role_mapping().get(pos, [])))) for _, p in df.iterrows()}
         handle_role_update({k: v for k, v in changes.items() if set(v) != set(df[df['Unique ID'] == k]['Assigned Roles'].iloc[0])})
     
     st.subheader("Assign/Edit Roles Individually")
     st.dataframe(filtered_df[['Name', 'Position', 'Club', 'Assigned Roles']], use_container_width=True, hide_index=True)
     changes = {}
     for _, row in filtered_df.iterrows():
-        new = st.multiselect(f"Roles for {row['Name']} ({row['Position']})", options=VALID_ROLES, default=row['Assigned Roles'], key=f"roles_{row['Unique ID']}", format_func=format_role_display)
-        #new = st.multiselect(f"Roles for {row['Name']}", options=VALID_ROLES, default=row['Assigned Roles'], key=f"roles_{row['Unique ID']}", format_func=format_role_display)
+        new = st.multiselect(f"Roles for {row['Name']} ({row['Position']})", options=get_valid_roles(), default=row['Assigned Roles'], key=f"roles_{row['Unique ID']}", format_func=format_role_display)
+        #new = st.multiselect(f"Roles for {row['Name']}", options=get_valid_roles(), default=row['Assigned Roles'], key=f"roles_{row['Unique ID']}", format_func=format_role_display)
         if new != row['Assigned Roles']: changes[row['Unique ID']] = new
     if st.button("Save All Individual Changes"): handle_role_update(changes)
 
@@ -128,7 +136,7 @@ def role_analysis_page():
     if not user_club:
         st.warning("Please select your club in the sidebar.")
         return
-    role = st.selectbox("Select Role", options=VALID_ROLES, format_func=format_role_display)
+    role = st.selectbox("Select Role", options=get_valid_roles(), format_func=format_role_display)
     my_df, second_df, scout_df = get_players_by_role(role, user_club, second_club)
     st.subheader(f"Players from {user_club}")
     st.dataframe(my_df, use_container_width=True, hide_index=True)
@@ -152,7 +160,7 @@ def player_role_matrix_page():
     st.subheader("Display Options")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        tactic_options = ["All Roles"] + list(TACTIC_ROLES.keys())
+        tactic_options = ["All Roles"] + list(get_tactic_roles().keys())
         selected_tactic = st.selectbox("Select Tactic", options=tactic_options)
     with col2:
         show_extra_details = st.checkbox("Show Extra Details")
@@ -161,7 +169,7 @@ def player_role_matrix_page():
     with col4:
         hide_retired = st.checkbox("Hide 'Retired' Players", value=True)
     
-    selected_roles = VALID_ROLES if selected_tactic == "All Roles" else sorted(list(set(TACTIC_ROLES[selected_tactic].values())))
+    selected_roles = get_valid_roles() if selected_tactic == "All Roles" else sorted(list(set(get_tactic_roles()[selected_tactic].values())))
     full_matrix = get_player_role_matrix(user_club, second_team_club)
     
     if full_matrix.empty:
@@ -233,8 +241,8 @@ def best_position_calculator_page():
         st.warning("Please select your club in the sidebar.")
         return
 
-    tactic = st.selectbox("Select Tactic", options=list(TACTIC_ROLES.keys()))
-    positions, layout = TACTIC_ROLES[tactic], TACTIC_LAYOUTS[tactic]
+    tactic = st.selectbox("Select Tactic", options=list(get_tactic_roles().keys()))
+    positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
     all_players = get_all_players()
     my_club_players = [p for p in all_players if p['Club'] == user_club]
     
@@ -400,7 +408,7 @@ def dwrs_progress_page():
         st.info("No players available.")
         return
     names = st.multiselect("Select Players", options=sorted(df['Name'].unique()))
-    role = st.selectbox("Select Role", ["All Roles"] + VALID_ROLES, format_func=format_role_display_with_all)
+    role = st.selectbox("Select Role", ["All Roles"] + get_valid_roles(), format_func=format_role_display_with_all)
     if names:
         ids = df[df['Name'].isin(names)]['Unique ID'].tolist()
         history = get_dwrs_history(ids, role if role != "All Roles" else None)
@@ -449,6 +457,113 @@ def edit_player_data_page():
                         st.rerun()
         else: st.warning("No players found.")
 
+def create_new_role_page():
+    st.title("Create a New Player Role")
+    st.info("Define a new field player role. The short name is generated automatically as you type. After creation, the app will reload with the new role available everywhere.")
+
+    # Attribute lists as you defined them
+    TECHNICAL_ATTRS = ["Corners", "Crossing", "Dribbling", "Finishing", "First Touch", "Free Kick Taking", "Heading", "Long Shots", "Long Throws", "Marking", "Passing", "Penalty Taking", "Tackling", "Technique"]
+    MENTAL_ATTRS = ["Aggression", "Anticipation", "Bravery", "Composure", "Concentration", "Decisions", "Determination", "Flair", "Leadership", "Off the Ball", "Positioning", "Teamwork", "Vision", "Work Rate"]
+    PHYSICAL_ATTRS = ["Acceleration", "Agility", "Balance", "Jumping Reach", "Natural Fitness", "Pace", "Stamina", "Strength"]
+    ALL_ATTRIBUTES = TECHNICAL_ATTRS + MENTAL_ATTRS + PHYSICAL_ATTRS
+
+    # --- PART 1: Inputs that need live feedback (moved outside the form) ---
+    st.subheader("1. Basic Role Information")
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        role_name = st.text_input("Full Role Name (e.g., 'Advanced Playmaker')", key="new_role_name", help="The descriptive name of the role.")
+    with c2:
+        role_cat = st.selectbox("Role Category", ["Defense", "Midfield", "Attack"], key="new_role_cat")
+    with c3:
+        role_duty = st.selectbox("Role Duty", ["Defend", "Support", "Attack", "Automatic", "Cover", "Stopper"], key="new_role_duty")
+
+    # Auto-generate and display short name dynamically
+    if role_name:
+        short_name_suggestion = "".join([word[0] for word in role_name.split()]).upper()
+        duty_suffix = role_duty[0] if role_duty not in ["Cover", "Stopper"] else role_duty[:2]
+        final_short_name = f"{short_name_suggestion}-{duty_suffix}"
+        st.write(f"**Generated Short Name:** `{final_short_name}` (This will be the unique ID)")
+    else:
+        final_short_name = ""
+        st.write("**Generated Short Name:** `...`")
+
+
+    with st.form("new_role_form"):
+        st.subheader("2. Position Mapping")
+        definitions = get_definitions()
+        possible_positions = sorted([p for p in definitions['position_to_role_mapping'].keys() if p != "GK"])
+        assigned_positions = st.multiselect("Assign this role to positions:", options=possible_positions, help="Select one or more positions where this role can be used.", key="new_role_positions")
+
+        st.subheader("3. Key and Preferable Attributes")
+        st.warning("A 'Key' attribute gets the highest multiplier. A 'Preferable' attribute gets a medium multiplier. If both are checked, 'Key' will be prioritized.")
+
+        tc, mc, pc = st.columns(3)
+        with tc:
+            st.markdown("#### Technical")
+            for attr in TECHNICAL_ATTRS:
+                cols = st.columns([0.6, 0.2, 0.2])
+                cols[0].write(attr)
+                cols[1].checkbox("K", key=f"key_{attr}")
+                cols[2].checkbox("P", key=f"pref_{attr}")
+        with mc:
+            st.markdown("#### Mental")
+            for attr in MENTAL_ATTRS:
+                cols = st.columns([0.6, 0.2, 0.2])
+                cols[0].write(attr)
+                cols[1].checkbox("K", key=f"key_{attr}")
+                cols[2].checkbox("P", key=f"pref_{attr}")
+        with pc:
+            st.markdown("#### Physical")
+            for attr in PHYSICAL_ATTRS:
+                cols = st.columns([0.6, 0.2, 0.2])
+                cols[0].write(attr)
+                cols[1].checkbox("K", key=f"key_{attr}")
+                cols[2].checkbox("P", key=f"pref_{attr}")
+        
+        submitted = st.form_submit_button("Create New Role", type="primary")
+
+    if submitted:
+        with st.spinner("Validating and saving new role..."):
+            if not role_name or not assigned_positions:
+                st.error("Validation Failed: Please provide a Full Role Name and at least one Position Mapping.")
+                return
+            
+            if final_short_name in definitions['role_specific_weights']:
+                st.error(f"Validation Failed: The short name '{final_short_name}' already exists. Please choose a different role name or duty.")
+                return
+
+            key_attrs, pref_attrs = [], []
+            for attr in ALL_ATTRIBUTES:
+                if st.session_state.get(f"key_{attr}"):
+                    key_attrs.append(attr)
+                elif st.session_state.get(f"pref_{attr}"):
+                    pref_attrs.append(attr)
+
+            full_role_display_name = f"{role_name} ({role_duty})"
+            
+            definitions['player_roles'][role_cat][final_short_name] = full_role_display_name
+            definitions['role_specific_weights'][final_short_name] = {"key": key_attrs, "preferable": pref_attrs}
+            for pos in assigned_positions:
+                if pos in definitions['position_to_role_mapping']:
+                    definitions['position_to_role_mapping'][pos].append(final_short_name)
+                    definitions['position_to_role_mapping'][pos].sort()
+
+            success, message = save_definitions(definitions)
+
+            if success:
+                st.success(f"Role '{full_role_display_name}' created successfully! Reloading application...")
+                
+                # --- FIX: Clear all session state keys to reset the form completely ---
+                keys_to_delete = [k for k in st.session_state.keys() if k.startswith('new_role_') or k.startswith('key_') or k.startswith('pref_')]
+                for key in keys_to_delete:
+                    del st.session_state[key]
+                
+                clear_all_caches()
+                st.rerun()
+            else:
+                st.error(f"Failed to save role: {message}")
+
 def settings_page():
     st.title("Settings")
     st.subheader("Global Stat Weights")
@@ -456,8 +571,8 @@ def settings_page():
     st.subheader("Goalkeeper Stat Weights")
     new_gk_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight("gk_" + cat.lower().replace(" ", "_"), val), 0.1, key=f"gk_{cat}") for cat, val in { "Top Importance": 10.0, "High Importance": 8.0, "Medium Importance": 6.0, "Key": 4.0, "Preferable": 2.0, "Other": 0.5 }.items()}
     st.subheader("Role Multipliers")
-    key_mult = st.number_input("Key Attributes Multiplier", 1.0, 5.0, get_role_multiplier('key'), 0.1)
-    pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 5.0, get_role_multiplier('preferable'), 0.1)
+    key_mult = st.number_input("Key Attributes Multiplier", 1.0, 20.0, get_role_multiplier('key'), 0.1)
+    pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
     st.subheader("Database Settings")
     db_name = st.text_input("Database Name (no .db)", value=get_db_name())
     if st.button("Save All Settings"):
@@ -468,7 +583,7 @@ def settings_page():
         set_db_name(db_name)
         clear_all_caches()
         df = load_data()
-        if df is not None: update_dwrs_ratings(df, VALID_ROLES)
+        if df is not None: update_dwrs_ratings(df, get_valid_roles())
         st.success("Settings updated successfully!")
         st.rerun()
 
@@ -497,6 +612,8 @@ def main():
         dwrs_progress_page()
     elif page == "Edit Player Data":
         edit_player_data_page()
+    elif page == "Create New Role":
+        create_new_role_page()
     elif page == "Settings":
         settings_page()
     else:

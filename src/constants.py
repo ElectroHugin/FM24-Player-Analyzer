@@ -1,14 +1,30 @@
 # constants.py
 from definitions_loader import load_definitions
 
-# --- LOAD DYNAMIC DEFINITIONS FROM JSON ---
-_defs = load_definitions()
 
-PLAYER_ROLES = _defs['player_roles']
-ROLE_SPECIFIC_WEIGHTS = _defs['role_specific_weights']
-POSITION_TO_ROLE_MAPPING = _defs['position_to_role_mapping']
-TACTIC_ROLES = _defs['tactic_roles']
-TACTIC_LAYOUTS = _defs['tactic_layouts']
+# --- DYNAMIC DEFINITION FUNCTIONS ---
+# By wrapping these in functions, we ensure the app can get the latest
+# definitions after they have been modified by the user.
+
+def get_player_roles():
+    return load_definitions().get('player_roles', {})
+
+def get_role_specific_weights():
+    return load_definitions().get('role_specific_weights', {})
+
+def get_position_to_role_mapping():
+    return load_definitions().get('position_to_role_mapping', {})
+
+def get_tactic_roles():
+    return load_definitions().get('tactic_roles', {})
+
+def get_tactic_layouts():
+    return load_definitions().get('tactic_layouts', {})
+
+def get_valid_roles():
+    """Generates and returns a sorted list of all valid role abbreviations."""
+    player_roles = get_player_roles()
+    return sorted([role for category in player_roles.values() for role in category.keys()])
 # -----------------------------------------
 
 # Attribute mapping (HTML abbreviations to full names)
@@ -70,10 +86,6 @@ attribute_mapping = {
     "Cor": "Corners",
     "Club": "Club"
 }
-
-# Generate a flat list of all valid role abbreviations for internal use
-VALID_ROLES = sorted([role for category in PLAYER_ROLES.values() for role in category.keys()])
-
 
 # Columns available for sorting in the Assign Roles page
 SORTABLE_COLUMNS = [

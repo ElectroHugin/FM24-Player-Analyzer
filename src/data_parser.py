@@ -2,7 +2,8 @@
 
 import pandas as pd
 from bs4 import BeautifulSoup
-from constants import attribute_mapping, VALID_ROLES, ROLE_ANALYSIS_COLUMNS, PLAYER_ROLE_MATRIX_COLUMNS, WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS
+from constants import (attribute_mapping, get_valid_roles, ROLE_ANALYSIS_COLUMNS, 
+                     PLAYER_ROLE_MATRIX_COLUMNS, WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS)
 from sqlite_db import init_db, update_player, get_all_players
 from analytics import calculate_dwrs
 from config_handler import get_weight
@@ -108,7 +109,7 @@ def get_player_role_matrix(user_club, second_team_club=None):
     for _, player in df_players.iterrows():
         player_dict = player.to_dict()
         row = {col: player_dict.get(col, '') for col in PLAYER_ROLE_MATRIX_COLUMNS}
-        for role in VALID_ROLES:
+        for role in get_valid_roles():
             if role in player_dict.get('Assigned Roles', []):
                 weights_to_use = gk_weights if role in all_gk_roles else weights
                 _, normalized = calculate_dwrs(player_dict, role, weights_to_use)
