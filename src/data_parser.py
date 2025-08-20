@@ -61,7 +61,21 @@ def get_filtered_players(filter_option="Unassigned Players", club_filter="All", 
         df = df[(df['Club'] != user_club) & (df['Assigned Roles'].apply(lambda x: not x))]
     if club_filter != "All": df = df[df['Club'] == club_filter]
     if position_filter != "All": df = df[df['Position'] == position_filter]
-    return df.sort_values(by=sort_column, ascending=sort_ascending)
+
+    # Check if the user wants to sort by player name
+    if sort_column == "Name":
+        # Helper function to extract the last name
+        def get_last_name(full_name):
+            if isinstance(full_name, str) and full_name:
+                return full_name.split(' ')[-1]
+            return ""
+        
+        # Create a temporary column for the last name, sort by it, then drop it
+        df['LastName'] = df['Name'].apply(get_last_name)
+        return df.sort_values(by=['LastName', 'Name'], ascending=sort_ascending).drop(columns=['LastName'])
+    else:
+        # For all other columns, sort normally
+        return df.sort_values(by=sort_column, ascending=sort_ascending)
 
 @st.cache_data
 def get_players_by_role(role, user_club, second_team_club=None):

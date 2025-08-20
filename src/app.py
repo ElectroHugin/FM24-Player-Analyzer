@@ -22,6 +22,12 @@ st.markdown(CSS_STYLES, unsafe_allow_html=True)
 def clear_all_caches():
     st.cache_data.clear()
 
+def get_last_name(full_name):
+    """Extracts the last name from a full name string."""
+    if isinstance(full_name, str) and full_name:
+        return full_name.split(' ')[-1]
+    return ""
+
 def get_role_display_map():
     player_roles = get_player_roles()
     return {role: name for category in player_roles.values() for role, name in category.items()}
@@ -147,7 +153,6 @@ def role_analysis_page():
     st.subheader("Scouted Players")
     st.dataframe(scout_df, use_container_width=True, hide_index=True)
 
-# --- RESTORED: Player-Role Matrix page function ---
 def player_role_matrix_page():
     st.title("Player-Role Matrix")
     st.write("View DWRS ratings for players in assigned roles. Select a tactic to see relevant roles, and toggle extra details.")
@@ -207,6 +212,12 @@ def player_role_matrix_page():
 
     def prepare_and_display_df(df, title, key_suffix, display_cols):
         st.subheader(title)
+        
+        # Sort the DataFrame by last name before displaying
+        if not df.empty:
+            df['LastName'] = df['Name'].apply(get_last_name)
+            df = df.sort_values(by=['LastName', 'Name']).drop(columns=['LastName'])
+
         search_term = st.text_input(f"Search by Name in {title}", key=f"search_{key_suffix}")
         if search_term:
             df = df[df['Name'].str.contains(search_term, case=False, na=False)]
@@ -237,15 +248,11 @@ def player_role_matrix_page():
         combined_club_matrix = pd.concat([my_club_matrix, second_team_matrix]).sort_values(by='Name')
         prepare_and_display_df(combined_club_matrix, f"Players from {user_club} & Second Team", "combined_club", my_club_display_cols)
     else:
-        # --- START OF FIX ---
         prepare_and_display_df(my_club_matrix, f"Players from {user_club}", "my_club", my_club_display_cols)
         if second_team_club and show_second_team:
             prepare_and_display_df(second_team_matrix, f"Players from {second_team_club} (Second Team)", "second_team", my_club_display_cols)
-        # --- END OF FIX ---
 
-    # --- FINAL FIX ---
     prepare_and_display_df(scouted_matrix, "Scouted Players", "scouted", scouted_display_cols)
-    # --- END FINAL FIX ---
 
 def best_position_calculator_page():
     st.title("Best Position Calculator")
@@ -430,7 +437,8 @@ def player_comparison_page():
     if df.empty:
         st.info("No players available.")
         return
-    names = st.multiselect("Select players to compare", options=sorted(df['Name'].unique()))
+    player_names = sorted(df['Name'].unique(), key=get_last_name)
+    names = st.multiselect("Select players to compare", options=player_names)
     if names:
         #st.dataframe(df[df['Name'].isin(names)].set_index('Name').T, use_container_width=True)
         comparison_df = df[df['Name'].isin(names)].copy()
@@ -450,7 +458,8 @@ def dwrs_progress_page():
     if df.empty:
         st.info("No players available.")
         return
-    names = st.multiselect("Select Players", options=sorted(df['Name'].unique()))
+    player_names = sorted(df['Name'].unique(), key=get_last_name)
+    names = st.multiselect("Select Players", options=player_names)
     role = st.selectbox("Select Role", ["All Roles"] + get_valid_roles(), format_func=format_role_display_with_all)
     if names:
         ids = df[df['Name'].isin(names)]['Unique ID'].tolist()
@@ -479,16 +488,14 @@ def edit_player_data_page():
 
     # --- Dropdown for user's club players ---
     st.subheader("Select Player from Your Club")
-    # --- MODIFIED: Updated caption to explain the new, specific emojis ---
     st.caption("Players are marked with 🎯 for a missing Primary Role and 📄 for missing Agreed Playing Time.")
     
-    my_club_players = sorted([p for p in all_players if p['Club'] == user_club], key=lambda x: x['Name'])
+    my_club_players = sorted([p for p in all_players if p['Club'] == user_club], key=lambda p: get_last_name(p['Name']))
     
     player_options_map = {}
     dropdown_options = ["--- Select a Player ---"]
 
     for player in my_club_players:
-        # --- MODIFIED: Logic to generate specific markers for each missing attribute ---
         markers = []
         # Check for Primary Role
         if not bool(player.get('primary_role')):
@@ -500,7 +507,7 @@ def edit_player_data_page():
         # Join the markers with a space if there are multiple
         marker = f" {' '.join(markers)}" if markers else ""
         display_name = f"{player['Name']}{marker}"
-        # --- END MODIFICATION ---
+
         
         dropdown_options.append(display_name)
         player_options_map[display_name] = player['Unique ID']
