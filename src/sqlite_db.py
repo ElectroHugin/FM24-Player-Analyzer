@@ -177,6 +177,40 @@ def set_second_team_club(club):
     conn.commit()
     conn.close()
 
+def get_favorite_tactics():
+    """Fetches the user's primary and secondary favorite tactics."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = "favorite_tactic_1"')
+    tactic1_result = cursor.fetchone()
+    cursor.execute('SELECT value FROM settings WHERE key = "favorite_tactic_2"')
+    tactic2_result = cursor.fetchone()
+    conn.close()
+    
+    tactic1 = tactic1_result[0] if tactic1_result else None
+    tactic2 = tactic2_result[0] if tactic2_result else None
+    return tactic1, tactic2
+
+def set_favorite_tactics(tactic1, tactic2):
+    """Saves the user's favorite tactics to the database."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    # Handle Tactic 1
+    if tactic1 and tactic1 != "None":
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ("favorite_tactic_1", tactic1))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "favorite_tactic_1"')
+        
+    # Handle Tactic 2
+    if tactic2 and tactic2 != "None":
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ("favorite_tactic_2", tactic2))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "favorite_tactic_2"')
+        
+    conn.commit()
+    conn.close()
+
 def get_dwrs_history(unique_ids, role=None):
     if not unique_ids: return pd.DataFrame()
     conn = connect_db()

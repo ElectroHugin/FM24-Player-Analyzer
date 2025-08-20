@@ -9,7 +9,7 @@ import urllib.parse
 from data_parser import load_data, parse_and_update_data, get_filtered_players, get_players_by_role, get_player_role_matrix
 from sqlite_db import (update_player_roles, get_user_club, set_user_club, update_dwrs_ratings, get_all_players, 
                      get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role, 
-                     update_player_apt)
+                     update_player_apt, get_favorite_tactics, set_favorite_tactics)
 from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE_MATRIX_COLUMNS,
                      get_player_roles, get_valid_roles, get_position_to_role_mapping, 
                      get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS)
@@ -161,8 +161,27 @@ def player_role_matrix_page():
     st.subheader("Display Options")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        tactic_options = ["All Roles"] + list(get_tactic_roles().keys())
-        selected_tactic = st.selectbox("Select Tactic", options=tactic_options)
+        fav_tactic1, fav_tactic2 = get_favorite_tactics()
+        all_tactics = sorted(list(get_tactic_roles().keys()))
+        
+        # Create the sorted list
+        sorted_tactics = []
+        if fav_tactic1 and fav_tactic1 in all_tactics:
+            sorted_tactics.append(fav_tactic1)
+        if fav_tactic2 and fav_tactic2 in all_tactics and fav_tactic2 != fav_tactic1:
+            sorted_tactics.append(fav_tactic2)
+        
+        # Add remaining tactics
+        for tactic in all_tactics:
+            if tactic not in sorted_tactics:
+                sorted_tactics.append(tactic)
+        
+        tactic_options = ["All Roles"] + sorted_tactics
+        
+        # The index will be 1 if a favorite is set, otherwise 0
+        default_index = 1 if fav_tactic1 else 0
+        
+        selected_tactic = st.selectbox("Select Tactic", options=tactic_options, index=default_index)
     with col2:
         show_extra_details = st.checkbox("Show Extra Details")
     with col3:
@@ -239,7 +258,24 @@ def best_position_calculator_page():
         st.warning("Please select your club in the sidebar.")
         return
 
-    tactic = st.selectbox("Select Tactic", options=list(get_tactic_roles().keys()))
+    fav_tactic1, fav_tactic2 = get_favorite_tactics()
+    all_tactics = sorted(list(get_tactic_roles().keys()))
+    
+    # Create the sorted list
+    sorted_tactics = []
+    if fav_tactic1 and fav_tactic1 in all_tactics:
+        sorted_tactics.append(fav_tactic1)
+    if fav_tactic2 and fav_tactic2 in all_tactics and fav_tactic2 != fav_tactic1:
+        sorted_tactics.append(fav_tactic2)
+    
+    for tactic in all_tactics:
+        if tactic not in sorted_tactics:
+            sorted_tactics.append(tactic)
+            
+    # The index will be 0, as the favorite is now the first item
+    default_index = 0
+    
+    tactic = st.selectbox("Select Tactic", options=sorted_tactics, index=default_index)
     positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
     all_players = get_all_players()
     my_club_players = [p for p in all_players if p['Club'] == user_club]
@@ -657,6 +693,28 @@ def create_new_role_page():
 
 def settings_page():
     st.title("Settings")
+
+    st.subheader("Favorite Tactic Selection")
+    st.info("The selected tactics will appear at the top of the list on the analysis pages.")
+    
+    # Get all available tactics and add a "None" option
+    all_tactics = ["None"] + sorted(list(get_tactic_roles().keys()))
+    
+    # Get currently saved favorite tactics
+    fav_tactic1, fav_tactic2 = get_favorite_tactics()
+    
+    # Set the index for the dropdowns, defaulting to "None" (index 0)
+    index1 = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
+    index2 = all_tactics.index(fav_tactic2) if fav_tactic2 in all_tactics else 0
+
+    c1, c2 = st.columns(2)
+    with c1:
+        new_fav_tactic1 = st.selectbox("Primary Favorite Tactic", options=all_tactics, index=index1)
+    with c2:
+        new_fav_tactic2 = st.selectbox("Secondary Favorite Tactic", options=all_tactics, index=index2)
+    
+    st.divider()
+
     st.subheader("Global Stat Weights")
     new_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight(cat.lower().replace(" ", "_"), val), 0.1) for cat, val in { "Extremely Important": 8.0, "Important": 4.0, "Good": 2.0, "Decent": 1.0, "Almost Irrelevant": 0.2 }.items()}
     st.subheader("Goalkeeper Stat Weights")
@@ -666,7 +724,11 @@ def settings_page():
     pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
     st.subheader("Database Settings")
     db_name = st.text_input("Database Name (no .db)", value=get_db_name())
+    
     if st.button("Save All Settings"):
+        # --- ADDED: Save favorite tactics ---
+        set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
+        
         for cat, val in new_weights.items(): set_weight(cat.lower().replace(" ", "_"), val)
         for cat, val in new_gk_weights.items(): set_weight("gk_" + cat.lower().replace(" ", "_"), val)
         set_role_multiplier('key', key_mult)
