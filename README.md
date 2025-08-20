@@ -74,6 +74,16 @@ This project stands on the shoulders of giants in the FM community.
 *   The initial idea and data view structures were heavily inspired by the excellent **FM Client App** ([fm-client-app.vercel.app](https://fm-client-app.vercel.app/)).
 *   The custom views used for exporting player data from the game were created by the talented **PlayingSquirrel** ([@playingsquirrel on X/Twitter](https://x.com/playingsquirrel)). You can find these files [here](https://www.mediafire.com/file/ymf6xhw0bk4enjj/FM24_files.zip/file).
 
+## About the Included Tactical Formations
+
+The tactical presets available in the "Player-Role Matrix" and "Best Position Calculator" pages serve as a powerful, standardized baseline for player analysis. These are not random formations; they have been selected from the **FM-Arena Best FM24 Tactics Hall of Fame**, a community-driven effort to test and rank the most effective tactics available.
+
+You can view the full list, see detailed performance metrics, and download the original `.fmf` tactic files from the official source:
+
+*   **[FM-Arena FM24 Hall of Fame](https://fm-arena.com/table/fm24-hall-of-fame/)**
+
+Full credit for the creation, innovation, and rigorous testing of these tactics goes to their respective authors and the entire FM-Arena team. The roles and layouts have been replicated within this application to allow users to quickly evaluate their squads against some of the game's most proven and meta-defining tactical systems.
+
 ## Project Structure
 
 The project is organized to separate different aspects of the application's logic, making it easier to maintain and extend.
