@@ -66,19 +66,51 @@ def update_player_apt(unique_id, playing_time):
 def update_player(mapped_player_data):
     conn = connect_db()
     cursor = conn.cursor()
+    
+    # Check if the player already exists in the database
     cursor.execute('SELECT "Assigned Roles" FROM players WHERE "Unique ID" = ?', (mapped_player_data['Unique ID'],))
     result = cursor.fetchone()
-    columns = list(attribute_mapping.values()) + ['Assigned Roles']
-    values = [mapped_player_data.get(col, '') for col in attribute_mapping.values()] + ['']
+    
+    # --- START OF NEW LOGIC ---
+    
+    # 1. Handle the attributes that are in attribute_mapping (the stable part)
+    columns_to_process = list(attribute_mapping.values())
+    values_to_process = [mapped_player_data.get(col, '') for col in columns_to_process]
+    
+    # 2. Specifically check for our new "Agreed Playing Time" data from the HTML
+    new_apt = mapped_player_data.get("Agreed Playing Time")
+
     if result:
-        values[-1] = result[0] or '[]'
-        set_clause = ", ".join([f'"{col}" = ?' for col in columns])
-        cursor.execute(f'UPDATE players SET {set_clause} WHERE "Unique ID" = ?', values + [mapped_player_data['Unique ID']])
+        # Player EXISTS, so we build an UPDATE query
+        set_clause = ", ".join([f'"{col}" = ?' for col in columns_to_process])
+        final_values = values_to_process
+
+        # If new APT data was found in the file, add it to the query
+        if new_apt:
+            set_clause += ', agreed_playing_time = ?'
+            final_values.append(new_apt)
+        
+        # Add the UID for the WHERE clause
+        final_values.append(mapped_player_data['Unique ID'])
+        
+        cursor.execute(f'UPDATE players SET {set_clause} WHERE "Unique ID" = ?', final_values)
     else:
-        columns.insert(0, "Unique ID")
-        values.insert(0, mapped_player_data['Unique ID'])
-        placeholders = ", ".join(["?" for _ in columns])
-        cursor.execute(f'INSERT INTO players ({", ".join([f'"{col}"' for col in columns])}) VALUES ({placeholders})', values)
+        # Player is NEW, so we build an INSERT query
+        columns_to_insert = ["Unique ID"] + columns_to_process + ["Assigned Roles"]
+        values_to_insert = [mapped_player_data['Unique ID']] + values_to_process + [str(mapped_player_data.get('Assigned Roles', '[]'))]
+        
+        # If new APT data was found in the file, add it to the query
+        if new_apt:
+            columns_to_insert.append("agreed_playing_time")
+            values_to_insert.append(new_apt)
+
+        placeholders = ", ".join(["?" for _ in columns_to_insert])
+        column_names = ", ".join([f'"{col}"' for col in columns_to_insert])
+        
+        cursor.execute(f'INSERT INTO players ({column_names}) VALUES ({placeholders})', values_to_insert)
+
+    # --- END OF NEW LOGIC ---
+
     conn.commit()
     conn.close()
 
