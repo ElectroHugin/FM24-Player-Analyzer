@@ -190,12 +190,30 @@ def get_dwrs_history(unique_ids, role=None):
     if not unique_ids: return pd.DataFrame()
     conn = connect_db()
     placeholders = ','.join(['?'] * len(unique_ids))
+
+    # --- NEW SQL LOGIC ---
+    # We use DENSE_RANK() as a window function. It assigns a rank (which we'll call a "Snapshot Number")
+    # to each unique timestamp, partitioned by player and role. This correctly numbers the progression
+    # for each player's specific role history.
+    base_query = f"""
+        SELECT 
+            unique_id, 
+            role, 
+            dwrs_normalized, 
+            timestamp,
+            DENSE_RANK() OVER (PARTITION BY unique_id, role ORDER BY timestamp) as snapshot
+        FROM dwrs_ratings 
+        WHERE unique_id IN ({placeholders})
+    """
+    
     if role and role != "All Roles":
-        query = f"SELECT * FROM dwrs_ratings WHERE unique_id IN ({placeholders}) AND role = ? ORDER BY unique_id, timestamp"
+        query = base_query + " AND role = ? ORDER BY unique_id, role, timestamp"
         params = unique_ids + [role]
     else:
-        query = f"SELECT * FROM dwrs_ratings WHERE unique_id IN ({placeholders}) ORDER BY unique_id, role, timestamp"
+        query = base_query + " ORDER BY unique_id, role, timestamp"
         params = unique_ids
+    # --- END NEW SQL LOGIC ---
+
     df = pd.read_sql_query(query, conn, params=params)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     conn.close()
