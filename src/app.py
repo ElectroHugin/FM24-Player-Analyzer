@@ -254,36 +254,26 @@ def player_role_matrix_page():
 
     prepare_and_display_df(scouted_matrix, "Scouted Players", "scouted", scouted_display_cols)
 
+    
 def best_position_calculator_page():
     st.title("Best Position Calculator")
     st.write("A 'Primary Role' now correctly locks a player to that role, forcing them to compete on merit against other eligible players.")
 
-    # --- OPTIMIZATION: Helper function to pre-calculate and cache all role ratings ---
     @st.cache_data
     def _get_master_role_ratings(user_club):
-        """
-        Calculates all role ratings for all players in the user's club ONCE.
-        Returns a dictionary: {'role': {'player_id': rating}}
-        """
         master_ratings = {}
         all_club_players_df = pd.DataFrame([p for p in get_all_players() if p['Club'] == user_club])
         if all_club_players_df.empty:
             return {}
-
         for role in get_valid_roles():
-            # Use the existing cached function to get ratings for all players for this one role
             ratings_df, _, _ = get_players_by_role(role, user_club)
             if not ratings_df.empty:
-                # Convert the rating percentage string to a number
                 ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
-                # Create a simple {player_id: rating} dictionary for this role
                 role_ratings_dict = ratings_df.set_index('Unique ID')['DWRS'].to_dict()
                 master_ratings[role] = role_ratings_dict
         return master_ratings
-    # --- END OPTIMIZATION ---
 
     show_selection_log = False
-
     user_club = get_user_club()
     if not user_club:
         st.warning("Please select your club in the sidebar.")
@@ -291,13 +281,11 @@ def best_position_calculator_page():
 
     fav_tactic1, fav_tactic2 = get_favorite_tactics()
     all_tactics = sorted(list(get_tactic_roles().keys()))
-    
     sorted_tactics = []
     if fav_tactic1 and fav_tactic1 in all_tactics: sorted_tactics.append(fav_tactic1)
     if fav_tactic2 and fav_tactic2 in all_tactics and fav_tactic2 != fav_tactic1: sorted_tactics.append(fav_tactic2)
     for tactic in all_tactics:
         if tactic not in sorted_tactics: sorted_tactics.append(tactic)
-            
     tactic = st.selectbox("Select Tactic", options=sorted_tactics, index=0)
     
     positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
@@ -305,84 +293,87 @@ def best_position_calculator_page():
     
     log_messages = []
 
-    # --- OPTIMIZATION: Call the master ratings function once ---
     with st.spinner("Calculating all player role ratings..."):
         master_role_ratings = _get_master_role_ratings(user_club)
 
-    # --- STEP 1: Build a master list of all possible, valid assignments using fast lookups ---
     log_messages.append("--- Stage 1: Building list of all eligible player assignments ---")
     all_possible_assignments = []
-
     for player in my_club_players:
         player_primary_role = player.get('primary_role')
-        
         if player_primary_role:
-            # Player is ROLE-LOCKED.
             for pos, role_tactic in positions.items():
                 if role_tactic == player_primary_role:
-                    # Perform a lightning-fast dictionary lookup
                     rating = master_role_ratings.get(role_tactic, {}).get(player['Unique ID'], 0)
                     all_possible_assignments.append({
                         "player_id": player['Unique ID'], "player_name": player['Name'],
                         "player_apt": player.get('agreed_playing_time', '') or '',
                         "position": pos, "rating": rating
                     })
-                    log_messages.append(f"LOCKED: {player['Name']} is eligible for {pos} ({role_tactic}) with rating {rating:.0f}%.")
         else:
-            # Player is a FREE AGENT.
             for pos, role_tactic in positions.items():
-                # Perform a lightning-fast dictionary lookup
                 rating = master_role_ratings.get(role_tactic, {}).get(player['Unique ID'], 0)
                 all_possible_assignments.append({
                     "player_id": player['Unique ID'], "player_name": player['Name'],
                     "player_apt": player.get('agreed_playing_time', '') or '',
                     "position": pos, "rating": rating
                 })
-                log_messages.append(f"FREE AGENT: {player['Name']} is eligible for {pos} ({role_tactic}) with rating {rating:.0f}%.")
 
-    # --- STEP 2: Sort the master list by rating ---
     all_possible_assignments.sort(key=lambda x: x['rating'], reverse=True)
     log_messages.append("\n--- Stage 2: Sorted all assignments by merit (rating) ---")
 
-    # --- STEP 3: Assign teams using a greedy, two-pass algorithm ---
     log_messages.append("\n--- Stage 3: Assigning teams based on sorted list ---")
     default_player = {"name": "-", "rating": "0%", "apt": ""}
     starting_xi = {p: default_player.copy() for p in positions}
     b_team = {p: default_player.copy() for p in positions}
     players_on_teamsheet = set()
 
-    # First Pass: Fill the Starting XI
     for assignment in all_possible_assignments:
         pos, p_id = assignment['position'], assignment['player_id']
         if starting_xi[pos]['name'] == "-" and p_id not in players_on_teamsheet:
             starting_xi[pos] = {"name": assignment['player_name'], "rating": f"{int(assignment['rating'])}%", "apt": assignment['player_apt']}
             players_on_teamsheet.add(p_id)
-            log_messages.append(f"STARTER: Placed {assignment['player_name']} in Starting XI at {pos}.")
 
-    # Second Pass: Fill the B-Team
     for assignment in all_possible_assignments:
         pos, p_id = assignment['position'], assignment['player_id']
         if b_team[pos]['name'] == "-" and p_id not in players_on_teamsheet:
             b_team[pos] = {"name": assignment['player_name'], "rating": f"{int(assignment['rating'])}%", "apt": assignment['player_apt']}
             players_on_teamsheet.add(p_id)
-            log_messages.append(f"BACKUP: Placed {assignment['player_name']} in B-Team at {pos}.")
     
-    # --- STEP 4: Populate Depth Chart ---
+    # --- FIX: STEP 4 - Populate Depth Chart with new validation ---
     log_messages.append("\n--- Stage 4: Populating depth chart ---")
     depth = {p: [] for p in positions}
-    position_candidates = {p: [assign for assign in all_possible_assignments if assign['position'] == p] for p in positions}
+    # Use a new set here to track players added specifically to the depth chart
+    # to prevent a player appearing as depth for multiple positions.
+    players_depth = set()
 
-    for pos, candidates in position_candidates.items():
-        for candidate in candidates:
-            if candidate['player_id'] not in players_on_teamsheet and len(depth[pos]) < 3:
+    # Iterate through each position in the tactic
+    for pos in positions:
+        # Get all possible assignments for this specific position, sorted by rating
+        candidates_for_pos = sorted(
+            [assign for assign in all_possible_assignments if assign['position'] == pos],
+            key=lambda x: x['rating'],
+            reverse=True
+        )
+        
+        for candidate in candidates_for_pos:
+            # THE CRITICAL FIX: Add two new conditions to the check
+            if (
+                candidate['rating'] > 0 and  # Condition 1: Player must have a rating > 0%
+                candidate['player_id'] not in players_on_teamsheet and  # Condition 2: Not in XI or B-Team
+                candidate['player_id'] not in players_depth and  # Condition 3: Not already used as depth elsewhere
+                len(depth[pos]) < 3  # Condition 4: The depth chart for this position isn't full
+            ):
                 depth[pos].append({
-                    "name": candidate['player_name'], "rating": f"{int(candidate['rating'])}%",
+                    "name": candidate['player_name'],
+                    "rating": f"{int(candidate['rating'])}%",
                     "apt": candidate['player_apt']
                 })
+                # Add player to both sets to ensure they aren't used again anywhere
                 players_on_teamsheet.add(candidate['player_id'])
+                players_depth.add(candidate['player_id'])
                 log_messages.append(f"DEPTH: Added {candidate['player_name']} to depth for {pos}.")
-
-    # --- Display Logic (unchanged) ---
+    # --- END FIX ---
+                
     if show_selection_log:
         with st.expander("Show Team Selection Log"): st.code('\n'.join(log_messages))
 
@@ -413,6 +404,20 @@ def best_position_calculator_page():
         if players:
             player_strs = [f"{p['name']} ({p['rating']}){' - ' + p['apt'] if p['apt'] else ''}" for p in players]
             st.markdown(f"**{pos} ({positions[pos]})**: {', '.join(player_strs)}")
+
+    # --- NEW FEATURE: Display players who don't fit the tactic ---
+    st.divider()
+    surplus_players = []
+    for player in my_club_players:
+        if player['Unique ID'] not in players_on_teamsheet:
+            surplus_players.append(player['Name'])
+    
+    if surplus_players:
+        st.subheader("Players Without a Suitable Role in This Tactic")
+        st.info(", ".join(sorted(surplus_players, key=get_last_name)))
+    # --- END NEW FEATURE ---
+
+  
 
 def player_comparison_page():
     st.title("Player Comparison")
