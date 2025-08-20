@@ -1,4 +1,4 @@
-# sqlite_db.py
+# src/sqlite_db.py
 
 import sqlite3
 from datetime import datetime
@@ -30,12 +30,21 @@ def init_db():
     
     if "primary_role" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
-
+    
     if "agreed_playing_time" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "agreed_playing_time" TEXT')
-    
+
     cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-    cursor.execute("UPDATE settings SET key = 'second_team_club' WHERE key = 'youth_club'")
+
+    # This prevents the database lock error by only performing a write operation once ever.
+    cursor.execute("SELECT value FROM settings WHERE key = 'youth_club'")
+    youth_club_result = cursor.fetchone()
+    if youth_club_result:
+        youth_club_name = youth_club_result[0]
+        # Delete the old key to prevent this from running again
+        cursor.execute("DELETE FROM settings WHERE key = 'youth_club'")
+        # Insert the new key with the old value. Use INSERT OR REPLACE for maximum safety.
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("second_team_club", youth_club_name))
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS dwrs_ratings (
@@ -177,6 +186,21 @@ def set_second_team_club(club):
     conn.commit()
     conn.close()
 
+def get_dwrs_history(unique_ids, role=None):
+    if not unique_ids: return pd.DataFrame()
+    conn = connect_db()
+    placeholders = ','.join(['?'] * len(unique_ids))
+    if role and role != "All Roles":
+        query = f"SELECT * FROM dwrs_ratings WHERE unique_id IN ({placeholders}) AND role = ? ORDER BY unique_id, timestamp"
+        params = unique_ids + [role]
+    else:
+        query = f"SELECT * FROM dwrs_ratings WHERE unique_id IN ({placeholders}) ORDER BY unique_id, role, timestamp"
+        params = unique_ids
+    df = pd.read_sql_query(query, conn, params=params)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    conn.close()
+    return df
+
 def get_favorite_tactics():
     """Fetches the user's primary and secondary favorite tactics."""
     conn = connect_db()
@@ -210,18 +234,3 @@ def set_favorite_tactics(tactic1, tactic2):
         
     conn.commit()
     conn.close()
-
-def get_dwrs_history(unique_ids, role=None):
-    if not unique_ids: return pd.DataFrame()
-    conn = connect_db()
-    placeholders = ','.join(['?'] * len(unique_ids))
-    if role and role != "All Roles":
-        query = f"SELECT * FROM dwrs_ratings WHERE unique_id IN ({placeholders}) AND role = ? ORDER BY unique_id, timestamp"
-        params = unique_ids + [role]
-    else:
-        query = f"SELECT * FROM dwrs_ratings WHERE unique_id IN ({placeholders}) ORDER BY unique_id, role, timestamp"
-        params = unique_ids
-    df = pd.read_sql_query(query, conn, params=params)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    conn.close()
-    return df
