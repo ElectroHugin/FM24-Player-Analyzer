@@ -8,10 +8,11 @@ import csv
 import urllib.parse
 from data_parser import load_data, parse_and_update_data, get_filtered_players, get_players_by_role, get_player_role_matrix
 from sqlite_db import (update_player_roles, get_user_club, set_user_club, update_dwrs_ratings, get_all_players, 
-                     get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role)
+                     get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role, 
+                     update_player_apt)
 from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE_MATRIX_COLUMNS,
                      get_player_roles, get_valid_roles, get_position_to_role_mapping, 
-                     get_tactic_roles, get_tactic_layouts)
+                     get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS)
 from config_handler import get_weight, set_weight, get_role_multiplier, set_role_multiplier, get_db_name, set_db_name
 from definitions_handler import get_definitions, save_definitions
 
@@ -231,11 +232,8 @@ def best_position_calculator_page():
     st.title("Best Position Calculator")
     st.write("Players with a 'Primary Role' are locked to that role and prioritized. All other positions are filled by the best available players.")
     
-    # --- EASY TOGGLE FOR DEBUG LOG ---
     show_selection_log = False
-    # ---------------------------------
 
-    # --- Data Loading and Setup ---
     user_club = get_user_club()
     if not user_club:
         st.warning("Please select your club in the sidebar.")
@@ -248,7 +246,6 @@ def best_position_calculator_page():
     
     log_messages = []
 
-    # 1. Pre-calculate and store sorted lists of players for each role
     role_players = {}
     for pos, role in positions.items():
         df, _, _ = get_players_by_role(role, user_club)
@@ -256,13 +253,13 @@ def best_position_calculator_page():
             df['DWRS'] = pd.to_numeric(df['DWRS Rating (Normalized)'].str.rstrip('%'))
             role_players[pos] = df.sort_values(by='DWRS', ascending=False)
 
-    # --- Initialization ---
-    starting_xi = {p: ("-", "0%") for p in positions}
-    b_team = {p: ("-", "0%") for p in positions}
+    # --- MODIFIED: Initialization now uses a dictionary to hold more player info ---
+    default_player = {"name": "-", "rating": "0%", "apt": ""}
+    starting_xi = {p: default_player.copy() for p in positions}
+    b_team = {p: default_player.copy() for p in positions}
     depth = {p: [] for p in positions}
     assigned_player_ids = set()
 
-    # --- STEP 1 & 2: PLACE ALL PLAYERS WITH A PRIMARY ROLE ---
     log_messages.append("--- Stage 1: Assigning players with a Primary Role ---")
     
     primary_role_candidates = {}
@@ -283,7 +280,8 @@ def best_position_calculator_page():
                     primary_role_candidates[pos].append({
                         'id': player_data['Unique ID'],
                         'name': player_data['Name'],
-                        'rating': rating
+                        'rating': rating,
+                        'apt': player_data.get('agreed_playing_time', '') or '' # Get APT
                     })
                     log_messages.append(f"Found Primary Role Candidate: {player_data['Name']} for {pos} ({role}) at {rating:.0f}%.")
                     break
@@ -293,79 +291,83 @@ def best_position_calculator_page():
         
         if len(candidates) > 0:
             starter = candidates[0]
-            starting_xi[pos] = (starter['name'], f"{int(starter['rating'])}%")
+            # MODIFIED: Store dictionary instead of tuple
+            starting_xi[pos] = {"name": starter['name'], "rating": f"{int(starter['rating'])}%", "apt": starter['apt']}
             assigned_player_ids.add(starter['id'])
             log_messages.append(f"SUCCESS: Placed {starter['name']} in Starting XI at {pos} (Primary Role).")
 
         if len(candidates) > 1:
             backup = candidates[1]
-            b_team[pos] = (backup['name'], f"{int(backup['rating'])}%")
+            b_team[pos] = {"name": backup['name'], "rating": f"{int(backup['rating'])}%", "apt": backup['apt']}
             assigned_player_ids.add(backup['id'])
             log_messages.append(f"SUCCESS: Placed {backup['name']} in B-Team at {pos} (Primary Role).")
 
-    # --- STEP 3: FILL REMAINING SPOTS WITH BEST AVAILABLE PLAYERS ---
     log_messages.append("\n--- Stage 2: Filling remaining spots with best available players ---")
 
     remaining_assignments = []
     for pos, df_role_players in role_players.items():
         for _, player in df_role_players.iterrows():
             if player['Unique ID'] not in assigned_player_ids:
-                remaining_assignments.append({
-                    'rating': player['DWRS'],
-                    'player_name': player['Name'],
-                    'player_id': player['Unique ID'],
-                    'position': pos,
-                })
+                # Get the full player dict to access APT
+                full_player_data = next((p for p in my_club_players if p['Unique ID'] == player['Unique ID']), None)
+                if full_player_data:
+                    remaining_assignments.append({
+                        'rating': player['DWRS'],
+                        'player_name': player['Name'],
+                        'player_id': player['Unique ID'],
+                        'player_apt': full_player_data.get('agreed_playing_time', '') or '',
+                        'position': pos,
+                    })
 
     remaining_assignments.sort(key=lambda x: x['rating'], reverse=True)
 
     for assignment in remaining_assignments:
-        pos = assignment['position']
-        p_id = assignment['player_id']
-        if starting_xi[pos][0] == "-" and p_id not in assigned_player_ids:
-            starting_xi[pos] = (assignment['player_name'], f"{int(assignment['rating'])}%")
+        pos, p_id = assignment['position'], assignment['player_id']
+        if starting_xi[pos]["name"] == "-" and p_id not in assigned_player_ids:
+            starting_xi[pos] = {"name": assignment['player_name'], "rating": f"{int(assignment['rating'])}%", "apt": assignment['player_apt']}
             assigned_player_ids.add(p_id)
             log_messages.append(f"SUCCESS: Placed {assignment['player_name']} in Starting XI at {pos} (Best Available).")
 
     for assignment in remaining_assignments:
-        pos = assignment['position']
-        p_id = assignment['player_id']
-        if b_team[pos][0] == "-" and p_id not in assigned_player_ids:
-            b_team[pos] = (assignment['player_name'], f"{int(assignment['rating'])}%")
+        pos, p_id = assignment['position'], assignment['player_id']
+        if b_team[pos]["name"] == "-" and p_id not in assigned_player_ids:
+            b_team[pos] = {"name": assignment['player_name'], "rating": f"{int(assignment['rating'])}%", "apt": assignment['player_apt']}
             assigned_player_ids.add(p_id)
             log_messages.append(f"SUCCESS: Placed {assignment['player_name']} in B-Team at {pos} (Best Available).")
             
-    # --- STEP 4: POPULATE DEPTH CHART (THE FIX) ---
     log_messages.append("\n--- Stage 3: Populating depth chart ---")
     for pos in positions:
         if pos in role_players:
-            # Filter for players not in the starting XI or B-Team
             unassigned_for_role = role_players[pos][~role_players[pos]['Unique ID'].isin(assigned_player_ids)]
-            
-            # Take the top 3 unassigned players for depth
             for _, player in unassigned_for_role.head(3).iterrows():
-                depth[pos].append((player['Name'], f"{int(player['DWRS'])}%"))
+                full_player_data = next((p for p in my_club_players if p['Unique ID'] == player['Unique ID']), None)
+                player_apt = full_player_data.get('agreed_playing_time', '') or '' if full_player_data else ''
+                # MODIFIED: Store dictionary in depth list
+                depth[pos].append({"name": player['Name'], "rating": f"{int(player['DWRS'])}%", "apt": player_apt})
                 log_messages.append(f"DEPTH: Added {player['Name']} ({int(player['DWRS'])}%) to depth for {pos}.")
 
-    # --- Display Log (Conditionally) ---
     if show_selection_log:
         with st.expander("Show Team Selection Log"):
             st.code('\n'.join(log_messages))
 
-    # --- Display Logic (no changes needed) ---
+    # --- MODIFIED: display_layout now handles the new dictionary structure and shows APT ---
     def display_layout(team, title):
         st.subheader(title)
         gk_pos_key = 'GK'
         gk_role = positions.get(gk_pos_key, "GK")
-        name, rating = team.get(gk_pos_key, ("-", "0%"))
-        gk_display = f"<div style='text-align: center;'><b>{gk_pos_key}</b> ({gk_role})<br>{name}<br><i>{rating}</i></div>"
+        player_info = team.get(gk_pos_key, default_player)
+        
+        apt_html = f"<br><small><i>{player_info['apt']}</i></small>" if player_info['apt'] else ""
+        gk_display = f"<div style='text-align: center;'><b>{gk_pos_key}</b> ({gk_role})<br>{player_info['name']}<br><i>{player_info['rating']}</i>{apt_html}</div>"
         
         for row in reversed(layout):
             cols = st.columns(len(row))
             for i, pos in enumerate(row):
-                name, rating = team.get(pos, ("-", "0%"))
+                player_info = team.get(pos, default_player)
                 role = positions.get(pos, "")
-                cols[i].markdown(f"<div style='text-align: center; border: 1px solid #444; border-radius: 5px; padding: 10px; height: 100%;'><b>{pos}</b> ({role})<br>{name}<br><i>{rating}</i></div>", unsafe_allow_html=True)
+                apt_html = f"<br><small><i>{player_info['apt']}</i></small>" if player_info['apt'] else ""
+                
+                cols[i].markdown(f"<div style='text-align: center; border: 1px solid #444; border-radius: 5px; padding: 10px; height: 100%;'><b>{pos}</b> ({role})<br>{player_info['name']}<br><i>{player_info['rating']}</i>{apt_html}</div>", unsafe_allow_html=True)
             st.write("")
         
         st.markdown(gk_display, unsafe_allow_html=True)
@@ -378,8 +380,13 @@ def best_position_calculator_page():
     st.subheader("Additional Depth")
     for pos, players in depth.items():
         if players:
-            player_str = ', '.join([f'{name} ({rating})' for name, rating in players])
-            st.markdown(f"**{pos} ({positions[pos]})**: {player_str}")
+            # MODIFIED: Update player string to include APT
+            player_strs = []
+            for p in players:
+                apt_str = f" - {p['apt']}" if p['apt'] else ""
+                player_strs.append(f"{p['name']} ({p['rating']}){apt_str}")
+            
+            st.markdown(f"**{pos} ({positions[pos]})**: {', '.join(player_strs)}")
 
 def player_comparison_page():
     st.title("Player Comparison")
@@ -423,39 +430,123 @@ def dwrs_progress_page():
 def edit_player_data_page():
     st.title("Edit Player Data")
     user_club = get_user_club()
-    df = pd.DataFrame(get_all_players())
-    if df.empty:
+    if not user_club:
+        st.warning("Please select your club from the sidebar to use this feature.")
+        return
+
+    all_players = get_all_players()
+    if not all_players:
         st.info("No players loaded.")
         return
+
+    player_to_edit = None
+
+    # --- Dropdown for user's club players ---
+    st.subheader("Select Player from Your Club")
+    # --- MODIFIED: Updated caption to explain the new, specific emojis ---
+    st.caption("Players are marked with 🎯 for a missing Primary Role and 📄 for missing Agreed Playing Time.")
+    
+    my_club_players = sorted([p for p in all_players if p['Club'] == user_club], key=lambda x: x['Name'])
+    
+    player_options_map = {}
+    dropdown_options = ["--- Select a Player ---"]
+
+    for player in my_club_players:
+        # --- MODIFIED: Logic to generate specific markers for each missing attribute ---
+        markers = []
+        # Check for Primary Role
+        if not bool(player.get('primary_role')):
+            markers.append('🎯')
+        # Check for Agreed Playing Time
+        if not bool(player.get('agreed_playing_time')):
+            markers.append('📄')
+        
+        # Join the markers with a space if there are multiple
+        marker = f" {' '.join(markers)}" if markers else ""
+        display_name = f"{player['Name']}{marker}"
+        # --- END MODIFICATION ---
+        
+        dropdown_options.append(display_name)
+        player_options_map[display_name] = player['Unique ID']
+
+    selected_dropdown_option = st.selectbox("My Club Players", options=dropdown_options, index=0)
+
+    if selected_dropdown_option != "--- Select a Player ---":
+        # Find the original display name without the emoji markers to look up the ID
+        clean_name = selected_dropdown_option.split(' ')[0] + " " + selected_dropdown_option.split(' ')[1]
+        matching_keys = [k for k in player_options_map.keys() if k.startswith(clean_name)]
+        if matching_keys:
+            player_id = player_options_map[matching_keys[0]]
+            player_to_edit = next((p for p in all_players if p['Unique ID'] == player_id), None)
+
+    st.divider()
+
+    # --- Existing Search Feature (as a fallback) ---
+    st.subheader("Or, Search All Players")
     search = st.text_input("Search for a player by name")
-    if search:
-        results = df[df['Name'].str.contains(search, case=False, na=False)]
-        if not results.empty:
-            options = [f"{n} ({c})" for n, c in zip(results['Name'], results['Club'])]
-            selected = st.selectbox("Select a player to edit", options=options)
-            if selected:
-                player = results.iloc[options.index(selected)].to_dict()
-                st.write(f"### Editing: {player['Name']}")
-                st.subheader("Update Club")
-                new_club = st.text_input("Club Name", value=player['Club'])
-                if st.button("Save Club Change"):
-                    update_player_club(player['Unique ID'], new_club)
-                    clear_all_caches()
-                    st.success(f"Updated club to '{new_club}'.")
-                    st.rerun()
-                if player['Club'] == user_club:
-                    st.subheader("Set Primary Role")
-                    st.info("This role will be prioritized in the 'Best Position Calculator'.")
-                    options = ["None"] + sorted(player.get('Assigned Roles', []))
-                    current = player.get('primary_role')
-                    index = options.index(current) if current and current in options else 0
-                    new_role = st.selectbox("Primary Role", options, index, format_func=lambda x: "None" if x == "None" else format_role_display(x))
-                    if st.button("Save Primary Role"):
-                        set_primary_role(player['Unique ID'], new_role if new_role != "None" else None)
-                        clear_all_caches()
-                        st.success(f"Set primary role to {new_role}.")
-                        st.rerun()
-        else: st.warning("No players found.")
+    
+    if search and not player_to_edit:
+        results = [p for p in all_players if search.lower() in p['Name'].lower()]
+        if results:
+            search_options_map = {f"{p['Name']} ({p['Club']})": p for p in results}
+            selected_search_option = st.selectbox("Select a player from search results", options=list(search_options_map.keys()))
+            if selected_search_option:
+                player_to_edit = search_options_map[selected_search_option]
+        else:
+            st.warning("No players found with that name.")
+    
+    # --- Main Edit Form ---
+    if player_to_edit:
+        player = player_to_edit
+        st.write(f"### Editing: {player['Name']}")
+        
+        st.subheader("Update Club")
+        new_club = st.text_input("Club Name", value=player['Club'], key=f"club_{player['Unique ID']}")
+        if st.button("Save Club Change"):
+            update_player_club(player['Unique ID'], new_club)
+            clear_all_caches()
+            st.success(f"Updated club to '{new_club}'.")
+            st.rerun()
+
+        if player['Club'] == user_club:
+            st.subheader("Set Agreed Playing Time")
+            is_gk = "GK" in player.get('Position', '')
+            apt_options = GK_APT_OPTIONS if is_gk else FIELD_PLAYER_APT_OPTIONS
+            current_apt = player.get('agreed_playing_time')
+            
+            try:
+                apt_index = apt_options.index(current_apt)
+            except (ValueError, TypeError):
+                apt_index = 0
+            
+            new_apt = st.selectbox("Agreed Playing Time", options=apt_options, index=apt_index, key=f"apt_{player['Unique ID']}")
+
+            if st.button("Save Playing Time"):
+                value_to_save = None if new_apt == "None" else new_apt
+                update_player_apt(player['Unique ID'], value_to_save)
+                clear_all_caches()
+                st.success(f"Set Agreed Playing Time to '{new_apt}'.")
+                st.rerun()
+
+            st.divider()
+
+            st.subheader("Set Primary Role")
+            st.info("This role will be prioritized in the 'Best Position Calculator'.")
+            role_options = ["None"] + sorted(player.get('Assigned Roles', []))
+            current_role = player.get('primary_role')
+            
+            try:
+                role_index = role_options.index(current_role)
+            except (ValueError, TypeError):
+                role_index = 0
+
+            new_role = st.selectbox("Primary Role", role_options, index=role_index, format_func=lambda x: "None" if x == "None" else format_role_display(x), key=f"role_{player['Unique ID']}")
+            
+            if st.button("Save Primary Role"):
+                set_primary_role(player['Unique ID'], new_role if new_role != "None" else None)
+                clear_all_caches()
+                st.success(f"Set primary role to {new_role}.")
+                st.rerun()
 
 def create_new_role_page():
     st.title("Create a New Player Role")

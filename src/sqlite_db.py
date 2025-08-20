@@ -30,6 +30,9 @@ def init_db():
     
     if "primary_role" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
+
+    if "agreed_playing_time" not in existing_columns:
+        cursor.execute('ALTER TABLE players ADD COLUMN "agreed_playing_time" TEXT')
     
     cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     cursor.execute("UPDATE settings SET key = 'second_team_club' WHERE key = 'youth_club'")
@@ -41,6 +44,13 @@ def init_db():
         )
     """)
     
+    conn.commit()
+    conn.close()
+
+def update_player_apt(unique_id, playing_time):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE players SET agreed_playing_time = ? WHERE "Unique ID" = ?', (playing_time, unique_id))
     conn.commit()
     conn.close()
 
@@ -125,7 +135,7 @@ def get_all_players():
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM players')
     rows = cursor.fetchall()
-    columns = ["Unique ID"] + list(attribute_mapping.values()) + ["Assigned Roles", "primary_role"]
+    columns = ["Unique ID"] + list(attribute_mapping.values()) + ["Assigned Roles", "primary_role", "agreed_playing_time"]
     players = []
     for row in rows:
         player = dict(zip(columns, row))

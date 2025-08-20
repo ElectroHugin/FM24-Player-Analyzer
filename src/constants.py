@@ -226,6 +226,19 @@ ROLE_MULTIPLIERS_DEFAULTS = {
     "preferable": 1.2
 }
 
+# Agreed Playing Time options
+FIELD_PLAYER_APT_OPTIONS = [
+    "None", "Star Player", "Important Player", "Regular Starter", "Squad Player",
+    "Impact Sub", "Fringe Player", "Breakthrough Prospect", "Future Prospect", "Youngster", 
+    "Emergency Backup", "2nd Team Regular", "Surplus to Requirements"
+]
+
+GK_APT_OPTIONS = [
+    "None", "Star Player", "Important Player", "First-Choice Goalkeeper", "Cup Goalkeeper",
+    "Backup", "Breakthrough Prospect", "Future Prospect", "Youngster",
+    "Emergency Backup", "Surplus to Requirements"
+]
+
 
 # Custom CSS for visual design (dark theme, FM-inspired)
 CSS_STYLES = """
