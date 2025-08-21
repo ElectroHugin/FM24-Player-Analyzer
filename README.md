@@ -123,13 +123,7 @@ To run this application locally, follow these steps:
     ```
 
 3.  **Install the required Python packages:**
-    *Create a `requirements.txt` file with the following content:*
-    ```
-    streamlit
-    pandas
-    beautifulsoup4
-    ```
-    *Then run the installation command:*
+    *Run the installation command:*
     ```bash
     pip install -r requirements.txt
     ```
