@@ -83,8 +83,10 @@ attribute_mapping = {
     "TRO": "Rushing Out (Tendency)",
     "Vis": "Vision",
     "Wor": "Work Rate",
+    "UID": "Unique ID",
     "Cor": "Corners",
-    "Club": "Club"
+    "Club": "Club",
+    "Agreed Playing Time": "Agreed Playing Time"
 }
 
 # Columns available for sorting in the Assign Roles page

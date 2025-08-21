@@ -11,41 +11,63 @@ import streamlit as st
 def connect_db():
     return sqlite3.connect(get_db_file())
 
+
 def init_db():
     conn = connect_db()
     cursor = conn.cursor()
     
-    columns = ", ".join([f'"{col}" TEXT' for col in attribute_mapping.values()])
-    cursor.execute(f"""
+    # Ensure the players table exists
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS players (
-            "Unique ID" TEXT PRIMARY KEY, {columns}, "Assigned Roles" TEXT
+            "Unique ID" TEXT PRIMARY KEY, 
+            "Assigned Roles" TEXT
         )
     """)
     
+    # Get the current state of the database columns
     cursor.execute("PRAGMA table_info(players)")
     existing_columns = [col[1] for col in cursor.fetchall()]
 
-    if "Team Roles" in existing_columns and "Rushing Out (Tendency)" not in existing_columns:
-        cursor.execute('ALTER TABLE players RENAME COLUMN "Team Roles" TO "Rushing Out (Tendency)"')
-    
+    # --- START OF AUTOMATIC MIGRATION AND SCHEMA CORRECTION ---
+
+    # 1. Add any missing columns from the attribute_mapping
+    for col_name in attribute_mapping.values():
+        if col_name not in existing_columns:
+            cursor.execute(f'ALTER TABLE players ADD COLUMN "{col_name}" TEXT')
+
+    # 2. Add other special columns if they are missing
     if "primary_role" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
     
-    if "agreed_playing_time" not in existing_columns:
-        cursor.execute('ALTER TABLE players ADD COLUMN "agreed_playing_time" TEXT')
+    # The old name for agreed_playing_time
+    OLD_APT_COL = "agreed_playing_time"
+    # The new, standardized name
+    NEW_APT_COL = "Agreed Playing Time"
 
+    # 3. ONE-TIME MIGRATION: Check if the old column exists
+    if OLD_APT_COL in existing_columns:
+        # If the new standardized column doesn't exist yet, simply RENAME the old one.
+        if NEW_APT_COL not in existing_columns:
+            cursor.execute(f'ALTER TABLE players RENAME COLUMN "{OLD_APT_COL}" TO "{NEW_APT_COL}"')
+        # If both exist (a messy state), copy data from old to new, then delete old.
+        else:
+            # Copy any data from the old column to the new one, but only if the new one is empty.
+            cursor.execute(f'''
+                UPDATE players 
+                SET "{NEW_APT_COL}" = "{OLD_APT_COL}" 
+                WHERE "{NEW_APT_COL}" IS NULL OR "{NEW_APT_COL}" = ''
+            ''')
+            # Safely remove the old column
+            cursor.execute(f'ALTER TABLE players DROP COLUMN "{OLD_APT_COL}"')
+
+    # --- END OF MIGRATION LOGIC ---
+
+    # Legacy migration for other columns (can be kept for safety)
+    if "Team Roles" in existing_columns and "Rushing Out (Tendency)" not in existing_columns:
+        cursor.execute('ALTER TABLE players RENAME COLUMN "Team Roles" TO "Rushing Out (Tendency)"')
+
+    # Create other necessary tables
     cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-
-    # This prevents the database lock error by only performing a write operation once ever.
-    cursor.execute("SELECT value FROM settings WHERE key = 'youth_club'")
-    youth_club_result = cursor.fetchone()
-    if youth_club_result:
-        youth_club_name = youth_club_result[0]
-        # Delete the old key to prevent this from running again
-        cursor.execute("DELETE FROM settings WHERE key = 'youth_club'")
-        # Insert the new key with the old value. Use INSERT OR REPLACE for maximum safety.
-        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("second_team_club", youth_club_name))
-    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS dwrs_ratings (
             unique_id TEXT, role TEXT, dwrs_absolute REAL, dwrs_normalized TEXT, timestamp TEXT,
@@ -59,55 +81,57 @@ def init_db():
 def update_player_apt(unique_id, playing_time):
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute('UPDATE players SET agreed_playing_time = ? WHERE "Unique ID" = ?', (playing_time, unique_id))
+    cursor.execute('UPDATE players SET "Agreed Playing Time" = ? WHERE "Unique ID" = ?', (playing_time, unique_id))
     conn.commit()
     conn.close()
 
 def update_player(mapped_player_data):
     conn = connect_db()
     cursor = conn.cursor()
-    
+
+    uid = mapped_player_data.get('Unique ID')
+    # If there's no Unique ID, we cannot process the row.
+    if not uid:
+        conn.close()
+        return
+
     # Check if the player already exists in the database
-    cursor.execute('SELECT "Assigned Roles" FROM players WHERE "Unique ID" = ?', (mapped_player_data['Unique ID'],))
+    cursor.execute('SELECT "Unique ID" FROM players WHERE "Unique ID" = ?', (uid,))
     result = cursor.fetchone()
-    
-    # --- START OF NEW LOGIC ---
-    
-    # 1. Handle the attributes that are in attribute_mapping (the stable part)
-    columns_to_process = list(attribute_mapping.values())
-    values_to_process = [mapped_player_data.get(col, '') for col in columns_to_process]
-    
-    # 2. Specifically check for our new "Agreed Playing Time" data from the HTML
-    new_apt = mapped_player_data.get("Agreed Playing Time")
+
+    # --- START OF NEW, SAFER LOGIC ---
+
+    # Create a clean dictionary of only the columns we want to insert or update.
+    # Exclude the Unique ID itself, as it's used to identify the row, not to be set.
+    data_to_update = {k: v for k, v in mapped_player_data.items() if k != 'Unique ID'}
 
     if result:
-        # Player EXISTS, so we build an UPDATE query
-        set_clause = ", ".join([f'"{col}" = ?' for col in columns_to_process])
-        final_values = values_to_process
+        # PLAYER EXISTS: Build a dynamic UPDATE statement.
+        # This ensures we only update the columns present in the uploaded file.
+        if data_to_update: # Proceed only if there's actually data to update
+            set_clauses = [f'"{col}" = ?' for col in data_to_update.keys()]
+            values = list(data_to_update.values())
+            values.append(uid)  # Add the UID for the WHERE clause at the end
 
-        # If new APT data was found in the file, add it to the query
-        if new_apt:
-            set_clause += ', agreed_playing_time = ?'
-            final_values.append(new_apt)
-        
-        # Add the UID for the WHERE clause
-        final_values.append(mapped_player_data['Unique ID'])
-        
-        cursor.execute(f'UPDATE players SET {set_clause} WHERE "Unique ID" = ?', final_values)
+            query = f'UPDATE players SET {", ".join(set_clauses)} WHERE "Unique ID" = ?'
+            cursor.execute(query, values)
     else:
-        # Player is NEW, so we build an INSERT query
-        columns_to_insert = ["Unique ID"] + columns_to_process + ["Assigned Roles"]
-        values_to_insert = [mapped_player_data['Unique ID']] + values_to_process + [str(mapped_player_data.get('Assigned Roles', '[]'))]
-        
-        # If new APT data was found in the file, add it to the query
-        if new_apt:
-            columns_to_insert.append("agreed_playing_time")
-            values_to_insert.append(new_apt)
+        # PLAYER IS NEW: Build a dynamic INSERT statement.
+        # Start with the Unique ID
+        columns = ['"Unique ID"']
+        values = [uid]
 
-        placeholders = ", ".join(["?" for _ in columns_to_insert])
-        column_names = ", ".join([f'"{col}"' for col in columns_to_insert])
-        
-        cursor.execute(f'INSERT INTO players ({column_names}) VALUES ({placeholders})', values_to_insert)
+        # Add the rest of the data from the file
+        columns.extend([f'"{col}"' for col in data_to_update.keys()])
+        values.extend(data_to_update.values())
+
+        # Explicitly set "Assigned Roles" to an empty list for new players
+        columns.append('"Assigned Roles"')
+        values.append('[]')
+
+        placeholders = ", ".join(["?" for _ in columns])
+        query = f'INSERT INTO players ({", ".join(columns)}) VALUES ({placeholders})'
+        cursor.execute(query, values)
 
     # --- END OF NEW LOGIC ---
 
@@ -176,7 +200,13 @@ def get_all_players():
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM players')
     rows = cursor.fetchall()
-    columns = ["Unique ID"] + list(attribute_mapping.values()) + ["Assigned Roles", "primary_role", "agreed_playing_time"]
+    
+    # --- THIS IS THE CRITICAL FIX ---
+    # Get column names directly from the cursor description.
+    # This guarantees the names are in the same order as the data in each row.
+    columns = [description[0] for description in cursor.description]
+    # --- END FIX ---
+    
     players = []
     for row in rows:
         player = dict(zip(columns, row))

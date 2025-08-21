@@ -16,56 +16,51 @@ A comprehensive Streamlit-based web application designed to import, analyze, and
 
 ## How the Dynamic Weighted Role Score (DWRS) is Calculated
 
-The DWRS is the core of this application, designed to provide a single, understandable score that evaluates a player's suitability for a specific role. The formula, which was developed specifically for this project, is built on a two-layer philosophy:
+The DWRS is the core of this application, designed to provide a single, understandable score that evaluates a player's suitability for a specific role. The formula is built on a two-layer philosophy:
 
-1.  A player's general effectiveness in the match engine ("meta" attributes).
+1.  A player's general effectiveness based on attributes that are powerful in the match engine ("meta" attributes).
 2.  Their specific aptitude for the duties of a particular role (role-specific attributes).
 
-Here is a step-by-step breakdown of how the score is calculated:
+Here is a step-by-step breakdown:
 
-### Step 1: The Foundation - General "Meta" Attributes
+#### Step 1: Foundational Attribute Weighting
 
-The calculation starts with the idea that not all attributes are created equal in the Football Manager match engine. Based on extensive community testing, particularly the findings in **[this Reddit post by u/florin133](https://www.reddit.com/r/footballmanagergames/comments/16fuksi/a_not_so_short_guide_to_meta_player_attributes/)**, attributes are grouped into categories of importance:
+The calculation starts with the idea that not all attributes are created equal. Based on extensive community research, particularly the findings in **[this Reddit post by u/florin133](https://www.reddit.com/r/footballmanagergames/comments/16fuksi/a_not_so_short_guide_to_meta_player_attributes/)**, attributes are grouped into "meta" categories of importance:
 
-*   **Extremely Important:** Pace, Acceleration
-*   **Important:** Jumping Reach, Anticipation, Balance, Agility, Concentration, Finishing
-*   **Good:** Work Rate, Dribbling, Stamina, Strength, Passing, Determination, Vision
-*   **Decent:** Long Shots, Marking, Decisions, First Touch
-*   **Almost Irrelevant:** Off the Ball, Tackling, Teamwork, Composure, Technique, Positioning
+*   **Extremely Important:** Pace, Acceleration (Default Weight: 8.0)
+*   **Important:** Jumping Reach, Anticipation, Balance, Agility, Concentration, Finishing (Default Weight: 4.0)
+*   **Good:** Work Rate, Dribbling, Stamina, Strength, Passing, Determination, Vision (Default Weight: 2.0)
+*   **Decent:** Long Shots, Marking, Decisions, First Touch (Default Weight: 1.0)
+*   **Almost Irrelevant:** Off the Ball, Tackling, Teamwork, Composure, Technique, Positioning (Default Weight: 0.2)
 
 Each of these categories is assigned a base weight, establishing a foundational score for a player's general quality.
 
-### Step 2: Specialization - Role-Specific Multipliers
+#### Step 2: Role-Specific Multipliers
 
-A good general player isn't always the right player for a specific job. To reflect this, the DWRS applies a powerful multiplier to the attributes that Football Manager itself designates as "Key" or "Preferable" for a given role.
+A good general player isn't always the right player for a specific job. To reflect this, the DWRS applies a multiplier directly to an attribute's value (1-20) if it is designated as "Key" or "Preferable" for a given role.
 
-*   When calculating the score for a **Ball-Playing Defender**, attributes like Passing, Composure, and Vision receive a significant boost.
+*   When calculating the score for a **Ball-Playing Defender**, attributes like Passing, Composure, and Vision get their values boosted.
 *   When calculating for a **Winger**, Crossing and Dribbling get the same boost.
 
-This ensures that the final score heavily rewards players who are a perfect fit for the tactical instructions of a role.
+The default multipliers are:
+*   **`key_multiplier`**: **1.5x**
+*   **`preferable_multiplier`**: **1.2x**
 
-### Step 3: The Calculation in Plain English
+#### Step 3: The Calculation
 
 The final "Absolute" DWRS is calculated as follows:
 
-1.  **Attribute Grouping:** All of a player's attributes are sorted into their "meta" categories.
-2.  **Role-Specific Weighting:** Inside each category, attributes are weighted. A standard attribute has a weight of 1.0. However, if an attribute is "Preferable" for the role being analyzed, its value is multiplied by the `preferable_multiplier` (e.g., 4.0). If it's a "Key" attribute, it's multiplied by the even higher `key_multiplier` (e.g., 8.0).
-3.  **Category Averages:** A weighted average is calculated for each "meta" category.
-4.  **Final Sum:** The average of each category is then multiplied by that category's main weight (e.g., the "Extremely Important" average is multiplied by its weight) and all the results are added together to get the final score.
+1.  **Attribute Boosting:** For the role being analyzed (e.g., Winger), each of a player's attributes is checked. If an attribute like Dribbling (with a value of 16) is "Key" for a Winger, its value is boosted for this calculation: `16 * 1.5 = 24`. If another attribute is "Preferable", it is multiplied by 1.2. All other attributes keep their original value.
+2.  **Category Averages:** A simple average of these (potentially boosted) attribute values is calculated for each "meta" category from Step 1.
+3.  **Final Score:** The average of each category is then multiplied by that category's main weight (e.g., the "Extremely Important" average is multiplied by its 8.0 weight). All results are summed to get the final "Absolute" DWRS.
 
-### Step 4: Normalization - Creating the Percentage Score
+#### Step 4: Normalization (The Percentage Score)
 
-The "Absolute" score is just a number. To make it intuitive, it's converted to a percentage.
+To make the score intuitive, the "Absolute" score is converted to a percentage. This is done by comparing the player's score to two theoretical benchmarks: the score of a player with 1 in every attribute (the "Worst") and a player with 20 in every attribute (the "Best"). Your player's score is then scaled between these two points to generate the final percentage. A score of **100%** means your player has, effectively, a 20 in every attribute relevant to that role, weighted according to the system.
 
-This is done by comparing the player's score to two theoretical benchmarks:
-*   The **"Worst Possible Player":** A player with a value of 1 in every single attribute.
-*   The **"Best Possible Player":** A player with a value of 20 in every single attribute.
+#### Full Customization
 
-The system calculates the absolute DWRS for both of these theoretical players. Your player's score is then placed on this scale to generate the final percentage. A score of **100%** would mean your player has a 20 in every attribute relevant to that role, weighted according to the system.
-
-### Full Customization
-
-The entire system is transparent and customizable. All base weights for the "meta" categories and the multipliers for "Key" and "Preferable" attributes can be easily changed in the `config/config.ini` file or directly on the **Settings** page of the application.
+The entire system is transparent. All base weights for the "meta" categories and the multipliers for "Key" and "Preferable" attributes can be easily changed on the **Settings** page of the application or in the `config/config.ini` file.
 
 ### Credits and Inspiration
 

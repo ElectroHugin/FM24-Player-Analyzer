@@ -47,7 +47,21 @@ def sidebar():
         df = load_data()
         club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
         current_club = get_user_club() or "Select a club"
-        selected_club = st.selectbox("Your Club", options=club_options, index=club_options.index(current_club))
+                # --- ADD THIS BUTTON ---
+        if st.button("🚨 Clear Cache & Rerun"):
+            clear_all_caches()
+            st.rerun()
+        # --- END OF BUTTON CODE ---
+        # --- NEW ROBUST LOGIC ---
+        # Check if the current club from settings is actually in the options from the (potentially stale) cache.
+        # If not, default the index to 0 ("Select a club") to prevent a crash.
+        club_index = 0
+        if current_club in club_options:
+            club_index = club_options.index(current_club)
+        
+        selected_club = st.selectbox("Your Club", options=club_options, index=club_index)
+        # --- END ROBUST LOGIC ---
+
         if selected_club != current_club and selected_club != "Select a club":
             set_user_club(selected_club)
             st.rerun()
@@ -228,7 +242,27 @@ def player_role_matrix_page():
 
         existing_cols = [col for col in display_cols if col in df.columns]
         df_display = df[existing_cols]
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+        # --- NEW: Define column formatting ---
+        # Get all role columns that exist in this dataframe
+        role_cols_df = [role for role in get_valid_roles() if role in df_display.columns]
+        
+        # Create a configuration dictionary to format role columns as percentages
+        column_config = {
+            role: st.column_config.NumberColumn(
+                label=role, # Use the full role name in the header
+                format="%d%%",                  # Display the number with a '%' sign
+            )
+            for role in role_cols_df
+        }
+        # --- END NEW ---
+
+        st.dataframe(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config=column_config # Pass the new configuration here
+        )
         
         csv_buffer = StringIO()
         df_display.to_csv(csv_buffer, index=False)
@@ -300,13 +334,14 @@ def best_position_calculator_page():
     all_possible_assignments = []
     for player in my_club_players:
         player_primary_role = player.get('primary_role')
+        player_apt_value = player.get("Agreed Playing Time", "") or ""
         if player_primary_role:
             for pos, role_tactic in positions.items():
                 if role_tactic == player_primary_role:
                     rating = master_role_ratings.get(role_tactic, {}).get(player['Unique ID'], 0)
                     all_possible_assignments.append({
                         "player_id": player['Unique ID'], "player_name": player['Name'],
-                        "player_apt": player.get('agreed_playing_time', '') or '',
+                        "player_apt": player_apt_value,
                         "position": pos, "rating": rating
                     })
         else:
@@ -314,7 +349,7 @@ def best_position_calculator_page():
                 rating = master_role_ratings.get(role_tactic, {}).get(player['Unique ID'], 0)
                 all_possible_assignments.append({
                     "player_id": player['Unique ID'], "player_name": player['Name'],
-                    "player_apt": player.get('agreed_playing_time', '') or '',
+                    "player_apt": player_apt_value,
                     "position": pos, "rating": rating
                 })
 
@@ -609,12 +644,8 @@ def edit_player_data_page():
     selected_dropdown_option = st.selectbox("My Club Players", options=dropdown_options, index=0)
 
     if selected_dropdown_option != "--- Select a Player ---":
-        # Find the original display name without the emoji markers to look up the ID
-        clean_name = selected_dropdown_option.split(' ')[0] + " " + selected_dropdown_option.split(' ')[1]
-        matching_keys = [k for k in player_options_map.keys() if k.startswith(clean_name)]
-        if matching_keys:
-            player_id = player_options_map[matching_keys[0]]
-            player_to_edit = next((p for p in all_players if p['Unique ID'] == player_id), None)
+        player_id = player_options_map[selected_dropdown_option]
+        player_to_edit = next((p for p in all_players if p['Unique ID'] == player_id), None)
 
     st.divider()
 

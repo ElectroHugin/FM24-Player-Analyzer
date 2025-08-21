@@ -126,9 +126,15 @@ def get_player_role_matrix(user_club, second_team_club=None):
         for role in get_valid_roles():
             if role in player_dict.get('Assigned Roles', []):
                 weights_to_use = gk_weights if role in all_gk_roles else weights
-                _, normalized = calculate_dwrs(player_dict, role, weights_to_use)
-                row[role] = normalized
+                _, normalized_str = calculate_dwrs(player_dict, role, weights_to_use)
+                try:
+                    # Convert '85%' to the number 85 for correct sorting
+                    row[role] = int(normalized_str.rstrip('%'))
+                except (ValueError, AttributeError):
+                    # In case the value is invalid, store it as a missing number
+                    row[role] = None
             else:
-                row[role] = ''
+                # Use None for empty cells in a numeric column
+                row[role] = None
         matrix_data.append(row)
     return pd.DataFrame(matrix_data)
