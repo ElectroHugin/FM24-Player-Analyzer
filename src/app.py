@@ -13,7 +13,8 @@ from sqlite_db import (update_player_roles, get_user_club, set_user_club, update
 from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE_MATRIX_COLUMNS,
                      get_player_roles, get_valid_roles, get_position_to_role_mapping, 
                      get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS)
-from config_handler import get_weight, set_weight, get_role_multiplier, set_role_multiplier, get_db_name, set_db_name
+from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
+                          get_db_name, set_db_name, get_apt_weight, set_apt_weight)
 from definitions_handler import get_definitions, save_definitions
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
@@ -291,10 +292,11 @@ def player_role_matrix_page():
     
 def best_position_calculator_page():
     st.title("Best Position Calculator")
-    st.write("A 'Primary Role' now correctly locks a player to that role, forcing them to compete on merit against other eligible players.")
+    st.write("This tool now uses a 'weakest link first' algorithm to build the most balanced team. It prioritizes filling positions where the talent drop-off is highest, while respecting Primary Roles and Agreed Playing Time.")
 
     @st.cache_data
     def _get_master_role_ratings(user_club):
+        # ... (This helper function is perfect, no changes needed) ...
         master_ratings = {}
         all_club_players_df = pd.DataFrame([p for p in get_all_players() if p['Club'] == user_club])
         if all_club_players_df.empty:
@@ -307,7 +309,6 @@ def best_position_calculator_page():
                 master_ratings[role] = role_ratings_dict
         return master_ratings
 
-    show_selection_log = False
     user_club = get_user_club()
     if not user_club:
         st.warning("Please select your club in the sidebar.")
@@ -320,7 +321,12 @@ def best_position_calculator_page():
     if fav_tactic2 and fav_tactic2 in all_tactics and fav_tactic2 != fav_tactic1: sorted_tactics.append(fav_tactic2)
     for tactic in all_tactics:
         if tactic not in sorted_tactics: sorted_tactics.append(tactic)
-    tactic = st.selectbox("Select Tactic", options=sorted_tactics, index=0)
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        tactic = st.selectbox("Select Tactic", options=sorted_tactics, index=0)
+    with c2:
+        show_selection_log = st.checkbox("Show Team Selection Log", value=False)
     
     positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
     my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
@@ -330,85 +336,117 @@ def best_position_calculator_page():
     with st.spinner("Calculating all player role ratings..."):
         master_role_ratings = _get_master_role_ratings(user_club)
 
-    log_messages.append("--- Stage 1: Building list of all eligible player assignments ---")
-    all_possible_assignments = []
-    for player in my_club_players:
-        player_primary_role = player.get('primary_role')
-        player_apt_value = player.get("Agreed Playing Time", "") or ""
-        if player_primary_role:
-            for pos, role_tactic in positions.items():
-                if role_tactic == player_primary_role:
-                    rating = master_role_ratings.get(role_tactic, {}).get(player['Unique ID'], 0)
-                    all_possible_assignments.append({
-                        "player_id": player['Unique ID'], "player_name": player['Name'],
-                        "player_apt": player_apt_value,
-                        "position": pos, "rating": rating
-                    })
-        else:
-            for pos, role_tactic in positions.items():
-                rating = master_role_ratings.get(role_tactic, {}).get(player['Unique ID'], 0)
-                all_possible_assignments.append({
-                    "player_id": player['Unique ID'], "player_name": player['Name'],
-                    "player_apt": player_apt_value,
-                    "position": pos, "rating": rating
-                })
-
-    all_possible_assignments.sort(key=lambda x: x['rating'], reverse=True)
-    log_messages.append("\n--- Stage 2: Sorted all assignments by merit (rating) ---")
-
-    log_messages.append("\n--- Stage 3: Assigning teams based on sorted list ---")
-    default_player = {"name": "-", "rating": "0%", "apt": ""}
-    starting_xi = {p: default_player.copy() for p in positions}
-    b_team = {p: default_player.copy() for p in positions}
-    players_on_teamsheet = set()
-
-    for assignment in all_possible_assignments:
-        pos, p_id = assignment['position'], assignment['player_id']
-        if starting_xi[pos]['name'] == "-" and p_id not in players_on_teamsheet:
-            starting_xi[pos] = {"name": assignment['player_name'], "rating": f"{int(assignment['rating'])}%", "apt": assignment['player_apt']}
-            players_on_teamsheet.add(p_id)
-
-    for assignment in all_possible_assignments:
-        pos, p_id = assignment['position'], assignment['player_id']
-        if b_team[pos]['name'] == "-" and p_id not in players_on_teamsheet:
-            b_team[pos] = {"name": assignment['player_name'], "rating": f"{int(assignment['rating'])}%", "apt": assignment['player_apt']}
-            players_on_teamsheet.add(p_id)
+    # --- NEW: WEAKEST LINK SELECTION ALGORITHM ---
     
-    # --- FIX: STEP 4 - Populate Depth Chart with new validation ---
-    log_messages.append("\n--- Stage 4: Populating depth chart ---")
-    depth = {p: [] for p in positions}
-    # Use a new set here to track players added specifically to the depth chart
-    # to prevent a player appearing as depth for multiple positions.
-    players_depth = set()
-
-    # Iterate through each position in the tactic
-    for pos in positions:
-        # Get all possible assignments for this specific position, sorted by rating
-        candidates_for_pos = sorted(
-            [assign for assign in all_possible_assignments if assign['position'] == pos],
-            key=lambda x: x['rating'],
-            reverse=True
-        )
+    def select_team(team_positions, available_players, log_prefix="XI"):
+        team = {}
+        players_team = set()
         
-        for candidate in candidates_for_pos:
-            # THE CRITICAL FIX: Add two new conditions to the check
-            if (
-                candidate['rating'] > 0 and  # Condition 1: Player must have a rating > 0%
-                candidate['player_id'] not in players_on_teamsheet and  # Condition 2: Not in XI or B-Team
-                candidate['player_id'] not in players_depth and  # Condition 3: Not already used as depth elsewhere
-                len(depth[pos]) < 3  # Condition 4: The depth chart for this position isn't full
-            ):
-                depth[pos].append({
-                    "name": candidate['player_name'],
-                    "rating": f"{int(candidate['rating'])}%",
-                    "apt": candidate['player_apt']
-                })
-                # Add player to both sets to ensure they aren't used again anywhere
-                players_on_teamsheet.add(candidate['player_id'])
-                players_depth.add(candidate['player_id'])
-                log_messages.append(f"DEPTH: Added {candidate['player_name']} to depth for {pos}.")
-    # --- END FIX ---
+        while len(team) < len(team_positions):
+            log_messages.append(f"\n--- {log_prefix} SELECTION ROUND {len(team) + 1} ---")
+            
+            best_candidate_for_each_pos = {}
+            empty_positions = [p for p in team_positions if p not in team]
+
+            # 1. Find the best available player for EACH empty position
+            for pos in empty_positions:
+                role = team_positions[pos]
+                best_candidate = None
+                max_score = -1
+
+                for player in available_players:
+                    # Skip players already assigned
+                    if player['Unique ID'] in players_team:
+                        continue
+                    
+                    # RULE: Enforce Primary Role. If a player has one, they are ONLY considered for that role.
+                    primary_role = player.get('primary_role')
+                    if primary_role and primary_role != role:
+                        continue
+                    
+                    rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
+                    if rating > 0:
+                        apt = player.get("Agreed Playing Time", "None") or "None"
+                        apt_weight = get_apt_weight(apt)
+                        selection_score = rating * apt_weight
+
+                        if selection_score > max_score:
+                            max_score = selection_score
+                            best_candidate = {
+                                "player_id": player['Unique ID'],
+                                "player_name": player['Name'],
+                                "player_apt": apt,
+                                "rating": rating,
+                                "selection_score": selection_score,
+                                "position": pos
+                            }
                 
+                if best_candidate:
+                    best_candidate_for_each_pos[pos] = best_candidate
+                    log_messages.append(f"Best for {pos} ({role}): {best_candidate['player_name']} (Score: {best_candidate['selection_score']:.2f})")
+            
+            if not best_candidate_for_each_pos:
+                log_messages.append("No more eligible players found for remaining positions.")
+                break 
+
+            # 2. Identify the "weakest link" - the position where our best option is the least strong
+            weakest_link_pos = min(best_candidate_for_each_pos, key=lambda p: best_candidate_for_each_pos[p]['selection_score'])
+            winner = best_candidate_for_each_pos[weakest_link_pos]
+            
+            log_messages.append(f"WEAKEST LINK IDENTIFIED: {weakest_link_pos}. Assigning {winner['player_name']}.")
+            
+            # 3. Assign the player to that position and remove them from the available pool
+            team[winner['position']] = {
+                "name": winner['player_name'],
+                "rating": f"{int(winner['rating'])}%",
+                "apt": winner['player_apt']
+            }
+            players_team.add(winner['player_id'])
+            # A player once assigned cannot be picked again for this team
+            available_players = [p for p in available_players if p['Unique ID'] != winner['player_id']]
+
+        return team, available_players
+
+    # --- Run the selection process ---
+    default_player = {"name": "-", "rating": "0%", "apt": ""}
+    
+    log_messages.append("--- Stage 1: Selecting Starting XI ---")
+    starting_xi, remaining_players = select_team(positions, my_club_players, "XI")
+    
+    log_messages.append("\n--- Stage 2: Selecting B-Team ---")
+    b_team, depth_pool = select_team(positions, remaining_players, "B-Team")
+
+    # Fill any unassigned slots with default values
+    for pos in positions:
+        if pos not in starting_xi: starting_xi[pos] = default_player.copy()
+        if pos not in b_team: b_team[pos] = default_player.copy()
+    
+    players_on_teamsheet = {p['Unique ID'] for p in my_club_players if p not in depth_pool}
+
+    # --- NEW SIMPLIFIED DEPTH CHART LOGIC ---
+    log_messages.append("\n--- Stage 3: Populating depth chart from remaining players ---")
+    depth = {p: [] for p in positions}
+    if depth_pool:
+        for pos, role in positions.items():
+            candidates_for_pos = []
+            for player in depth_pool:
+                rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
+                if rating > 0:
+                    candidates_for_pos.append({
+                        "name": player['Name'],
+                        "rating": rating,
+                        "apt": player.get("Agreed Playing Time", "") or ""
+                    })
+            
+            # Sort candidates by rating and take the top 3
+            sorted_candidates = sorted(candidates_for_pos, key=lambda x: x['rating'], reverse=True)
+            for cand in sorted_candidates[:3]:
+                depth[pos].append({
+                    "name": cand['name'],
+                    "rating": f"{int(cand['rating'])}%",
+                    "apt": cand['apt']
+                })
+    
     if show_selection_log:
         with st.expander("Show Team Selection Log"): st.code('\n'.join(log_messages))
 
@@ -847,6 +885,24 @@ def settings_page():
     
     st.divider()
 
+    # --- NEW: Add Agreed Playing Time Weights Section ---
+    st.subheader("Agreed Playing Time (APT) Weights")
+    st.info("Adjust the multiplier for a player's selection score based on their promised playing time. A higher value makes them more likely to be selected.")
+    
+    all_apt_options = sorted(list(set(FIELD_PLAYER_APT_OPTIONS + GK_APT_OPTIONS) - {'None'}))
+    new_apt_weights = {}
+    
+    cols = st.columns(3)
+    col_idx = 0
+    for apt in all_apt_options:
+        with cols[col_idx % 3]:
+            # Use the new get_apt_weight function to get the current value
+            current_weight = get_apt_weight(apt)
+            new_apt_weights[apt] = st.number_input(f"Weight for '{apt}'", 0.0, 5.0, current_weight, 0.05, key=f"apt_{apt}")
+        col_idx += 1
+    
+    st.divider()
+
     st.subheader("Global Stat Weights")
     new_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight(cat.lower().replace(" ", "_"), val), 0.1) for cat, val in { "Extremely Important": 8.0, "Important": 4.0, "Good": 2.0, "Decent": 1.0, "Almost Irrelevant": 0.2 }.items()}
     st.subheader("Goalkeeper Stat Weights")
@@ -858,9 +914,12 @@ def settings_page():
     db_name = st.text_input("Database Name (no .db)", value=get_db_name())
     
     if st.button("Save All Settings"):
-        # --- ADDED: Save favorite tactics ---
         set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
         
+        # --- NEW: Save the APT weights ---
+        for apt, val in new_apt_weights.items():
+            set_apt_weight(apt, val)
+
         for cat, val in new_weights.items(): set_weight(cat.lower().replace(" ", "_"), val)
         for cat, val in new_gk_weights.items(): set_weight("gk_" + cat.lower().replace(" ", "_"), val)
         set_role_multiplier('key', key_mult)
