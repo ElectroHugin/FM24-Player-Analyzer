@@ -42,11 +42,30 @@ def parse_and_update_data(file):
     html_df = parse_html_table(file)
     if html_df is None: return None
     init_db()
+# --- NEW ROBUST LOGIC ---
+    # Create a set of all the column names our application officially recognizes from constants.py.
+    # This is our "master list" of which columns are safe to import.
+    known_columns = set(attribute_mapping.values())
+
     for _, row in html_df.iterrows():
         player_data = row.to_dict()
+
+        # Step 1: Map the columns from the HTML file using the abbreviations.
+        # This will produce keys like "Pace", "Acceleration", but also "Days Old", "Ability", etc.
         mapped_player_data = {attribute_mapping.get(k, k): v for k, v in player_data.items()}
-        mapped_player_data['Unique ID'] = player_data['UID']
-        update_player(mapped_player_data)
+
+        # Step 2: Filter the data. We create a new dictionary that ONLY includes
+        # the key-value pairs where the key is in our "master list" (known_columns).
+        # This safely discards "Days Old", "Potential", and any other unknown columns.
+        final_player_data = {k: v for k, v in mapped_player_data.items() if k in known_columns}
+
+        # Step 3: We only try to save the player to the database if a valid Unique ID exists.
+        # This prevents errors from corrupt rows in the file.
+        if 'Unique ID' in final_player_data and final_player_data['Unique ID']:
+            update_player(final_player_data)
+
+    # --- END NEW LOGIC ---
+
     return load_data()
 
 def get_filtered_players(filter_option="Unassigned Players", club_filter="All", position_filter="All", sort_column="Name", sort_ascending=True, user_club=None):
