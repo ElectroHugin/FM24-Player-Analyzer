@@ -67,7 +67,7 @@ The entire system is transparent. All base weights for the "meta" categories and
 This project stands on the shoulders of giants in the FM community.
 *   The concept for weighting "meta" attributes was inspired by the research of **u/florin133**.
 *   The initial idea and data view structures were heavily inspired by the excellent **FM Client App** ([fm-client-app.vercel.app](https://fm-client-app.vercel.app/)).
-*   The custom views used for exporting player data from the game were created by the talented **PlayingSquirrel** ([@playingsquirrel on X/Twitter](https://x.com/playingsquirrel)). You can find these files [here](https://www.mediafire.com/file/ymf6xhw0bk4enjj/FM24_files.zip/file).
+*   The custom views used for exporting player data from the game were created by the talented **PlayingSquirrel** ([@playingsquirrel on X/Twitter](https://x.com/playingsquirrel)). You can find these files [here](https://www.mediafire.com/file/ymf6xhw0bk4enjj/FM24_files.zip/file) (You might need to adjust some of these filters to include the UID. For your own players you can optionally include the "Agreed Playing Time" to import that too)
 
 ## About the Included Tactical Formations
 
@@ -107,7 +107,7 @@ To run this application locally, follow these steps:
 
 1.  **Clone the repository (when you upload it to GitHub):**
     ```bash
-    git clone https://github.com/your-username/your-repo-name.git
+    git clone https://github.com/ElectroHugin/FM24-Player-Analyzer.git
     cd your-repo-name
     ```
 
