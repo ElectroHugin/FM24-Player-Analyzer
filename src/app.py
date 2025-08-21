@@ -630,7 +630,7 @@ def edit_player_data_page():
         if not bool(player.get('primary_role')):
             markers.append('🎯')
         # Check for Agreed Playing Time
-        if not bool(player.get('agreed_playing_time')):
+        if not bool(player.get('Agreed Playing Time')):
             markers.append('📄')
         
         # Join the markers with a space if there are multiple
