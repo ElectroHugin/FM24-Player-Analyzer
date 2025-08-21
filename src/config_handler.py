@@ -3,7 +3,7 @@
 import configparser
 import os
 import streamlit as st
-from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS
+from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS
 
 # Get the absolute path to the directory this file is in (i.e., .../project/src)
 _CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,16 +16,53 @@ CONFIG_FILE = os.path.join(_PROJECT_ROOT, 'config', 'config.ini')
 @st.cache_data
 def load_config():
     config = configparser.ConfigParser()
-    # Create the config directory if it doesn't exist, to prevent errors on first run
+    config_was_modified = False
+
+    # Ensure the config directory exists before trying to read from it
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    if not os.path.exists(CONFIG_FILE):
+    
+    # Read the existing config file. If it doesn't exist, this does nothing.
+    config.read(CONFIG_FILE)
+
+    # --- NEW: Section-by-section validation and creation ---
+
+    # 1. Ensure [Database] section exists
+    if not config.has_section('Database'):
         config['Database'] = {'db_name': 'default'}
+        config_was_modified = True
+
+    # 2. Ensure [Weights] section exists
+    if not config.has_section('Weights'):
         config['Weights'] = {k.lower().replace(' ', '_'): str(v) for k, v in WEIGHT_DEFAULTS.items()}
+        config_was_modified = True
+
+    # 3. Ensure [GKWeights] section exists
+    if not config.has_section('GKWeights'):
         config['GKWeights'] = {k.lower().replace(' ', '_'): str(v) for k, v in GK_WEIGHT_DEFAULTS.items()}
+        config_was_modified = True
+
+    # 4. Ensure [RoleMultipliers] section exists
+    if not config.has_section('RoleMultipliers'):
         config['RoleMultipliers'] = {'key_multiplier': '1.5', 'preferable_multiplier': '1.2'}
+        config_was_modified = True
+
+    # 5. Ensure [APTWeights] section exists (This is the critical fix)
+    if not config.has_section('APTWeights'):
+        config['APTWeights'] = {}
+        all_apt = set(FIELD_PLAYER_APT_OPTIONS + GK_APT_OPTIONS)
+        for apt in all_apt:
+            if apt != "None":
+                key = apt.lower().replace(' ', '_')
+                config['APTWeights'][key] = '1.0'
+        config_was_modified = True
+
+    # --- End of validation ---
+
+    # If we had to add any missing sections, write the complete config back to the file
+    if config_was_modified or not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'w') as f:
             config.write(f)
-    config.read(CONFIG_FILE)
+
     return config
 
 def get_db_file():
@@ -60,6 +97,30 @@ def set_weight(key, value):
     config[section][config_key] = str(value)
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
+    load_config.clear()
+
+def get_apt_weight(key, default=1.0):
+    """Gets the weight for a given Agreed Playing Time status."""
+    if not key or key == "None":
+        return default
+    config = load_config()
+    # Standardize the key to match how it's stored in the config file
+    config_key = key.lower().replace(' ', '_')
+    # Use .get() for safe access, falling back to the default value
+    return float(config['APTWeights'].get(config_key, str(default)))
+
+def set_apt_weight(key, value):
+    """Sets the weight for a given Agreed Playing Time status."""
+    if not key or key == "None":
+        return
+    config = load_config()
+    config_key = key.lower().replace(' ', '_')
+    if 'APTWeights' not in config:
+        config['APTWeights'] = {}
+    config['APTWeights'][config_key] = str(value)
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    # Clear the cache to ensure the new value is loaded on the next call
     load_config.clear()
 
 def get_role_multiplier(type_):
