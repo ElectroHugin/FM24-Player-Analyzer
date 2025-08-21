@@ -166,3 +166,25 @@ You can customize the logic of the DWRS calculation without touching the code:
     *   `"role_specific_weights"`: Define which attributes are "key" and "preferable" for each role.
     *   `"tactic_roles"`: Define your own custom tactics by mapping positions to specific roles.
     *   `"tactic_layouts"`: Define the visual layout for your custom tactics on the "Best Position Calculator" page.
+
+
+## License, Trademarks, and Disclaimers
+
+### License
+
+All original source code created for this project, including the unique "Dynamic Weighted Role Score" (DWRS) calculation methodology, is released under the **GNU General Public License v3.0**. A copy of the license should be included in the repository. For more details, see [the full license text](https://www.gnu.org/licenses/gpl-3.0.html).
+
+### Trademarks and Third-Party Content
+
+This project is an unofficial, fan-made tool and is not endorsed by or affiliated with the creators of Football Manager.
+
+*   **Football Manager 2024:** Football Manager, the Football Manager logo, Sports Interactive, and the Sports Interactive logo are either registered trademarks or trademarks of Sports Interactive Limited. SEGA and the SEGA logo are either registered trademarks or trademarks of SEGA Corporation or its affiliates. All in-game data is the intellectual property of Sports Interactive and/or SEGA.
+
+*   **Community Content:**
+    *   The tactical formations included are replications of systems created by their respective authors and shared by the **[FM-Arena](https://fm-arena.com/table/fm24-hall-of-fame/)** community.
+    *   The custom views/filters recommended for data export are the work of **PlayingSquirrel**.
+    *   The core concept for weighting "meta" attributes was inspired by the research of **u/florin133**.
+
+### No Warranty
+
+This application is provided "as is," without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
