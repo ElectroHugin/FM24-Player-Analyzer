@@ -1376,12 +1376,12 @@
             "DCR": "BPD-D",
             "DCL": "BPD-D",
             "DL": "FBL-A",
-            "DMR": "DM-S",
-            "DML": "DM-S",
+            "DMCR": "DM-S",
+            "DMCL": "DM-S",
             "AMR": "IFR-A",
+            "AML": "IFL-S",
             "STR": "PF-S",
-            "STL": "AF-A",
-            "AML": "IFL-S"
+            "STL": "AF-A"
         },
         "4-2-3-1 Highway Star": {
             "GK": "SK-D",
@@ -1389,8 +1389,8 @@
             "DCR": "BPD-D",
             "DCL": "BPD-D",
             "DL": "FBL-A",
-            "DMR": "DM-S",
-            "DML": "DM-S",
+            "DMCR": "DM-S",
+            "DMCL": "DM-S",
             "AMR": "IFR-S",
             "AMC": "AM-A",
             "AML": "IFL-S",
@@ -1402,9 +1402,9 @@
             "DCR": "BPD-D",
             "DCL": "BPD-D",
             "DL": "FBL-A",
-            "DM": "DM-S",
-            "CMR": "CM-S",
-            "CML": "CM-S",
+            "DMC": "DM-S",
+            "MCR": "CM-S",
+            "MCL": "CM-S",
             "AMR": "IFR-S",
             "AML": "IFL-S",
             "ST": "AF-A"
@@ -1415,11 +1415,11 @@
             "DCR": "BPD-D",
             "DCL": "BPD-D",
             "DL": "FBL-A",
-            "DMR": "VOL-A",
-            "DML": "RPM-S",
-            "AMR": "IWR-S",
-            "AML": "AM-A",
-            "STR": "PF-S",
+            "DMCR": "VOL-A",
+            "DMCL": "RPM-S",
+            "MR": "IWR-S",
+            "AMCL": "AM-A",
+            "STC": "PF-S",
             "STL": "AF-A"
         },
         "4-2-1-1-2 Perfect Strangers": {
@@ -1428,10 +1428,10 @@
             "DCR": "BPD-D",
             "DCL": "BPD-D",
             "DL": "IWBL-A",
-            "DMR": "DM-S",
-            "DML": "VOL-A",
-            "MC": "WL-S",
-            "AMC": "IFR-S",
+            "DMCR": "DM-S",
+            "DMCL": "VOL-A",
+            "ML": "WL-S",
+            "AMR": "IFR-S",
             "STR": "PF-S",
             "STL": "AF-A"
         },
@@ -1441,12 +1441,12 @@
             "DCR": "BPD-D",
             "DCL": "BPD-D",
             "DL": "FBL-A",
-            "DMR": "RPM-S",
-            "DML": "VOL-A",
-            "AMR": "AM-A",
+            "DMCR": "RPM-S",
+            "DMCL": "VOL-A",
+            "AMCR": "AM-A",
             "AML": "IFL-A",
             "STR": "AF-A",
-            "STL": "CF-S"
+            "STC": "CF-S"
         },
         "4-3-3 Striker Force": {
             "GK": "SK-D",
@@ -1454,9 +1454,9 @@
             "DCL": "BPD-D",
             "DCR": "BPD-D",
             "DR": "FBR-A",
+            "DMCL": "VOL-A",
+            "DMCR": "DM-S",
             "ML": "WL-S",
-            "MC": "VOL-A",
-            "DMR": "DM-S",
             "STL": "AF-A",
             "STC": "CF-S",
             "STR": "PF-S"
@@ -1467,12 +1467,12 @@
             "DCL": "BPD-D",
             "DCR": "BPD-D",
             "DR": "FBR-A",
-            "DML": "VOL-A",
-            "DMR": "DM-S",
-            "AMC": "IFR-S",
-            "AML": "PF-S",
+            "DMCL": "VOL-A",
+            "DMCR": "DM-S",
+            "AMR": "IFR-S",
+            "STL": "PF-S",
             "STC": "AF-A",
-            "AMR": "PF-S"
+            "STR": "PF-S"
         },
         "4-1-1-4 Moo Grob": {
             "GK": "SK-D",
@@ -1480,8 +1480,8 @@
             "DCL": "BPD-D",
             "DCR": "BPD-D",
             "DR": "FBR-A",
-            "DM": "DM-S",
-            "MC": "CM-S",
+            "DMCR": "DM-S",
+            "MCL": "CM-S",
             "AML": "IFL-S",
             "AMR": "IFR-S",
             "STL": "AF-A",
@@ -1502,205 +1502,68 @@
         }
     },
     "tactic_layouts": {
-        "4-2-4 EF 424 IF HP": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DML",
-                "DMR"
-            ],
-            [
-                "AML",
-                "STL",
-                "STR",
-                "AMR"
-            ]
-        ],
-        "4-2-3-1 Highway Star": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DML",
-                "DMR"
-            ],
-            [
-                "AML",
-                "AMC",
-                "AMR"
-            ],
-            [
-                "ST"
-            ]
-        ],
-        "4-5-1 Speed King": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DM"
-            ],
-            [
-                "CML",
-                "CMR"
-            ],
-            [
-                "AML",
-                "AMR"
-            ],
-            [
-                "ST"
-            ]
-        ],
-        "4-2-2-2 Silvermoon": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DML",
-                "DMR"
-            ],
-            [
-                "AML",
-                "AMR"
-            ],
-            [
-                "STL",
-                "STR"
-            ]
-        ],
-        "4-2-1-1-2 Perfect Strangers": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DML",
-                "DMR"
-            ],
-            [
-                "MC"
-            ],
-            [
-                "AMC"
-            ],
-            [
-                "STL",
-                "STR"
-            ]
-        ],
-        "4-2-2-2 The In Law": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DML",
-                "DMR"
-            ],
-            [
-                "AML",
-                "AMR"
-            ],
-            [
-                "STL",
-                "STR"
-            ]
-        ],
-        "4-3-3 Striker Force": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "ML",
-                "MC",
-                "DMR"
-            ],
-            [
-                "STL",
-                "STC",
-                "STR"
-            ]
-        ],
-        "4-2-1-3 Emerald Cucumber": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DML",
-                "DMR"
-            ],
-            [
-                "AMC"
-            ],
-            [
-                "AML",
-                "STC",
-                "AMR"
-            ]
-        ],
-        "4-1-1-4 Moo Grob": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "DM"
-            ],
-            [
-                "MC"
-            ],
-            [
-                "AML",
-                "AMR"
-            ],
-            [
-                "STL",
-                "STR"
-            ]
-        ],
-        "4-4-2 GIN 25": [
-            [
-                "DL",
-                "DCL",
-                "DCR",
-                "DR"
-            ],
-            [
-                "ML",
-                "MCL",
-                "MCR",
-                "MR"
-            ],
-            [
-                "STL",
-                "STR"
-            ]
-        ]
+        "4-1-1-4 Moo Grob": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCR"],
+            "Midfield": ["MCL"],
+            "Attacking Midfield": ["AML", "AMR"],
+            "Strikers": ["STL", "STR"]
+        },
+        "4-2-1-1-2 Perfect Strangers": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Midfield": ["ML"],
+            "Attacking Midfield": ["AMR"],
+            "Strikers": ["STL", "STR"]
+        },
+        "4-2-1-3 Emerald Cucumber": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Attacking Midfield": ["AMR"],
+            "Strikers": ["STL", "STC", "STR"]
+        },
+        "4-2-2-2 Silvermoon": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Midfield": ["MR"],
+            "Attacking Midfield": ["AMCL"],
+            "Strikers": ["STL", "STC"]
+        },
+        "4-2-2-2 The In Law": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Attacking Midfield": ["AML", "AMCR"],
+            "Strikers": ["STC", "STR"]
+        },
+        "4-2-3-1 Highway Star": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Attacking Midfield": ["AML", "AMC", "AMR"],
+            "Strikers": ["ST"]
+        },
+        "4-2-4 EF 424 IF HP": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Attacking Midfield": ["AML", "AMR"],
+            "Strikers": ["STL", "STR"]
+        },
+        "4-3-3 Striker Force": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMCL", "DMCR"],
+            "Midfield": ["ML"],
+            "Strikers": ["STL", "STC", "STR"]
+        },
+        "4-4-2 GIN 25": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Midfield": ["ML", "MCL", "MCR", "MR"],
+            "Strikers": ["STL", "STR"]
+        },
+        "4-5-1 Speed King": {
+            "Defense": ["DL", "DCL", "DCR", "DR"],
+            "Defensive Midfield": ["DMC"],
+            "Midfield": ["MCL", "MCR"],
+            "Attacking Midfield": ["AML", "AMR"],
+            "Strikers": ["ST"]
+        }
     }
 }
