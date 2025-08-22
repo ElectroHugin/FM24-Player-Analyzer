@@ -38,6 +38,11 @@ def init_db():
     # 2. Add other special columns if they are missing
     if "primary_role" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
+
+    if "transfer_status" not in existing_columns:
+        cursor.execute('ALTER TABLE players ADD COLUMN "transfer_status" INTEGER DEFAULT 0')
+    if "loan_status" not in existing_columns:
+        cursor.execute('ALTER TABLE players ADD COLUMN "loan_status" INTEGER DEFAULT 0')
     
     # The old name for agreed_playing_time
     OLD_APT_COL = "agreed_playing_time"
@@ -312,5 +317,20 @@ def set_favorite_tactics(tactic1, tactic2):
     else:
         cursor.execute('DELETE FROM settings WHERE key = "favorite_tactic_2"')
         
+    conn.commit()
+    conn.close()
+
+def update_player_transfer_status(unique_id, status):
+    conn = connect_db()
+    cursor = conn.cursor()
+    # status is a boolean (True/False), so we store it as 1 or 0
+    cursor.execute('UPDATE players SET transfer_status = ? WHERE "Unique ID" = ?', (1 if status else 0, unique_id))
+    conn.commit()
+    conn.close()
+
+def update_player_loan_status(unique_id, status):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE players SET loan_status = ? WHERE "Unique ID" = ?', (1 if status else 0, unique_id))
     conn.commit()
     conn.close()
