@@ -241,6 +241,41 @@ GK_APT_OPTIONS = [
     "Emergency Backup", "Surplus to Requirements"
 ]
 
+# NEW: Master map for tactical grid display
+# Defines the stratum (vertical level) and column index (horizontal slot) for each position key.
+# Defensive/Midfield strata use a 5-column grid (indices 0-4).
+# Striker stratum uses a 3-column grid (indices 0-2).
+MASTER_POSITION_MAP = {
+    # Defense (5 slots, indices 0-4)
+    "DL": ("Defense", 0), "WBL": ("Defense", 0),
+    "DCL": ("Defense", 1),
+    "DC": ("Defense", 2),
+    "DCR": ("Defense", 3),
+    "DR": ("Defense", 4), "WBR": ("Defense", 4),
+    # Defensive Midfield (5 slots, indices 0-4)
+    "DML": ("Defensive Midfield", 0),
+    "DMCL": ("Defensive Midfield", 1),
+    "DMC": ("Defensive Midfield", 2),
+    "DMCR": ("Defensive Midfield", 3),
+    "DMR": ("Defensive Midfield", 4),
+    # Midfield (5 slots, indices 0-4)
+    "ML": ("Midfield", 0),
+    "MCL": ("Midfield", 1),
+    "MC": ("Midfield", 2),
+    "MCR": ("Midfield", 3),
+    "MR": ("Midfield", 4),
+    # Attacking Midfield (5 slots, indices 0-4)
+    "AML": ("Attacking Midfield", 0),
+    "AMCL": ("Attacking Midfield", 1),
+    "AMC": ("Attacking Midfield", 2),
+    "AMCR": ("Attacking Midfield", 3),
+    "AMR": ("Attacking Midfield", 4),
+    # Strikers (3 slots, indices 0-2)
+    "STL": ("Strikers", 0),
+    "STC": ("Strikers", 1), "ST": ("Strikers", 1), # Both ST and STC map to the central slot
+    "STR": ("Strikers", 2)
+}
+
 
 # Custom CSS for visual design (dark theme, FM-inspired)
 CSS_STYLES = """
