@@ -55,6 +55,14 @@ def load_config():
                 key = apt.lower().replace(' ', '_')
                 config['APTWeights'][key] = '1.0'
         config_was_modified = True
+    
+        # 6. Ensure [AgeThresholds] section exists
+    if not config.has_section('AgeThresholds'):
+        config['AgeThresholds'] = {
+            'outfielder_youth_age': '20',
+            'goalkeeper_youth_age': '25'
+        }
+        config_was_modified = True
 
     # --- End of validation ---
 
@@ -132,6 +140,24 @@ def set_role_multiplier(type_, value):
     config = load_config()
     if 'RoleMultipliers' not in config: config['RoleMultipliers'] = {}
     config['RoleMultipliers'][type_ + '_multiplier'] = str(value)
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    load_config.clear()
+
+def get_age_threshold(player_type):
+    """Gets the youth age threshold for either 'outfielder' or 'goalkeeper'."""
+    config = load_config()
+    defaults = {'outfielder': '20', 'goalkeeper': '25'}
+    key = f'{player_type}_youth_age'
+    return int(config['AgeThresholds'].get(key, defaults.get(player_type, '20')))
+
+def set_age_threshold(player_type, value):
+    """Sets the youth age threshold for a player type."""
+    config = load_config()
+    if 'AgeThresholds' not in config:
+        config['AgeThresholds'] = {}
+    key = f'{player_type}_youth_age'
+    config['AgeThresholds'][key] = str(value)
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
     load_config.clear()
