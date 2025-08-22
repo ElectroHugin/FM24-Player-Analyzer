@@ -472,8 +472,10 @@ def best_position_calculator_page():
     else:
         senior_surplus = squad_data["senior_surplus"]
         if senior_surplus:
+            outfielder_age_limit = get_age_threshold('outfielder')
+            goalkeeper_age_limit = get_age_threshold('goalkeeper')
             # --- Corrected Title ---
-            st.markdown("**For Sale / Release (Outfielders 21+, GKs 26+):**")
+            st.markdown(f"**For Sale / Release (Outfielders {outfielder_age_limit}+ , GKs {goalkeeper_age_limit}+):**")
             df_senior_data = {
                 'Name': [p['Name'] for p in senior_surplus], 'Age': [p.get('Age', 'N/A') for p in senior_surplus],
                 'On Transfer List': ["✅" if p.get('transfer_status', 0) else "❌" for p in senior_surplus],
@@ -484,7 +486,7 @@ def best_position_calculator_page():
         youth_surplus = squad_data["youth_surplus"]
         if youth_surplus:
             # --- Corrected Title ---
-            st.markdown("**For Loan (Outfielders U20, GKs U25):**")
+            st.markdown(f"**For Loan (Outfielders U{outfielder_age_limit}, GKs U{goalkeeper_age_limit}):**")
             df_youth_data = {
                 'Name': [p['Name'] for p in youth_surplus], 'Age': [p.get('Age', 'N/A') for p in youth_surplus],
                 'On Transfer List': ["✅" if p.get('transfer_status', 0) else "❌" for p in youth_surplus],
@@ -493,7 +495,6 @@ def best_position_calculator_page():
             st.dataframe(pd.DataFrame(df_youth_data), hide_index=True, use_container_width=True)
 
   
-
 def transfer_loan_management_page():
     st.title("Transfer & Loan Management")
     st.info("Manage surplus players based on your selected tactic. Use the save buttons to commit your changes.")
@@ -690,130 +691,145 @@ def player_comparison_page():
         st.dataframe(comparison_df.set_index('Name').T, use_container_width=True)
 
 def dwrs_progress_page():
-    st.title("DWRS Progress Over Time")
+    st.title("DWRS Player Development")
+    st.info("Analyze player development trends. Choose an analysis mode to compare positional averages, specific players in a role, or an individual player's progress across their roles.")
 
-    all_players = get_all_players()
+    user_club = get_user_club()
+    all_players = [p for p in get_all_players() if p['Club'] == user_club] # Filter to your club first
     if not all_players:
-        st.info("No players available.")
+        st.warning("No players found for your club. Please select your club in the sidebar.")
         return
 
-    # --- NEW HIERARCHICAL FILTERING UI ---
-    st.subheader("Display Options")
-    
-    # -- Filter 1: Select Tactic (with favorites) --
-    fav_tactic1, _ = get_favorite_tactics()
-    all_tactics = sorted(list(get_tactic_roles().keys()))
-    
-    try:
-        # Set default index to the favorite tactic if it exists
-        default_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
-    except ValueError:
-        default_index = 0
-        
-    selected_tactic = st.selectbox("Select a Tactic to Analyze", options=all_tactics, index=default_index)
-    
-    # -- Filter 2: Select Display Mode --
-    display_mode = st.selectbox(
-        "Display progress by:",
-        ["Player Position Category", "Specific Role", "Individual Players"]
+    # --- NEW, SIMPLIFIED 3-PRONGED UI ---
+    st.subheader("1. Choose Analysis Mode")
+    analysis_mode = st.selectbox(
+        "How would you like to analyze development?",
+        ["Squad Overview (by Position)", "Player vs. Player (in a specific role)", "Individual Player (deep dive)"],
+        label_visibility="collapsed"
     )
     
-    # -- Filter 3: Conditional Selector & U20 Checkbox --
-    c1, c2 = st.columns([3, 1])
-    
-    player_ids_to_chart = []
-    role_to_chart = None
-    
-    positions_tactic = get_tactic_roles().get(selected_tactic, {})
-    
-    with c1:
-        if display_mode == "Player Position Category":
-            # Define position categories based on common tactical shapes
-            pos_categories = {
-                'Attackers': ['ST', 'AML', 'AMR', 'AMC'],
-                'Midfielders': ['ML', 'MC', 'MR', 'DML', 'DMC', 'DMR'],
-                'Defenders': ['DL', 'DC', 'DR', 'WBL', 'WBR']
-            }
-            selected_cat = st.selectbox("Select Position Category", options=pos_categories.keys())
-            
-            # Find all players who are assigned to any role in the tactic that fits the category
-            players_category = set()
-            for pos_code, role in positions_tactic.items():
-                # Check the start of the position code (e.g., 'STL' starts with 'ST')
-                if any(pos_code.startswith(cat_prefix) for cat_prefix in pos_categories[selected_cat]):
-                    # Get all players assigned this role
-                    role_players_df, _, _ = get_players_by_role(role, get_user_club())
-                    if not role_players_df.empty:
-                        for pid in role_players_df['Unique ID']:
-                            players_category.add(pid)
-            player_ids_to_chart = list(players_category)
-            role_to_chart = "All Roles" # Show all relevant roles for these players
+    st.subheader("2. Select Your Filters")
 
-        elif display_mode == "Specific Role":
-            # Get unique roles from the selected tactic and display them nicely
-            roles_tactic = sorted(list(set(positions_tactic.values())), key=format_role_display)
-            selected_role = st.selectbox("Select Specific Role", options=roles_tactic, format_func=format_role_display)
-            
-            # Find all players assigned this role
-            role_players_df, _, _ = get_players_by_role(selected_role, get_user_club())
-            if not role_players_df.empty:
-                player_ids_to_chart = role_players_df['Unique ID'].tolist()
-            role_to_chart = selected_role
-
-        else: # Individual Players
-            player_names = sorted([p['Name'] for p in all_players], key=get_last_name)
-            selected_names = st.multiselect("Select Players", options=player_names)
-            player_ids_to_chart = [p['Unique ID'] for p in all_players if p['Name'] in selected_names]
-            role_to_chart = "All Roles"
-
-    with c2:
-        st.write("") # Spacer
-        st.write("") # Spacer
-        u20_only = st.checkbox("Youth Prospects Only (U20)")
-
-    # --- DATA PROCESSING AND CHARTING ---
-    if not player_ids_to_chart:
-        st.info("Select players or a category to display the chart.")
-        return
-
-    # Filter for U20 players if the checkbox is ticked
-    if u20_only:
-        u20_ids = {p['Unique ID'] for p in all_players if p.get('Age') and int(p['Age']) <= 20}
-        player_ids_to_chart = [pid for pid in player_ids_to_chart if pid in u20_ids]
-
-    if not player_ids_to_chart:
-        st.warning("No players match the selected criteria (e.g., no U20 players found).")
-        return
-
-    history = get_dwrs_history(player_ids_to_chart, role_to_chart if role_to_chart != "All Roles" else None)
-
-    if not history.empty:
-        st.subheader("DWRS Progress by Data Snapshot")
-        history['dwrs_normalized'] = pd.to_numeric(history['dwrs_normalized'].str.rstrip('%'))
+    # --- PRONG 1: SQUAD OVERVIEW ---
+    if analysis_mode == "Squad Overview (by Position)":
+        pos_categories = {
+            'Goalkeepers': ['GK'],
+            'Defenders': ['DL', 'DC', 'DR', 'WBL', 'WBR'],
+            'Midfielders': ['ML', 'MC', 'MR', 'DML', 'DMC', 'DMR'],
+            'Attackers': ['ST', 'AML', 'AMR', 'AMC']
+        }
+        selected_cats = st.multiselect("Select positional groups to display", options=pos_categories.keys(), default=list(pos_categories.keys()))
         
-        # Merge with player names
-        player_name_map = {p['Unique ID']: p['Name'] for p in all_players}
-        history['Name'] = history['unique_id'].map(player_name_map)
-        
-        # Create a unique label for each line on the chart
-        if role_to_chart == "All Roles":
-            history['label'] = history['Name'] + ' - ' + history['role'].apply(format_role_display)
+        if not selected_cats:
+            st.warning("Please select at least one positional group.")
+            return
+
+        with st.spinner("Aggregating squad development data..."):
+            all_history_dfs = []
+            for cat_name in selected_cats:
+                # Find all players belonging to this category
+                cat_player_ids = {p['Unique ID'] for p in all_players if any(p['Position'].startswith(prefix) for prefix in pos_categories[cat_name])}
+                
+                if not cat_player_ids: continue
+
+                history_df = get_dwrs_history(list(cat_player_ids))
+                if history_df.empty: continue
+
+                # For each player, find their best role within the category at each snapshot
+                # This is a bit complex, but it ensures we are comparing apples to apples
+                history_df['dwrs_normalized'] = pd.to_numeric(history_df['dwrs_normalized'].str.rstrip('%'))
+                best_role_per_snapshot = history_df.loc[history_df.groupby(['unique_id', 'snapshot'])['dwrs_normalized'].idxmax()]
+                
+                # Calculate the average of these "best scores" for the whole group
+                avg_progress = best_role_per_snapshot.groupby('snapshot')['dwrs_normalized'].mean().rename(f"Average - {cat_name}")
+                all_history_dfs.append(avg_progress)
+
+        if all_history_dfs:
+            chart_data = pd.concat(all_history_dfs, axis=1).interpolate(method='linear', limit_direction='forward', axis=0)
+            st.subheader("Average DWRS Progression by Position")
+            st.line_chart(chart_data)
         else:
-            history['label'] = history['Name']
+            st.info("No historical data found for the selected positional groups.")
 
-        # --- THE NEW PIVOT ---
-        # The X-axis (index) is now the 'snapshot' number.
-        pivot = history.pivot_table(index='snapshot', columns='label', values='dwrs_normalized', aggfunc='mean')
+    # --- PRONG 2: PLAYER VS. PLAYER ---
+    elif analysis_mode == "Player vs. Player (in a specific role)":
+        c1, c2 = st.columns(2)
+        with c1:
+            player_names = sorted([p['Name'] for p in all_players], key=get_last_name)
+            selected_names = st.multiselect("Select players to compare", options=player_names)
+        with c2:
+            # Get a list of all roles that at least one of the selected players can play
+            if selected_names:
+                player_ids = [p['Unique ID'] for p in all_players if p['Name'] in selected_names]
+                possible_roles = set()
+                for p in all_players:
+                    if p['Unique ID'] in player_ids:
+                        for role in p.get('Assigned Roles', []):
+                            possible_roles.add(role)
+                role_options = sorted(list(possible_roles), key=format_role_display)
+                selected_role = st.selectbox("Select a single role to compare", options=role_options, format_func=format_role_display)
+            else:
+                selected_role = None
         
-        # Fill missing values to create continuous lines where possible
-        pivot = pivot.interpolate(method='linear', limit_direction='forward', axis=0)
+        if selected_names and selected_role:
+            player_ids_to_chart = [p['Unique ID'] for p in all_players if p['Name'] in selected_names]
+            history = get_dwrs_history(player_ids_to_chart, selected_role)
+            
+            if not history.empty:
+                history['dwrs_normalized'] = pd.to_numeric(history['dwrs_normalized'].str.rstrip('%'))
+                player_name_map = {p['Unique ID']: p['Name'] for p in all_players}
+                history['Name'] = history['unique_id'].map(player_name_map)
+                
+                pivot = history.pivot_table(index='snapshot', columns='Name', values='dwrs_normalized', aggfunc='mean')
+                pivot = pivot.interpolate(method='linear', limit_direction='forward', axis=0)
 
-        st.line_chart(pivot)
+                st.subheader(f"Development as {format_role_display(selected_role)}")
+                st.line_chart(pivot)
+            else:
+                st.info(f"No historical data found for the selected players in the '{format_role_display(selected_role)}' role.")
+        else:
+            st.info("Select 2 or more players and a role to see a comparison.")
+
+    # --- PRONG 3: INDIVIDUAL DEEP DIVE ---
+    elif analysis_mode == "Individual Player (deep dive)":
+        c1, c2 = st.columns(2)
+        with c1:
+            player_names = sorted([p['Name'] for p in all_players], key=get_last_name)
+            selected_name = st.selectbox("Select a player", options=player_names)
         
-        with st.expander("Show Raw Data"):
-            st.dataframe(history[['snapshot', 'Name', 'role', 'dwrs_normalized', 'timestamp']].sort_values(by=['Name', 'role', 'snapshot']), use_container_width=True, hide_index=True)
-    else:
-        st.info("No historical data available for the selected players/roles.")
+        player_obj = next((p for p in all_players if p['Name'] == selected_name), None)
+        
+        with c2:
+            if player_obj:
+                role_options = sorted(player_obj.get('Assigned Roles', []), key=format_role_display)
+                if role_options:
+                    selected_roles = st.multiselect("Select roles to display", options=role_options, default=role_options[:3], format_func=format_role_display)
+                else:
+                    st.warning("This player has no assigned roles to analyze.")
+                    selected_roles = []
+            else:
+                selected_roles = []
+
+        if player_obj and selected_roles:
+            player_id_to_chart = [player_obj['Unique ID']]
+            
+            history_dfs = []
+            for role in selected_roles:
+                history = get_dwrs_history(player_id_to_chart, role)
+                if not history.empty:
+                    history['dwrs_normalized'] = pd.to_numeric(history['dwrs_normalized'].str.rstrip('%'))
+                    # Rename the column to the role name for the legend
+                    history = history.rename(columns={'dwrs_normalized': format_role_display(role)})
+                    history_dfs.append(history.set_index('snapshot')[format_role_display(role)])
+
+            if history_dfs:
+                chart_data = pd.concat(history_dfs, axis=1).interpolate(method='linear', limit_direction='forward', axis=0)
+                st.subheader(f"Development for {selected_name}")
+                st.line_chart(chart_data)
+            else:
+                st.info("No historical data found for the selected roles.")
+        else:
+            st.info("Select a player and at least one of their roles to see their progress.")
 
 def edit_player_data_page():
     st.title("Edit Player Data")
