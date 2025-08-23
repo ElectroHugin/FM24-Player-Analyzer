@@ -169,7 +169,8 @@ def get_player_role_matrix(user_club, second_team_club=None):
         for role in get_valid_roles():
             if role in assigned_roles:
                 weights_to_use = gk_weights if role in all_gk_roles else weights
-                _, normalized_str = calculate_dwrs(player, role, weights_to_use)
+                #_, normalized_str = calculate_dwrs(player, role, weights_to_use)
+                _, normalized_str = calculate_dwrs(player.to_dict(), role, weights_to_use)
                 try:
                     row[role] = int(normalized_str.rstrip('%'))
                 except (ValueError, AttributeError):

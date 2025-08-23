@@ -4,17 +4,16 @@ import streamlit as st
 import pandas as pd
 import re
 from io import StringIO
-import csv
-import urllib.parse
+import plotly.graph_objects as go
 from data_parser import load_data, parse_and_update_data, get_filtered_players, get_players_by_role, get_player_role_matrix
 from sqlite_db import (update_player_roles, get_user_club, set_user_club, update_dwrs_ratings, get_all_players, 
                      get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role, 
                      update_player_apt, get_favorite_tactics, set_favorite_tactics, 
                      update_player_transfer_status, update_player_loan_status)
-from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE_MATRIX_COLUMNS,
+from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS,
                      get_player_roles, get_valid_roles, get_position_to_role_mapping, 
-                     get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS,
-                     MASTER_POSITION_MAP)
+                     get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS, 
+                     get_role_specific_weights, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES)
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
                           get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
                           get_age_threshold, set_age_threshold)
@@ -114,20 +113,48 @@ def parse_position_string(pos_str):
 
 def assign_roles_page(df):
     st.title("Assign Roles to Players")
+    # --- START: Initialize session state for filters ---
+    if 'ar_filter_option' not in st.session_state:
+        st.session_state.ar_filter_option = "All Players"
+    if 'ar_club_filter' not in st.session_state:
+        st.session_state.ar_club_filter = "All"
+    if 'ar_pos_filter' not in st.session_state:
+        st.session_state.ar_pos_filter = "All"
+    if 'ar_sort_column' not in st.session_state:
+        st.session_state.ar_sort_column = "Name"
+    if 'ar_sort_order' not in st.session_state:
+        st.session_state.ar_sort_order = "Ascending"
+    if 'ar_search' not in st.session_state:
+        st.session_state.ar_search = ""
+    # --- END: Initialize session state ---
     #df = pd.DataFrame(get_all_players())
     if df.empty:
         st.info("No players available. Please upload player data.")
         return
+    
     st.subheader("Filter & Sort")
     c1, c2, c3 = st.columns(3)
-    filter_option = c1.selectbox("Filter by", options=FILTER_OPTIONS)
-    club_filter = c2.selectbox("Filter by Club", options=["All"] + sorted(df['Club'].unique()))
-    pos_filter = c3.selectbox("Filter by Position", options=["All"] + sorted(df['Position'].unique()))
-    sort_column = c1.selectbox("Sort by", options=SORTABLE_COLUMNS)
-    sort_order = c2.selectbox("Sort Order", options=["Ascending", "Descending"])
-    filtered_df = get_filtered_players(filter_option, club_filter, pos_filter, sort_column, (sort_order == "Ascending"), get_user_club())
-    search = st.text_input("Search by Name")
-    if search: filtered_df = filtered_df[filtered_df['Name'].str.contains(search, case=False, na=False)]
+
+    # The 'key' argument automatically links the widget's state to st.session_state
+    filter_option = c1.selectbox("Filter by", options=FILTER_OPTIONS, key='ar_filter_option')
+    club_filter = c2.selectbox("Filter by Club", options=["All"] + sorted(df['Club'].unique()), key='ar_club_filter')
+    pos_filter = c3.selectbox("Filter by Position", options=["All"] + sorted(df['Position'].unique()), key='ar_pos_filter')
+    sort_column = c1.selectbox("Sort by", options=SORTABLE_COLUMNS, key='ar_sort_column')
+    sort_order = c2.selectbox("Sort Order", options=["Ascending", "Descending"], key='ar_sort_order')
+    search = st.text_input("Search by Name", key='ar_search')
+
+    # Now, use the values from session_state to perform the filtering
+    filtered_df = get_filtered_players(
+        st.session_state.ar_filter_option, 
+        st.session_state.ar_club_filter, 
+        st.session_state.ar_pos_filter, 
+        st.session_state.ar_sort_column, 
+        (st.session_state.ar_sort_order == "Ascending"), 
+        get_user_club()
+    )
+
+    if st.session_state.ar_search: 
+        filtered_df = filtered_df[filtered_df['Name'].str.contains(st.session_state.ar_search, case=False, na=False)]
     
     def handle_role_update(role_changes):
         if role_changes:
@@ -298,7 +325,7 @@ def player_role_matrix_page():
 
 def best_position_calculator_page(players):
     st.title("Best Position Calculator")
-    st.write("This tool uses a 'weakest link first' algorithm to build the most balanced team based on a selected tactic.")
+    st.info("This tool uses a 'weakest link first' algorithm. Instead of picking the best player for each position one by one, it evaluates all open positions simultaneously and fills the one where the best available player provides the smallest upgrade. This creates a more balanced and often stronger overall team.")
 
     @st.cache_data
     def _get_master_role_ratings(user_club):
@@ -561,38 +588,145 @@ def transfer_loan_management_page(players):
 
 def player_comparison_page(players):
     st.title("Player Comparison")
-    #df = pd.DataFrame(get_all_players())
+    
     df = pd.DataFrame(players)
     if df.empty:
         st.info("No players available.")
         return
-    player_names = sorted(df['Name'].unique(), key=get_last_name)
-    names = st.multiselect("Select players to compare", options=player_names)
-    if names:
-        #st.dataframe(df[df['Name'].isin(names)].set_index('Name').T, use_container_width=True)
-        comparison_df = df[df['Name'].isin(names)].copy()
-        
-        # Convert the 'Assigned Roles' list to a readable string to prevent the ArrowTypeError
-        if 'Assigned Roles' in comparison_df.columns:
-            comparison_df['Assigned Roles'] = comparison_df['Assigned Roles'].apply(
-                lambda roles: ', '.join(roles) if isinstance(roles, list) else roles
-            )
 
-        # Set index, transpose, and display the corrected DataFrame
-        st.dataframe(comparison_df.set_index('Name').T, use_container_width=True)
+    # --- 1. ADVANCED FILTERING SECTION ---
+    st.subheader("Filter Player Selection")
+    user_club = get_user_club()
+    f_col1, f_col2, f_col3 = st.columns(3)
+    
+    with f_col1:
+        fav_tactic1, _ = get_favorite_tactics()
+        all_tactics = ["All Roles"] + sorted(list(get_tactic_roles().keys()))
+        tactic_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
+        selected_tactic = st.selectbox("Filter by Tactic", options=all_tactics, index=tactic_index)
+
+    with f_col2:
+        if selected_tactic == "All Roles":
+            role_options = get_valid_roles()
+        else:
+            role_options = sorted(list(set(get_tactic_roles()[selected_tactic].values())))
+        selected_role = st.selectbox("Filter by Role", options=role_options, format_func=format_role_display)
+
+    with f_col3:
+        club_filter = st.selectbox("Filter by Club", options=["My Club", "All Players"])
+
+    player_pool = df.copy()
+    if club_filter == "My Club":
+        player_pool = player_pool[player_pool['Club'] == user_club]
+    
+    player_pool = player_pool[player_pool['Assigned Roles'].apply(lambda roles: selected_role in roles if isinstance(roles, list) else False)]
+    
+    # --- START: BUG FIX FOR DUPLICATE NAMES ---
+
+    # Create a mapping from Unique ID to a descriptive, unique display name
+    player_map = {
+        p['Unique ID']: f"{p['Name']} ({p['Club']})"
+        for _, p in player_pool.iterrows()
+    }
+    
+    if not player_map:
+        st.warning(f"No players found with the role '{format_role_display(selected_role)}' in the selected club filter.")
+        return
+        
+    # The multiselect options are now the Unique IDs, but it displays the descriptive names
+    selected_ids = st.multiselect(
+        f"Select players to compare (up to 5 for optimal viewing)",
+        options=list(player_map.keys()),
+        format_func=lambda uid: player_map[uid],
+        help="Only players matching the filters above are shown."
+    )
+
+    if selected_ids:
+        # Filter the main DataFrame using the list of selected Unique IDs
+        comparison_df = df[df['Unique ID'].isin(selected_ids)].copy()
+        
+        # --- END: BUG FIX ---
+        
+        all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
+        is_gk_role = selected_role in all_gk_roles
+
+        role_weights = get_role_specific_weights().get(selected_role, {"key": [], "preferable": []})
+        key_attrs = role_weights["key"]
+        pref_attrs = role_weights["preferable"]
+
+        if is_gk_role:
+            gameplay_attrs = { 'Shot Stopping': ['Reflexes', 'One vs One', 'Handling', 'Agility'], 'Aerial Control': ['Aerial Reach', 'Command of Area', 'Jumping Reach'], 'Distribution': ['Kicking', 'Throwing', 'Passing', 'Vision'], 'Sweeping': ['Rushing Out (Tendency)', 'Acceleration', 'Pace'], 'Mental': ['Composure', 'Concentration', 'Decisions', 'Anticipation']}
+            meta_categories = { "Top Importance": [attr for attr, cat in GK_STAT_CATEGORIES.items() if cat == "Top Importance"], "High Importance": [attr for attr, cat in GK_STAT_CATEGORIES.items() if cat == "High Importance"], "Medium Importance": [attr for attr, cat in GK_STAT_CATEGORIES.items() if cat == "Medium Importance"], "Key Role Attributes": key_attrs, "Preferable Role Attributes": pref_attrs}
+            meta_chart_title = "GK Meta-Attribute Profile"
+        else:
+            gameplay_attrs = { 'Pace': ['Acceleration', 'Pace'], 'Shooting': ['Finishing', 'Long Shots'], 'Passing': ['Passing', 'Crossing', 'Vision'], 'Dribbling': ['Dribbling', 'First Touch', 'Flair'], 'Defending': ['Tackling', 'Marking', 'Positioning'], 'Physical': ['Strength', 'Stamina', 'Balance'], 'Mental': ['Work Rate', 'Determination', 'Teamwork', 'Decisions']}
+            meta_categories = { "Extremely Important": [attr for attr, cat in GLOBAL_STAT_CATEGORIES.items() if cat == "Extremely Important"], "Important": [attr for attr, cat in GLOBAL_STAT_CATEGORIES.items() if cat == "Important"], "Good": [attr for attr, cat in GLOBAL_STAT_CATEGORIES.items() if cat == "Good"], "Key Role Attributes": key_attrs, "Preferable Role Attributes": pref_attrs}
+            meta_chart_title = "Outfield Meta-Attribute Profile"
+
+        with st.expander("What do these charts show?"):
+            st.info(f"The charts below visualize player attributes grouped into different categories. The Meta-Attribute Profile is based on the **{format_role_display(selected_role)}** role.")
+            info_col1, info_col2 = st.columns(2)
+            with info_col1:
+                st.markdown("**Chart 1: Gameplay Areas**")
+                md_string = "".join([f"- **{cat}**: `{', '.join(attrs)}`\n" for cat, attrs in gameplay_attrs.items()])
+                st.markdown(md_string)
+            with info_col2:
+                st.markdown(f"**Chart 2: {meta_chart_title}**")
+                meta_string = "".join([f"- **{cat}**: `{', '.join(attrs) or 'None'}`\n" for cat, attrs in meta_categories.items()])
+                st.markdown(meta_string)
+        
+        def parse_attribute_value(raw_value):
+            if isinstance(raw_value, str) and '-' in raw_value:
+                try: return sum(map(float, raw_value.split('-'))) / 2
+                except (ValueError, TypeError): return 0.0
+            else:
+                try: return float(raw_value)
+                except (ValueError, TypeError): return 0.0
+
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            st.subheader("Gameplay Areas")
+            fig1 = go.Figure()
+            # Loop through the selected IDs to build the chart
+            for uid in selected_ids:
+                player_data = comparison_df[comparison_df['Unique ID'] == uid].iloc[0]
+                category_values = [sum(parse_attribute_value(player_data.get(attr, 0)) for attr in attrs) / len(attrs) if attrs else 0 for attrs in gameplay_attrs.values()]
+                fig1.add_trace(go.Scatterpolar(r=category_values, theta=list(gameplay_attrs.keys()), fill='toself', name=player_map[uid]))
+            fig1.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 20], tickfont=dict(color='white'), gridcolor='rgba(255, 255, 255, 0.4)'), angularaxis=dict(tickfont=dict(size=12, color='white'), direction="clockwise"), bgcolor='rgba(46, 46, 46, 0.8)'), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=40, r=40, t=40, b=40))
+            st.plotly_chart(fig1, use_container_width=True)
+
+        with chart_col2:
+            st.subheader(meta_chart_title)
+            fig2 = go.Figure()
+            # Loop through the selected IDs to build the chart
+            for uid in selected_ids:
+                player_data = comparison_df[comparison_df['Unique ID'] == uid].iloc[0]
+                category_values = [sum(parse_attribute_value(player_data.get(attr, 0)) for attr in attrs) / len(attrs) if attrs else 0 for attrs in meta_categories.values()]
+                fig2.add_trace(go.Scatterpolar(r=category_values, theta=list(meta_categories.keys()), fill='toself', name=player_map[uid]))
+            fig2.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 20], tickfont=dict(color='white'), gridcolor='rgba(255, 255, 255, 0.4)'), angularaxis=dict(tickfont=dict(size=12, color='white'), direction="clockwise"), bgcolor='rgba(46, 46, 46, 0.8)'), legend=dict(font=dict(color='white')), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=40, r=40, t=40, b=40))
+            st.plotly_chart(fig2, use_container_width=True)
+
+        st.divider()
+        st.subheader("Detailed Attribute Comparison")
+        if 'Assigned Roles' in comparison_df.columns:
+            comparison_df['Assigned Roles'] = comparison_df['Assigned Roles'].apply(lambda roles: ', '.join(roles) if isinstance(roles, list) else roles)
+        
+        # Create a unique display name for the table index
+        comparison_df['Display Name'] = comparison_df['Unique ID'].map(player_map)
+        
+        # Set the unique 'Display Name' as the index before transposing
+        st.dataframe(comparison_df.set_index('Display Name').astype(str).T, use_container_width=True)
 
 def dwrs_progress_page(players):
     st.title("DWRS Player Development")
     st.info("Analyze player development trends. Choose an analysis mode to compare positional averages, specific players in a role, or an individual player's progress across their roles.")
 
     user_club = get_user_club()
-    #all_players = [p for p in get_all_players() if p['Club'] == user_club] # Filter to your club first
-    all_players = [p for p in players if p['Club'] == user_club] # Filter to your club first
+    all_players = [p for p in players if p['Club'] == user_club]
     if not all_players:
         st.warning("No players found for your club. Please select your club in the sidebar.")
         return
 
-    # --- NEW, SIMPLIFIED 3-PRONGED UI ---
     st.subheader("1. Choose Analysis Mode")
     analysis_mode = st.selectbox(
         "How would you like to analyze development?",
@@ -602,13 +736,11 @@ def dwrs_progress_page(players):
     
     st.subheader("2. Select Your Filters")
 
-    # --- PRONG 1: SQUAD OVERVIEW ---
+    # --- PRONG 1: SQUAD OVERVIEW (Unchanged) ---
     if analysis_mode == "Squad Overview (by Position)":
         pos_categories = {
-            'Goalkeepers': ['GK'],
-            'Defenders': ['DL', 'DC', 'DR', 'WBL', 'WBR'],
-            'Midfielders': ['ML', 'MC', 'MR', 'DML', 'DMC', 'DMR'],
-            'Attackers': ['ST', 'AML', 'AMR', 'AMC']
+            'Goalkeepers': ['GK'], 'Defenders': ['DL', 'DC', 'DR', 'WBL', 'WBR'],
+            'Midfielders': ['ML', 'MC', 'MR', 'DML', 'DMC', 'DMR'], 'Attackers': ['ST', 'AML', 'AMR', 'AMC']
         }
         selected_cats = st.multiselect("Select positional groups to display", options=pos_categories.keys(), default=list(pos_categories.keys()))
         
@@ -619,20 +751,12 @@ def dwrs_progress_page(players):
         with st.spinner("Aggregating squad development data..."):
             all_history_dfs = []
             for cat_name in selected_cats:
-                # Find all players belonging to this category
                 cat_player_ids = {p['Unique ID'] for p in all_players if any(p['Position'].startswith(prefix) for prefix in pos_categories[cat_name])}
-                
                 if not cat_player_ids: continue
-
                 history_df = get_dwrs_history(list(cat_player_ids))
                 if history_df.empty: continue
-
-                # For each player, find their best role within the category at each snapshot
-                # This is a bit complex, but it ensures we are comparing apples to apples
                 history_df['dwrs_normalized'] = pd.to_numeric(history_df['dwrs_normalized'].str.rstrip('%'))
                 best_role_per_snapshot = history_df.loc[history_df.groupby(['unique_id', 'snapshot'])['dwrs_normalized'].idxmax()]
-                
-                # Calculate the average of these "best scores" for the whole group
                 avg_progress = best_role_per_snapshot.groupby('snapshot')['dwrs_normalized'].mean().rename(f"Average - {cat_name}")
                 all_history_dfs.append(avg_progress)
 
@@ -643,36 +767,46 @@ def dwrs_progress_page(players):
         else:
             st.info("No historical data found for the selected positional groups.")
 
-    # --- PRONG 2: PLAYER VS. PLAYER ---
+    # --- PRONG 2: PLAYER VS. PLAYER (REFACTORED) ---
     elif analysis_mode == "Player vs. Player (in a specific role)":
         c1, c2 = st.columns(2)
         with c1:
-            player_names = sorted([p['Name'] for p in all_players], key=get_last_name)
-            selected_names = st.multiselect("Select players to compare", options=player_names)
+            fav_tactic1, _ = get_favorite_tactics()
+            all_tactics = ["All Roles"] + sorted(list(get_tactic_roles().keys()))
+            tactic_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
+            selected_tactic = st.selectbox("Filter by Tactic", options=all_tactics, index=tactic_index)
         with c2:
-            # Get a list of all roles that at least one of the selected players can play
-            if selected_names:
-                player_ids = [p['Unique ID'] for p in all_players if p['Name'] in selected_names]
-                possible_roles = set()
-                for p in all_players:
-                    if p['Unique ID'] in player_ids:
-                        for role in p.get('Assigned Roles', []):
-                            possible_roles.add(role)
-                role_options = sorted(list(possible_roles), key=format_role_display)
-                selected_role = st.selectbox("Select a single role to compare", options=role_options, format_func=format_role_display)
+            if selected_tactic == "All Roles":
+                role_options = get_valid_roles()
             else:
-                selected_role = None
+                role_options = sorted(list(set(get_tactic_roles()[selected_tactic].values())))
+            selected_role = st.selectbox("Filter by Role", options=role_options, format_func=format_role_display)
+
+        # Filter the player pool based on the selected role
+        player_pool = [p for p in all_players if selected_role in p.get('Assigned Roles', [])]
         
-        if selected_names and selected_role:
-            player_ids_to_chart = [p['Unique ID'] for p in all_players if p['Name'] in selected_names]
-            history = get_dwrs_history(player_ids_to_chart, selected_role)
+        # Create a map of Unique ID -> Display Name to handle duplicate names
+        player_map = {p['Unique ID']: f"{p['Name']} ({p['Age']})" for p in player_pool}
+
+        if not player_map:
+            st.warning(f"No players in your club have the role '{format_role_display(selected_role)}' assigned.")
+            return
+
+        selected_ids = st.multiselect(
+            "Select players to compare",
+            options=list(player_map.keys()),
+            format_func=lambda uid: player_map[uid]
+        )
+        
+        if selected_ids and selected_role:
+            history = get_dwrs_history(selected_ids, selected_role)
             
             if not history.empty:
                 history['dwrs_normalized'] = pd.to_numeric(history['dwrs_normalized'].str.rstrip('%'))
-                player_name_map = {p['Unique ID']: p['Name'] for p in all_players}
-                history['Name'] = history['unique_id'].map(player_name_map)
+                # Use the unique display name from player_map for the chart legend
+                history['DisplayName'] = history['unique_id'].map(player_map)
                 
-                pivot = history.pivot_table(index='snapshot', columns='Name', values='dwrs_normalized', aggfunc='mean')
+                pivot = history.pivot_table(index='snapshot', columns='DisplayName', values='dwrs_normalized', aggfunc='mean')
                 pivot = pivot.interpolate(method='linear', limit_direction='forward', axis=0)
 
                 st.subheader(f"Development as {format_role_display(selected_role)}")
@@ -680,9 +814,9 @@ def dwrs_progress_page(players):
             else:
                 st.info(f"No historical data found for the selected players in the '{format_role_display(selected_role)}' role.")
         else:
-            st.info("Select 2 or more players and a role to see a comparison.")
+            st.info("Select 2 or more players from the list to see a comparison.")
 
-    # --- PRONG 3: INDIVIDUAL DEEP DIVE ---
+    # --- PRONG 3: INDIVIDUAL DEEP DIVE (Unchanged) ---
     elif analysis_mode == "Individual Player (deep dive)":
         c1, c2 = st.columns(2)
         with c1:
@@ -704,13 +838,11 @@ def dwrs_progress_page(players):
 
         if player_obj and selected_roles:
             player_id_to_chart = [player_obj['Unique ID']]
-            
             history_dfs = []
             for role in selected_roles:
                 history = get_dwrs_history(player_id_to_chart, role)
                 if not history.empty:
                     history['dwrs_normalized'] = pd.to_numeric(history['dwrs_normalized'].str.rstrip('%'))
-                    # Rename the column to the role name for the legend
                     history = history.rename(columns={'dwrs_normalized': format_role_display(role)})
                     history_dfs.append(history.set_index('snapshot')[format_role_display(role)])
 
@@ -948,84 +1080,84 @@ def create_new_role_page():
                 st.error(f"Failed to save role: {message}")
 
 def settings_page():
-    st.title("Settings")
+    with st.expander("⭐ Favorite Tactic Selection", expanded=True):
+        st.info("The selected tactics will appear at the top of the list on the analysis pages.")
+        
+        # Get all available tactics and add a "None" option
+        all_tactics = ["None"] + sorted(list(get_tactic_roles().keys()))
+        
+        # Get currently saved favorite tactics
+        fav_tactic1, fav_tactic2 = get_favorite_tactics()
+        
+        # Set the index for the dropdowns, defaulting to "None" (index 0)
+        index1 = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
+        index2 = all_tactics.index(fav_tactic2) if fav_tactic2 in all_tactics else 0
 
-    st.subheader("Favorite Tactic Selection")
-    st.info("The selected tactics will appear at the top of the list on the analysis pages.")
-    
-    # Get all available tactics and add a "None" option
-    all_tactics = ["None"] + sorted(list(get_tactic_roles().keys()))
-    
-    # Get currently saved favorite tactics
-    fav_tactic1, fav_tactic2 = get_favorite_tactics()
-    
-    # Set the index for the dropdowns, defaulting to "None" (index 0)
-    index1 = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
-    index2 = all_tactics.index(fav_tactic2) if fav_tactic2 in all_tactics else 0
+        c1, c2 = st.columns(2)
+        with c1:
+            new_fav_tactic1 = st.selectbox("Primary Favorite Tactic", options=all_tactics, index=index1)
+        with c2:
+            new_fav_tactic2 = st.selectbox("Secondary Favorite Tactic", options=all_tactics, index=index2)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        new_fav_tactic1 = st.selectbox("Primary Favorite Tactic", options=all_tactics, index=index1)
-    with c2:
-        new_fav_tactic2 = st.selectbox("Secondary Favorite Tactic", options=all_tactics, index=index2)
-    
-    st.divider()
+    with st.expander("📄 Agreed Playing Time (APT) Weights"):
+        st.info("Adjust the multiplier for a player's selection score based on their promised playing time. A higher value makes them more likely to be selected.")
+        
+        all_apt_options = sorted(list(set(FIELD_PLAYER_APT_OPTIONS + GK_APT_OPTIONS) - {'None'}))
+        new_apt_weights = {}
+        
+        cols = st.columns(3)
+        col_idx = 0
+        for apt in all_apt_options:
+            with cols[col_idx % 3]:
+                # Use the new get_apt_weight function to get the current value
+                current_weight = get_apt_weight(apt)
+                new_apt_weights[apt] = st.number_input(f"Weight for '{apt}'", 0.0, 5.0, current_weight, 0.05, key=f"apt_{apt}")
+            col_idx += 1
 
-    # --- NEW: Add Agreed Playing Time Weights Section ---
-    st.subheader("Agreed Playing Time (APT) Weights")
-    st.info("Adjust the multiplier for a player's selection score based on their promised playing time. A higher value makes them more likely to be selected.")
-    
-    all_apt_options = sorted(list(set(FIELD_PLAYER_APT_OPTIONS + GK_APT_OPTIONS) - {'None'}))
-    new_apt_weights = {}
-    
-    cols = st.columns(3)
-    col_idx = 0
-    for apt in all_apt_options:
-        with cols[col_idx % 3]:
-            # Use the new get_apt_weight function to get the current value
-            current_weight = get_apt_weight(apt)
-            new_apt_weights[apt] = st.number_input(f"Weight for '{apt}'", 0.0, 5.0, current_weight, 0.05, key=f"apt_{apt}")
-        col_idx += 1
-    
-    st.divider()
-
-    st.subheader("Global Stat Weights")
-    new_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight(cat.lower().replace(" ", "_"), val), 0.1) for cat, val in { "Extremely Important": 8.0, "Important": 4.0, "Good": 2.0, "Decent": 1.0, "Almost Irrelevant": 0.2 }.items()}
-    st.subheader("Goalkeeper Stat Weights")
-    new_gk_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight("gk_" + cat.lower().replace(" ", "_"), val), 0.1, key=f"gk_{cat}") for cat, val in { "Top Importance": 10.0, "High Importance": 8.0, "Medium Importance": 6.0, "Key": 4.0, "Preferable": 2.0, "Other": 0.5 }.items()}
-    st.subheader("Role Multipliers")
-    key_mult = st.number_input("Key Attributes Multiplier", 1.0, 20.0, get_role_multiplier('key'), 0.1)
-    pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
-
-    st.divider()
-    st.subheader("Surplus Player Age Thresholds")
-    st.info(
-        "Define the maximum age for a player to be considered 'youth'. Players at or below (<=) this age will be "
-        "suggested for loan, while older players will be suggested for sale/release. This affects the "
-        "'Best Position Calculator' and 'Transfer & Loan Management' pages."
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        new_outfielder_age = st.number_input(
-            "Outfielder Youth Age", 
-            min_value=15, 
-            max_value=30, 
-            value=get_age_threshold('outfielder'), 
-            step=1
+    with st.expander("⚖️ DWRS Weights & Multipliers"):
+        st.info(
+            "These settings form the core of the DWRS calculation. "
+            "'Global Weights' define the general importance of a meta category. "
+            "'Role Multipliers' boost the value of an attribute if it is 'Key' or 'Preferable' for a specific role, "
+            "making the calculation role-sensitive."
         )
-    with col2:
-        new_goalkeeper_age = st.number_input(
-            "Goalkeeper Youth Age", 
-            min_value=15, 
-            max_value=35, 
-            value=get_age_threshold('goalkeeper'), 
-            step=1
+        st.subheader("Global Stat Weights")
+        new_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight(cat.lower().replace(" ", "_"), val), 0.1) for cat, val in { "Extremely Important": 8.0, "Important": 4.0, "Good": 2.0, "Decent": 1.0, "Almost Irrelevant": 0.2 }.items()}
+        st.subheader("Goalkeeper Stat Weights")
+        new_gk_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight("gk_" + cat.lower().replace(" ", "_"), val), 0.1, key=f"gk_{cat}") for cat, val in { "Top Importance": 10.0, "High Importance": 8.0, "Medium Importance": 6.0, "Key": 4.0, "Preferable": 2.0, "Other": 0.5 }.items()}
+        st.subheader("Role Multipliers")
+        key_mult = st.number_input("Key Attributes Multiplier", 1.0, 20.0, get_role_multiplier('key'), 0.1)
+        pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
+
+    with st.expander("👶 Surplus Player Age Thresholds"):
+        st.info(
+            "Define the maximum age for a player to be considered 'youth'. Players at or below (<=) this age will be "
+            "suggested for loan, while older players will be suggested for sale/release. This affects the "
+            "'Best Position Calculator' and 'Transfer & Loan Management' pages."
         )
 
-    st.subheader("Database Settings")
-    db_name = st.text_input("Database Name (no .db)", value=get_db_name())
-    
+        col1, col2 = st.columns(2)
+        with col1:
+            new_outfielder_age = st.number_input(
+                "Outfielder Youth Age", 
+                min_value=15, 
+                max_value=30, 
+                value=get_age_threshold('outfielder'), 
+                step=1
+            )
+        with col2:
+            new_goalkeeper_age = st.number_input(
+                "Goalkeeper Youth Age", 
+                min_value=15, 
+                max_value=35, 
+                value=get_age_threshold('goalkeeper'), 
+                step=1
+            )
+
+    with st.expander("⚙️ Database Settings"):
+        db_name = st.text_input("Database Name (no .db)", value=get_db_name())
+
+    # This button remains outside the expanders
     if st.button("Save All Settings"):
         set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
         
