@@ -3,3 +3,4 @@ streamlit-option-menu
 pandas
 beautifulsoup4
 plotly
+toml
