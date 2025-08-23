@@ -29,6 +29,7 @@ MANIFEST
 
 # Streamlit secrets
 .streamlit/secrets.toml
+.streamlit/config.toml
 
 # Database files
 # IMPORTANT: Prevents your personal player data from being committed.
