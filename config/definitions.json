@@ -48,7 +48,8 @@
             "RPM-S": "Roaming Playmaker (Support)",
             "VOL-A": "Segundo Volante (Attack)",
             "WL-S": "Winger Left (Support)",
-            "WR-S": "Winger Right (Support)"
+            "WR-S": "Winger Right (Support)",
+            "BBM-S": "Box Box Midfielder (Support)"
         },
         "Attack": {
             "AF-A": "Advanced Forward (Attack)",
@@ -1272,6 +1273,32 @@
                 "Acceleration",
                 "Stamina"
             ]
+        },
+        "BBM-S": {
+            "key": [
+                "Passing",
+                "Tackling",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Stamina"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Long Shots",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Composure",
+                "Decisions",
+                "Positioning",
+                "Acceleration",
+                "Balance",
+                "Pace",
+                "Strength"
+            ]
         }
     },
     "position_to_role_mapping": {
@@ -1334,6 +1361,7 @@
             "VOL-A"
         ],
         "M (C)": [
+            "BBM-S",
             "CM-S",
             "RPM-S"
         ],
@@ -1499,71 +1527,249 @@
             "MR": "WR-S",
             "STL": "AF-A",
             "STR": "PF-S"
+        },
+        "4-1-2-1-2 Snowblind": {
+            "GK": "SK-D",
+            "DCL": "BPD-D",
+            "STR": "PF-S",
+            "STL": "AF-A",
+            "DL": "IWBL-A",
+            "DCR": "BPD-D",
+            "MCL": "BBM-S",
+            "AMR": "IFR-S",
+            "DMCR": "DM-S",
+            "DR": "FBR-A",
+            "ML": "WL-S"
         }
     },
     "tactic_layouts": {
         "4-1-1-4 Moo Grob": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCR"],
-            "Midfield": ["MCL"],
-            "Attacking Midfield": ["AML", "AMR"],
-            "Strikers": ["STL", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCR"
+            ],
+            "Midfield": [
+                "MCL"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
         },
         "4-2-1-1-2 Perfect Strangers": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Midfield": ["ML"],
-            "Attacking Midfield": ["AMR"],
-            "Strikers": ["STL", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Midfield": [
+                "ML"
+            ],
+            "Attacking Midfield": [
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
         },
         "4-2-1-3 Emerald Cucumber": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Attacking Midfield": ["AMR"],
-            "Strikers": ["STL", "STC", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STC",
+                "STR"
+            ]
         },
         "4-2-2-2 Silvermoon": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Midfield": ["MR"],
-            "Attacking Midfield": ["AMCL"],
-            "Strikers": ["STL", "STC"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Midfield": [
+                "MR"
+            ],
+            "Attacking Midfield": [
+                "AMCL"
+            ],
+            "Strikers": [
+                "STL",
+                "STC"
+            ]
         },
         "4-2-2-2 The In Law": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Attacking Midfield": ["AML", "AMCR"],
-            "Strikers": ["STC", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMCR"
+            ],
+            "Strikers": [
+                "STC",
+                "STR"
+            ]
         },
         "4-2-3-1 Highway Star": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Attacking Midfield": ["AML", "AMC", "AMR"],
-            "Strikers": ["ST"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMC",
+                "AMR"
+            ],
+            "Strikers": [
+                "ST"
+            ]
         },
         "4-2-4 EF 424 IF HP": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Attacking Midfield": ["AML", "AMR"],
-            "Strikers": ["STL", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
         },
         "4-3-3 Striker Force": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMCL", "DMCR"],
-            "Midfield": ["ML"],
-            "Strikers": ["STL", "STC", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Midfield": [
+                "ML"
+            ],
+            "Strikers": [
+                "STL",
+                "STC",
+                "STR"
+            ]
         },
         "4-4-2 GIN 25": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Midfield": ["ML", "MCL", "MCR", "MR"],
-            "Strikers": ["STL", "STR"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Midfield": [
+                "ML",
+                "MCL",
+                "MCR",
+                "MR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
         },
         "4-5-1 Speed King": {
-            "Defense": ["DL", "DCL", "DCR", "DR"],
-            "Defensive Midfield": ["DMC"],
-            "Midfield": ["MCL", "MCR"],
-            "Attacking Midfield": ["AML", "AMR"],
-            "Strikers": ["ST"]
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMC"
+            ],
+            "Midfield": [
+                "MCL",
+                "MCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMR"
+            ],
+            "Strikers": [
+                "ST"
+            ]
+        },
+        "4-1-2-1-2 Snowblind": {
+            "Defense": [
+                "DCL",
+                "DL",
+                "DCR",
+                "DR"
+            ],
+            "Strikers": [
+                "STR",
+                "STL"
+            ],
+            "Midfield": [
+                "MCL",
+                "ML"
+            ],
+            "Attacking Midfield": [
+                "AMR"
+            ],
+            "Defensive Midfield": [
+                "DMCR"
+            ]
         }
     }
 }
