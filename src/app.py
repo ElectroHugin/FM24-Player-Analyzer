@@ -16,7 +16,8 @@ from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE
                      get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS,
                      MASTER_POSITION_MAP)
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
-                          get_db_name, set_db_name, get_apt_weight, set_apt_weight, get_age_threshold)
+                          get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
+                          get_age_threshold, set_age_threshold)
 from definitions_handler import get_definitions, save_definitions
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
@@ -203,7 +204,7 @@ def display_tactic_grid(team, title, positions, layout):
             grid-template-columns: {grid_template_columns};
             gap: 8px;
             padding: 10px;
-            max-width: 70%;
+            max-width: 50%;
             margin: 0 auto;
         }}
         .player-box, .placeholder {{
@@ -1231,6 +1232,33 @@ def settings_page():
     st.subheader("Role Multipliers")
     key_mult = st.number_input("Key Attributes Multiplier", 1.0, 20.0, get_role_multiplier('key'), 0.1)
     pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
+
+    st.divider()
+    st.subheader("Surplus Player Age Thresholds")
+    st.info(
+        "Define the maximum age for a player to be considered 'youth'. Players at or below (<=) this age will be "
+        "suggested for loan, while older players will be suggested for sale/release. This affects the "
+        "'Best Position Calculator' and 'Transfer & Loan Management' pages."
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        new_outfielder_age = st.number_input(
+            "Outfielder Youth Age", 
+            min_value=15, 
+            max_value=30, 
+            value=get_age_threshold('outfielder'), 
+            step=1
+        )
+    with col2:
+        new_goalkeeper_age = st.number_input(
+            "Goalkeeper Youth Age", 
+            min_value=15, 
+            max_value=35, 
+            value=get_age_threshold('goalkeeper'), 
+            step=1
+        )
+
     st.subheader("Database Settings")
     db_name = st.text_input("Database Name (no .db)", value=get_db_name())
     
@@ -1245,6 +1273,8 @@ def settings_page():
         for cat, val in new_gk_weights.items(): set_weight("gk_" + cat.lower().replace(" ", "_"), val)
         set_role_multiplier('key', key_mult)
         set_role_multiplier('preferable', pref_mult)
+        set_age_threshold('outfielder', new_outfielder_age)
+        set_age_threshold('goalkeeper', new_goalkeeper_age)
         set_db_name(db_name)
         clear_all_caches()
         df = load_data()
