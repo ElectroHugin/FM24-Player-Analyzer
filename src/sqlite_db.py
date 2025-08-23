@@ -169,12 +169,15 @@ def update_dwrs_ratings(df, valid_roles):
     from analytics import calculate_dwrs
     from config_handler import get_weight
     from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS
+    
     conn = connect_db()
     cursor = conn.cursor()
+    
     weights = {cat: get_weight(cat.lower().replace(" ", "_"), default) for cat, default in WEIGHT_DEFAULTS.items()}
     gk_weights = {cat: get_weight("gk_" + cat.lower().replace(" ", "_"), default) for cat, default in GK_WEIGHT_DEFAULTS.items()}
     all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
     cursor.execute("""
         SELECT unique_id, role, dwrs_normalized FROM dwrs_ratings
         WHERE (unique_id, role, timestamp) IN (
@@ -182,20 +185,38 @@ def update_dwrs_ratings(df, valid_roles):
         )
     """)
     dwrs_dict = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
-    for _, player in df.iterrows():
+
+    # --- START REFACTOR ---
+    
+    ratings_to_insert = []
+    
+    for _, player in df.iterrows(): # .iterrows() is acceptable here as the primary work is calculation, not dataframe modification
         player_dict = player.to_dict()
         roles = player_dict.get('Assigned Roles', [])
         if not isinstance(roles, list): roles = []
+        
         for role in roles:
             if role in valid_roles:
                 weights_to_use = gk_weights if role in all_gk_roles else weights
                 absolute, normalized = calculate_dwrs(player_dict, role, weights_to_use)
+                
                 old_normalized = dwrs_dict.get((player['Unique ID'], role), '0%')
                 old_value = float(old_normalized.strip('%')) if isinstance(old_normalized, str) and old_normalized.endswith('%') else 0.0
                 new_value = float(normalized.strip('%'))
+
                 if abs(new_value - old_value) >= 1.0 or (player['Unique ID'], role) not in dwrs_dict:
-                    cursor.execute("INSERT OR REPLACE INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp) VALUES (?, ?, ?, ?, ?)",
-                                   (player['Unique ID'], role, absolute, normalized, timestamp))
+                    ratings_to_insert.append(
+                        (player['Unique ID'], role, absolute, normalized, timestamp)
+                    )
+
+    if ratings_to_insert:
+        cursor.executemany(
+            "INSERT OR REPLACE INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp) VALUES (?, ?, ?, ?, ?)",
+            ratings_to_insert
+        )
+    
+    # --- END REFACTOR ---
+
     conn.commit()
     conn.close()
 
