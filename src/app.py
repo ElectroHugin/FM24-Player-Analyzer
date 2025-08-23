@@ -361,9 +361,16 @@ def best_position_calculator_page(players):
         master_role_ratings = _get_master_role_ratings(user_club)
         squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
 
-    display_tactic_grid(squad_data["starting_xi"], "Starting XI", positions, layout)
-    st.divider()
-    display_tactic_grid(squad_data["b_team"], "B Team", positions, layout)
+    # --- NEW: Side-by-side layout for Starting XI and B-Team ---
+    xi_col, b_team_col = st.columns(2)
+
+    with xi_col:
+        display_tactic_grid(squad_data["starting_xi"], "Starting XI", positions, layout)
+
+    with b_team_col:
+        display_tactic_grid(squad_data["b_team"], "B Team", positions, layout)
+    
+    st.divider() # Keep a divider after the two pitches
 
     st.subheader("Additional Depth")
     best_depth_options = squad_data["best_depth_options"]

@@ -211,6 +211,16 @@ GK_APT_OPTIONS = [
     "Emergency Backup", "Surplus to Requirements"
 ]
 
+APT_ABBREVIATIONS = {
+    "Important Player": "Important",
+    "Breakthrough Prospect": "Prospect",
+    "Future Prospect": "Future",
+    "Emergency Backup": "Backup",
+    "2nd Team Regular": "2nd Team",
+    "Surplus to Requirements": "Surplus",
+    # Note: GK-specific long names are not needed here as per the design.
+}
+
 # NEW: Master map for tactical grid display
 # Defines the stratum (vertical level) and column index (horizontal slot) for each position key.
 # Defensive/Midfield strata use a 5-column grid (indices 0-4).

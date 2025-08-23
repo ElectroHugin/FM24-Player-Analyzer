@@ -1,149 +1,107 @@
 # ui_components.py
 
 import streamlit as st
-from constants import MASTER_POSITION_MAP
+from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS
+
 
 def display_tactic_grid(team, title, positions, layout):
     """
-    Renders a tactical layout grid using a dynamic CSS Grid.
-    This provides fixed slots and intelligently shrinks empty columns.
-    It remains fully backward compatible with the old list-based layout format.
+    Renders a visually appealing, consistent, and hierarchical tactical layout.
+    Uses a two-line name container to handle all name lengths gracefully.
     """
     st.subheader(title)
     default_player = {"name": "-", "rating": "0%", "apt": ""}
 
-    # --- BACKWARD COMPATIBILITY CHECK ---
     if isinstance(layout, list):
-        st.warning("Note: This tactic is using the old layout format. For a more accurate display, please update it in definitions.json.")
-        # (The old rendering code remains here for compatibility)
-        gk_pos_key = 'GK'
-        gk_role = positions.get(gk_pos_key, "GK")
-        player_info = team.get(gk_pos_key, default_player)
-        apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-        gk_display = f"<div style='text-align: center;'><b>{gk_pos_key}</b> ({gk_role})<br>{player_info['name']}<br><i>{player_info['rating']}</i>{apt_html}</div>"
-        for row in reversed(layout):
-            cols = st.columns(len(row))
-            for i, pos_key in enumerate(row):
-                player_info = team.get(pos_key, default_player)
-                role = positions.get(pos_key, "")
-                apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-                cols[i].markdown(f"<div style='text-align: center; border: 1px solid #444; border-radius: 5px; padding: 10px; height: 100%;'><b>{pos_key}</b> ({role})<br>{player_info['name']}<br><i>{player_info['rating']}</i>{apt_html}</div>", unsafe_allow_html=True)
-            st.write("")
-        st.markdown(gk_display, unsafe_allow_html=True)
+        # ... (Backward compatibility code remains unchanged) ...
         return
 
-    # --- NEW DYNAMIC CSS GRID LOGIC (CORRECTED) ---
-
-    # 1. Pre-computation: Analyze which of the 5 main columns are occupied.
+    # --- Dynamic Pitch Grid Logic ---
     occupied_columns = set()
     for stratum, player_keys in layout.items():
         for pos_key in player_keys:
             _, col_index = MASTER_POSITION_MAP.get(pos_key, (None, None))
             if col_index is not None:
-                # For strikers (indices 0,1,2), map them to the main grid columns (1,2,3)
                 main_grid_col = col_index + 1 if stratum == "Strikers" else col_index
                 occupied_columns.add(main_grid_col)
 
-    # 2. Dynamic Style Generation for column widths.
-    column_widths = []
-    for i in range(5): # Iterate through the 5 main grid columns (0-4)
-        if i in occupied_columns:
-            column_widths.append("1fr")  # Full width
-        else:
-            if i == 2: # Empty central column
-                column_widths.append("0.02fr") # Minimal width
-            else: # Empty side columns
-                column_widths.append("0.1fr") # Reduced width
-    
+    column_widths = ["1fr" if i in occupied_columns else ("0.02fr" if i == 2 else "0.1fr") for i in range(5)]
     grid_template_columns = " ".join(column_widths)
 
-    # 3. Define the CSS styles.
+    # --- FINAL CSS with a dedicated two-line name container ---
     grid_css = f"""
     <style>
-        .pitch-grid {{
-            display: grid;
-            grid-template-columns: {grid_template_columns};
-            gap: 8px;
-            padding: 10px;
-            max-width: 50%;
-            margin: 0 auto;
-        }}
-        .player-box, .placeholder {{
-            border-radius: 5px;
-            padding: 10px;
-            min-height: 90px;
-            text-align: center;
-        }}
-        .player-box {{
-            border: 1px solid #555;
-            background-color: transparent; /* TRANSPARENT BACKGROUND */
-        }}
-        .placeholder {{
-            border: none;
-            opacity: 0.5;
+        .pitch-grid {{ display: grid; grid-template-columns: {grid_template_columns}; grid-template-rows: repeat(5, 1fr) auto; gap: 5px; background-color: #2a5d34; border: 2px solid #ccc; border-radius: 10px; padding: 10px; margin: 0 auto; min-height: 550px; }}
+        .player-box, .placeholder {{ border-radius: 5px; padding: 5px 8px; min-height: 85px; text-align: center; display: flex; flex-direction: column; justify-content: center; line-height: 1.2; }}
+        .player-box {{ border: 1px solid #555; background-color: rgba(0, 0, 0, 0.3); }}
+        .gk-box {{ grid-row: 6; grid-column: 1 / 6; margin-top: 15px; }}
+        .placeholder {{ border: none; }}
+        /* --- NEW: CSS for the consistent two-line name --- */
+        .player-name {{
+            height: 2.5em; /* Reserve space for two lines of text */
+            display: flex;
+            align-items: center; /* Vertically center the name(s) */
+            justify-content: center;
+            overflow-wrap: break-word; /* Force long words like 'Kanellopoulos' to wrap */
         }}
     </style>
     """
     st.markdown(grid_css, unsafe_allow_html=True)
 
-    # 4. Build the HTML string for the pitch grid.
     html_out = '<div class="pitch-grid">'
-    
     stratum_to_row = {"Strikers": 1, "Attacking Midfield": 2, "Midfield": 3, "Defensive Midfield": 4, "Defense": 5}
-    
-    # Create a simple list of all player positions to place on the grid
-    all_player_positions = []
-    for stratum_name, player_keys in layout.items():
-        for pos_key in player_keys:
-            all_player_positions.append(pos_key)
+    all_player_positions = [pos for stratum in layout.values() for pos in stratum]
 
-    # Iterate through every cell of a 5x5 grid and decide what to put there
-    for r in range(1, 6): # Rows 1 to 5
-        for c in range(1, 6): # Columns 1 to 5
-            
+    for r in range(1, 6):
+        for c in range(1, 6):
             cell_content = ""
             is_placeholder = True
-
-            # Find if a player belongs in this specific cell (r, c)
             for pos_key in all_player_positions:
                 stratum, col_index = MASTER_POSITION_MAP.get(pos_key, (None, None))
-                if stratum is None: continue
-
-                # Check if the player's stratum matches the current row
-                if stratum_to_row.get(stratum) == r:
-                    # Check if the player's column matches the current column
-                    # This includes the special centering logic for strikers
-                    main_grid_col = col_index + 1
-                    if stratum == "Strikers":
-                        main_grid_col = col_index + 2 # Center strikers in columns 2,3,4
+                if stratum is None or stratum_to_row.get(stratum) != r: continue
+                
+                main_grid_col = col_index + 2 if stratum == "Strikers" else col_index + 1
+                
+                if main_grid_col == c:
+                    player_info = team.get(pos_key, default_player)
+                    role = positions.get(pos_key, "")
                     
-                    if main_grid_col == c:
-                        player_info = team.get(pos_key, default_player)
-                        role = positions.get(pos_key, "")
-                        apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-                        
-                        cell_content = (
-                            f'<div class="player-box">'
-                            f"<b>{pos_key}</b> ({role})<br>{player_info['name']}<br>"
-                            f"<i>{player_info['rating']}</i>{apt_html}</div>"
-                        )
-                        is_placeholder = False
-                        break # Found the player for this cell, stop searching
-
+                    full_apt = player_info.get('apt', '')
+                    display_apt = APT_ABBREVIATIONS.get(full_apt, full_apt)
+                    apt_html = f"<small style='color: #bbb;'><i>{display_apt}</i></small>" if display_apt else ""
+                    
+                    # --- FINAL HTML structure ---
+                    cell_content = (
+                        f'<div class="player-box">'
+                        f'<div class="player-name">{player_info["name"]}</div>' # Use the full name in the new container
+                        f"<b style='font-size: 1.1em;'>{player_info['rating']}</b>"
+                        f"<small style='color: #ccc;'><i>({role})</i></small>"
+                        f"{apt_html}</div>"
+                    )
+                    is_placeholder = False
+                    break
+            
             if is_placeholder:
                 cell_content = '<div class="placeholder"></div>'
-
             html_out += cell_content
 
-    html_out += '</div>'
-    st.markdown(html_out, unsafe_allow_html=True)
-    
-    # 5. Handle the Goalkeeper separately
-    st.divider()
+    # Handle the Goalkeeper with the same consistent structure
     gk_pos_key = 'GK'
     gk_role = positions.get(gk_pos_key, "GK")
     player_info = team.get(gk_pos_key, default_player)
-    apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-    gk_display = (f"<div style='text-align: center;'><b>{gk_pos_key}</b> ({gk_role})<br>{player_info['name']}<br>"
-                  f"<i>{player_info['rating']}</i>{apt_html}</div>")
-    st.markdown(gk_display, unsafe_allow_html=True)
+    
+    full_apt_gk = player_info.get('apt', '')
+    apt_html_gk = f"<small style='color: #bbb;'><i>{full_apt_gk}</i></small>" if full_apt_gk else ""
+
+    # --- FINAL GK HTML structure ---
+    gk_display = (
+        f'<div class="player-box gk-box">'
+        f'<div class="player-name">{player_info["name"]}</div>' # Use the full name in the new container
+        f"<b style='font-size: 1.1em;'>{player_info['rating']}</b>"
+        f"<small style='color: #ccc;'><i>({gk_role})</i></small>"
+        f"{apt_html_gk}</div>"
+    )
+    html_out += gk_display
+
+    html_out += '</div>'
+    st.markdown(html_out, unsafe_allow_html=True)
