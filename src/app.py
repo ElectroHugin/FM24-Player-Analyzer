@@ -18,6 +18,8 @@ from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS, PLAYER_ROLE
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
                           get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
                           get_age_threshold, set_age_threshold)
+from squad_logic import calculate_squad_and_surplus
+from ui_components import display_tactic_grid
 from definitions_handler import get_definitions, save_definitions
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
@@ -42,258 +44,14 @@ def format_role_display(role_abbr):
 def format_role_display_with_all(role_abbr):
     return "All Roles" if role_abbr == "All Roles" else get_role_display_map().get(role_abbr, role_abbr)
 
-def _calculate_squad_and_surplus(my_club_players, positions, master_role_ratings):
-    """
-    A single, reliable function to calculate the Starting XI, B-Team, Depth, and Surplus players.
-    This version includes special logic for goalkeepers and is corrected to prevent TypeErrors.
-    """
-    def select_team(team_positions, available_players):
-        team = {}
-        players_team = set()
-        while len(team) < len(team_positions):
-            best_candidate_for_each_pos = {}
-            empty_positions = [p for p in team_positions if p not in team]
-            for pos in empty_positions:
-                role = team_positions[pos]
-                best_candidate = None
-                max_score = -1
-                for player in available_players:
-                    if player['Unique ID'] in players_team: continue
-                    primary_role = player.get('primary_role')
-                    if primary_role and primary_role != role: continue
-                    rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
-                    if rating > 0:
-                        apt = player.get("Agreed Playing Time", "None") or "None"
-                        apt_weight = get_apt_weight(apt)
-                        selection_score = rating * apt_weight
-                        if selection_score > max_score:
-                            max_score = selection_score
-                            best_candidate = { "player_id": player['Unique ID'], "player_name": player['Name'], "player_apt": apt, "rating": rating, "selection_score": selection_score, "position": pos }
-                if best_candidate: best_candidate_for_each_pos[pos] = best_candidate
-            if not best_candidate_for_each_pos: break 
-            weakest_link_pos = min(best_candidate_for_each_pos, key=lambda p: best_candidate_for_each_pos[p]['selection_score'])
-            winner = best_candidate_for_each_pos[weakest_link_pos]
-            team[weakest_link_pos] = { "name": winner['player_name'], "rating": f"{int(winner['rating'])}%", "apt": winner['player_apt'] }
-            players_team.add(winner['player_id'])
-            available_players = [p for p in available_players if p['Unique ID'] != winner['player_id']]
-        return team, available_players
 
-    # --- Main Logic Execution ---
-    starting_xi, remaining_players = select_team(positions, my_club_players)
-    b_team, depth_pool = select_team(positions, remaining_players)
-    
-    default_player = {"name": "-", "rating": "0%", "apt": ""}
-    for pos in positions:
-        if pos not in starting_xi: starting_xi[pos] = default_player.copy()
-        if pos not in b_team: b_team[pos] = default_player.copy()
-
-    players_xi_or_b_team = {p['Unique ID'] for p in my_club_players if p not in depth_pool}
-    
-    best_depth_options = {}
-    depth_player_ids = set()
-    if depth_pool:
-        for pos, role in positions.items():
-            if pos == 'GK':
-                gks_depth = [p for p in depth_pool if 'GK' in p.get('Position', '')]
-                sorted_gks = sorted(gks_depth, key=lambda p: master_role_ratings.get(role, {}).get(p['Unique ID'], -1), reverse=True)
-                top_depth_gks = sorted_gks[:2] 
-                if top_depth_gks:
-                    best_depth_options[pos] = []
-                    for gk in top_depth_gks:
-                        rating = master_role_ratings.get(role, {}).get(gk['Unique ID'], 0)
-                        if rating > 0:
-                            best_depth_options[pos].append({ "name": gk['Name'], "rating": f"{int(rating)}%", "apt": gk.get("Agreed Playing Time", "") or "" })
-                            depth_player_ids.add(gk['Unique ID'])
-            else:
-                outfielders_depth = [p for p in depth_pool if 'GK' not in p.get('Position', '')]
-                if outfielders_depth:
-                    best_candidate = max(outfielders_depth, key=lambda p: master_role_ratings.get(role, {}).get(p['Unique ID'], -1), default=None)
-                    if best_candidate:
-                        rating = master_role_ratings.get(role, {}).get(best_candidate['Unique ID'], 0)
-                        if rating > 0:
-                            best_depth_options[pos] = [{ "name": best_candidate['Name'], "rating": f"{int(rating)}%", "apt": best_candidate.get("Agreed Playing Time", "") or "" }]
-                            depth_player_ids.add(best_candidate['Unique ID'])
-
-    players_with_a_role_ids = players_xi_or_b_team.union(depth_player_ids)
-    surplus_players = [p for p in my_club_players if p['Unique ID'] not in players_with_a_role_ids]
-
-    youth_surplus = []
-    senior_surplus = []
-
-    outfielder_age_limit = get_age_threshold('outfielder')
-    goalkeeper_age_limit = get_age_threshold('goalkeeper')
-
-    for player in surplus_players:
-        age_str = player.get('Age')
-        age = int(age_str) if age_str and age_str.isdigit() else 99
-        is_gk = 'GK' in player.get('Position', '')
-        if is_gk:
-            if age <= goalkeeper_age_limit: youth_surplus.append(player)
-            else: senior_surplus.append(player)
-        else:
-            if age <= outfielder_age_limit: youth_surplus.append(player)
-            else: senior_surplus.append(player)
-
-    youth_surplus.sort(key=lambda p: get_last_name(p['Name']))
-    senior_surplus.sort(key=lambda p: get_last_name(p['Name']))
-    
-    return {
-        "starting_xi": starting_xi, "b_team": b_team, "best_depth_options": best_depth_options,
-        "surplus_players": surplus_players, "youth_surplus": youth_surplus, "senior_surplus": senior_surplus
-    }
-
-def display_tactic_grid(team, title, positions, layout):
-    """
-    Renders a tactical layout grid using a dynamic CSS Grid.
-    This provides fixed slots and intelligently shrinks empty columns.
-    It remains fully backward compatible with the old list-based layout format.
-    """
-    st.subheader(title)
-    default_player = {"name": "-", "rating": "0%", "apt": ""}
-
-    # --- BACKWARD COMPATIBILITY CHECK ---
-    if isinstance(layout, list):
-        st.warning("Note: This tactic is using the old layout format. For a more accurate display, please update it in definitions.json.")
-        # (The old rendering code remains here for compatibility)
-        gk_pos_key = 'GK'
-        gk_role = positions.get(gk_pos_key, "GK")
-        player_info = team.get(gk_pos_key, default_player)
-        apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-        gk_display = f"<div style='text-align: center;'><b>{gk_pos_key}</b> ({gk_role})<br>{player_info['name']}<br><i>{player_info['rating']}</i>{apt_html}</div>"
-        for row in reversed(layout):
-            cols = st.columns(len(row))
-            for i, pos_key in enumerate(row):
-                player_info = team.get(pos_key, default_player)
-                role = positions.get(pos_key, "")
-                apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-                cols[i].markdown(f"<div style='text-align: center; border: 1px solid #444; border-radius: 5px; padding: 10px; height: 100%;'><b>{pos_key}</b> ({role})<br>{player_info['name']}<br><i>{player_info['rating']}</i>{apt_html}</div>", unsafe_allow_html=True)
-            st.write("")
-        st.markdown(gk_display, unsafe_allow_html=True)
-        return
-
-    # --- NEW DYNAMIC CSS GRID LOGIC (CORRECTED) ---
-
-    # 1. Pre-computation: Analyze which of the 5 main columns are occupied.
-    occupied_columns = set()
-    for stratum, player_keys in layout.items():
-        for pos_key in player_keys:
-            _, col_index = MASTER_POSITION_MAP.get(pos_key, (None, None))
-            if col_index is not None:
-                # For strikers (indices 0,1,2), map them to the main grid columns (1,2,3)
-                main_grid_col = col_index + 1 if stratum == "Strikers" else col_index
-                occupied_columns.add(main_grid_col)
-
-    # 2. Dynamic Style Generation for column widths.
-    column_widths = []
-    for i in range(5): # Iterate through the 5 main grid columns (0-4)
-        if i in occupied_columns:
-            column_widths.append("1fr")  # Full width
-        else:
-            if i == 2: # Empty central column
-                column_widths.append("0.02fr") # Minimal width
-            else: # Empty side columns
-                column_widths.append("0.1fr") # Reduced width
-    
-    grid_template_columns = " ".join(column_widths)
-
-    # 3. Define the CSS styles.
-    grid_css = f"""
-    <style>
-        .pitch-grid {{
-            display: grid;
-            grid-template-columns: {grid_template_columns};
-            gap: 8px;
-            padding: 10px;
-            max-width: 50%;
-            margin: 0 auto;
-        }}
-        .player-box, .placeholder {{
-            border-radius: 5px;
-            padding: 10px;
-            min-height: 90px;
-            text-align: center;
-        }}
-        .player-box {{
-            border: 1px solid #555;
-            background-color: transparent; /* TRANSPARENT BACKGROUND */
-        }}
-        .placeholder {{
-            border: none;
-            opacity: 0.5;
-        }}
-    </style>
-    """
-    st.markdown(grid_css, unsafe_allow_html=True)
-
-    # 4. Build the HTML string for the pitch grid.
-    html_out = '<div class="pitch-grid">'
-    
-    stratum_to_row = {"Strikers": 1, "Attacking Midfield": 2, "Midfield": 3, "Defensive Midfield": 4, "Defense": 5}
-    
-    # Create a simple list of all player positions to place on the grid
-    all_player_positions = []
-    for stratum_name, player_keys in layout.items():
-        for pos_key in player_keys:
-            all_player_positions.append(pos_key)
-
-    # Iterate through every cell of a 5x5 grid and decide what to put there
-    for r in range(1, 6): # Rows 1 to 5
-        for c in range(1, 6): # Columns 1 to 5
-            
-            cell_content = ""
-            is_placeholder = True
-
-            # Find if a player belongs in this specific cell (r, c)
-            for pos_key in all_player_positions:
-                stratum, col_index = MASTER_POSITION_MAP.get(pos_key, (None, None))
-                if stratum is None: continue
-
-                # Check if the player's stratum matches the current row
-                if stratum_to_row.get(stratum) == r:
-                    # Check if the player's column matches the current column
-                    # This includes the special centering logic for strikers
-                    main_grid_col = col_index + 1
-                    if stratum == "Strikers":
-                        main_grid_col = col_index + 2 # Center strikers in columns 2,3,4
-                    
-                    if main_grid_col == c:
-                        player_info = team.get(pos_key, default_player)
-                        role = positions.get(pos_key, "")
-                        apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-                        
-                        cell_content = (
-                            f'<div class="player-box">'
-                            f"<b>{pos_key}</b> ({role})<br>{player_info['name']}<br>"
-                            f"<i>{player_info['rating']}</i>{apt_html}</div>"
-                        )
-                        is_placeholder = False
-                        break # Found the player for this cell, stop searching
-
-            if is_placeholder:
-                cell_content = '<div class="placeholder"></div>'
-
-            html_out += cell_content
-
-    html_out += '</div>'
-    st.markdown(html_out, unsafe_allow_html=True)
-    
-    # 5. Handle the Goalkeeper separately
-    st.divider()
-    gk_pos_key = 'GK'
-    gk_role = positions.get(gk_pos_key, "GK")
-    player_info = team.get(gk_pos_key, default_player)
-    apt_html = f"<br><small><i>{player_info.get('apt', '')}</i></small>" if player_info.get('apt') else ""
-    gk_display = (f"<div style='text-align: center;'><b>{gk_pos_key}</b> ({gk_role})<br>{player_info['name']}<br>"
-                  f"<i>{player_info['rating']}</i>{apt_html}</div>")
-    st.markdown(gk_display, unsafe_allow_html=True)
-
-def sidebar():
+def sidebar(df):
     with st.sidebar:
         st.header("Navigation")
         page_options = ["All Players", "Assign Roles", "Role Analysis", "Player-Role Matrix", "Best Position Calculator", "Transfer & Loan Management", "Player Comparison", "DWRS Progress", "Edit Player Data", "Create New Role", "Settings"]
         page = st.radio("Go to", page_options)
         uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
-        df = load_data()
+        #df = load_data()
         club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
         current_club = get_user_club() or "Select a club"
                 # --- ADD THIS BUTTON ---
@@ -321,7 +79,7 @@ def sidebar():
             st.rerun()
         return page, uploaded_file
 
-def main_page(uploaded_file):
+def main_page(uploaded_file, df):
     st.title("Player Dashboard")
     if uploaded_file:
         with st.spinner("Processing file..."):
@@ -333,7 +91,7 @@ def main_page(uploaded_file):
         update_dwrs_ratings(df, get_valid_roles())
         st.success("Data updated successfully!")
         st.rerun()
-    df = load_data()
+    #df = load_data()
     if df is not None:
         st.subheader("All Players")
         st.dataframe(df, use_container_width=True, hide_index=True)
@@ -354,9 +112,9 @@ def parse_position_string(pos_str):
                     final_pos.add(f"{base} (C)" if base == "ST" else base)
     return final_pos
 
-def assign_roles_page():
+def assign_roles_page(df):
     st.title("Assign Roles to Players")
-    df = pd.DataFrame(get_all_players())
+    #df = pd.DataFrame(get_all_players())
     if df.empty:
         st.info("No players available. Please upload player data.")
         return
@@ -538,7 +296,7 @@ def player_role_matrix_page():
     prepare_and_display_df(scouted_matrix, "Scouted Players", "scouted", scouted_display_cols)
 
 
-def best_position_calculator_page():
+def best_position_calculator_page(players):
     st.title("Best Position Calculator")
     st.write("This tool uses a 'weakest link first' algorithm to build the most balanced team based on a selected tactic.")
 
@@ -569,11 +327,12 @@ def best_position_calculator_page():
     tactic = st.selectbox("Select Tactic", options=sorted_tactics, index=0)
     
     positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
-    my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
+    #my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
+    my_club_players = [p for p in players if p['Club'] == user_club]
     
     with st.spinner("Calculating best teams and surplus players..."):
         master_role_ratings = _get_master_role_ratings(user_club)
-        squad_data = _calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
+        squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
 
     display_tactic_grid(squad_data["starting_xi"], "Starting XI", positions, layout)
     st.divider()
@@ -625,7 +384,7 @@ def best_position_calculator_page():
             st.dataframe(pd.DataFrame(df_youth_data), hide_index=True, use_container_width=True)
 
   
-def transfer_loan_management_page():
+def transfer_loan_management_page(players):
     st.title("Transfer & Loan Management")
     st.info("Manage surplus players based on your selected tactic. Use the save buttons to commit your changes.")
 
@@ -662,7 +421,8 @@ def transfer_loan_management_page():
     tactic = st.selectbox("Select Tactic to Analyze Surplus Players", options=all_tactics, index=default_index)
 
     positions = get_tactic_roles()[tactic]
-    my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
+    #my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
+    my_club_players = [p for p in players if p['Club'] == user_club]
     
     master_ratings = {}
     for role in get_valid_roles():
@@ -671,7 +431,7 @@ def transfer_loan_management_page():
             ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
             master_ratings[role] = ratings_df.set_index('Unique ID')['DWRS'].to_dict()
             
-    squad_data = _calculate_squad_and_surplus(my_club_players, positions, master_ratings)
+    squad_data = calculate_squad_and_surplus(my_club_players, positions, master_ratings)
 
     # --- Calculate Best DWRS AND Best Role for each surplus player ---
     tactic_roles = set(get_tactic_roles().get(tactic, {}).values())
@@ -799,9 +559,10 @@ def transfer_loan_management_page():
     st.divider()
     display_management_table(senior_surplus, f"For Sale / Release (Outfielders {outfielder_age}+, GKs {gk_age}+)")
 
-def player_comparison_page():
+def player_comparison_page(players):
     st.title("Player Comparison")
-    df = pd.DataFrame(get_all_players())
+    #df = pd.DataFrame(get_all_players())
+    df = pd.DataFrame(players)
     if df.empty:
         st.info("No players available.")
         return
@@ -820,12 +581,13 @@ def player_comparison_page():
         # Set index, transpose, and display the corrected DataFrame
         st.dataframe(comparison_df.set_index('Name').T, use_container_width=True)
 
-def dwrs_progress_page():
+def dwrs_progress_page(players):
     st.title("DWRS Player Development")
     st.info("Analyze player development trends. Choose an analysis mode to compare positional averages, specific players in a role, or an individual player's progress across their roles.")
 
     user_club = get_user_club()
-    all_players = [p for p in get_all_players() if p['Club'] == user_club] # Filter to your club first
+    #all_players = [p for p in get_all_players() if p['Club'] == user_club] # Filter to your club first
+    all_players = [p for p in players if p['Club'] == user_club] # Filter to your club first
     if not all_players:
         st.warning("No players found for your club. Please select your club in the sidebar.")
         return
@@ -961,14 +723,16 @@ def dwrs_progress_page():
         else:
             st.info("Select a player and at least one of their roles to see their progress.")
 
-def edit_player_data_page():
+def edit_player_data_page(players):
     st.title("Edit Player Data")
     user_club = get_user_club()
     if not user_club:
         st.warning("Please select your club from the sidebar to use this feature.")
         return
 
-    all_players = get_all_players()
+    #all_players = get_all_players()
+    all_players = players
+
     if not all_players:
         st.info("No players loaded.")
         return
@@ -1040,7 +804,7 @@ def edit_player_data_page():
             st.subheader("Set Agreed Playing Time")
             is_gk = "GK" in player.get('Position', '')
             apt_options = GK_APT_OPTIONS if is_gk else FIELD_PLAYER_APT_OPTIONS
-            current_apt = player.get('agreed_playing_time')
+            current_apt = player.get('Agreed Playing Time')
             
             try:
                 apt_index = apt_options.index(current_apt)
@@ -1284,7 +1048,10 @@ def settings_page():
 
 # --- FIXED: Main function with clear if/elif structure ---
 def main():
-    page, uploaded_file = sidebar()
+     # --- START REFACTOR ---
+    df = load_data() # This hits the @st.cache_data function once
+    players = get_all_players()
+    page, uploaded_file = sidebar(df) # Pass df to sidebar
     
     # Use st.query_params to allow linking to specific pages
     query_params = st.query_params
@@ -1292,23 +1059,23 @@ def main():
         page = query_params["page"][0]
     
     if page == "All Players":
-        main_page(uploaded_file)
+        main_page(uploaded_file, df)
     elif page == "Assign Roles":
-        assign_roles_page()
+        assign_roles_page(df)
     elif page == "Role Analysis":
         role_analysis_page()
     elif page == "Player-Role Matrix":
         player_role_matrix_page()
     elif page == "Best Position Calculator":
-        best_position_calculator_page()
+        best_position_calculator_page(players)
     elif page == "Transfer & Loan Management":
-        transfer_loan_management_page()
+        transfer_loan_management_page(players)
     elif page == "Player Comparison":
-        player_comparison_page()
+        player_comparison_page(players)
     elif page == "DWRS Progress":
-        dwrs_progress_page()
+        dwrs_progress_page(players)
     elif page == "Edit Player Data":
-        edit_player_data_page()
+        edit_player_data_page(players)
     elif page == "Create New Role":
         create_new_role_page()
     elif page == "Settings":
