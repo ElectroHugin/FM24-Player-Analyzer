@@ -255,29 +255,3 @@ MASTER_POSITION_MAP = {
     "STC": ("Strikers", 1), "ST": ("Strikers", 1), # Both ST and STC map to the central slot
     "STR": ("Strikers", 2)
 }
-
-
-# Custom CSS for visual design (dark theme, FM-inspired)
-CSS_STYLES = """
-    <style>
-    .main {
-        background-color: #1e1e1e;
-        color: white;
-    }
-    .stButton>button {
-        background-color: #0055a4;
-        color: white;
-        border-radius: 5px;
-    }
-    .stDataFrame {
-        background-color: #2e2e2e;
-        color: white;
-    }
-    h1, h2 {
-        color: #ffffff;
-    }
-    .sidebar .sidebar-content {
-        background-color: #2e2e2e;
-    }
-    </style>
-"""

@@ -64,6 +64,11 @@ def load_config():
         }
         config_was_modified = True
 
+    # 7. Ensure [Theme] section exists
+    if not config.has_section('Theme'):
+        config['Theme'] = {'primary_color': '#0055a4', 'secondary_color': '#ffffff'}
+        config_was_modified = True
+
     # --- End of validation ---
 
     # If we had to add any missing sections, write the complete config back to the file
@@ -161,3 +166,30 @@ def set_age_threshold(player_type, value):
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
     load_config.clear()
+
+def get_club_colors():
+    config = load_config()
+    primary = config['Theme'].get('primary_color', '#0055a4')
+    secondary = config['Theme'].get('secondary_color', '#ffffff')
+    return primary, secondary
+
+def set_club_colors(primary, secondary):
+    config = load_config()
+    if 'Theme' not in config: config['Theme'] = {}
+    config['Theme']['primary_color'] = primary
+    config['Theme']['secondary_color'] = secondary
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    load_config.clear()
+
+def get_initial_theme_colors():
+    """Non-cached function to read the theme colors for app startup."""
+    config = configparser.ConfigParser()
+    # Ensure the config directory exists before trying to read from it
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    config.read(CONFIG_FILE)
+    if config.has_section('Theme'):
+        primary = config.get('Theme', 'primary_color', fallback='#0055a4')
+        secondary = config.get('Theme', 'secondary_color', fallback='#FFFFFF')
+        return primary, secondary
+    return '#0055a4', '#FFFFFF'

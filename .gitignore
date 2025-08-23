@@ -37,6 +37,9 @@ databases/*.db
 # Config file
 /config/config*
 
+# Pictures
+/config/assets/*
+
 # Virtual environment
 # Replace 'venv' with the name of your virtual environment folder if different.
 venv/

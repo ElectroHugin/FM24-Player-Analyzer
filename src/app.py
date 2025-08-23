@@ -1,7 +1,11 @@
 # app.py
 
 import streamlit as st
+from streamlit_option_menu import option_menu
 import pandas as pd
+import os
+import base64
+from PIL import Image
 import re
 from io import StringIO
 import plotly.graph_objects as go
@@ -10,19 +14,27 @@ from sqlite_db import (update_player_roles, get_user_club, set_user_club, update
                      get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role, 
                      update_player_apt, get_favorite_tactics, set_favorite_tactics, 
                      update_player_transfer_status, update_player_loan_status)
-from constants import (CSS_STYLES, SORTABLE_COLUMNS, FILTER_OPTIONS,
+from constants import (SORTABLE_COLUMNS, FILTER_OPTIONS,
                      get_player_roles, get_valid_roles, get_position_to_role_mapping, 
                      get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS, 
                      get_role_specific_weights, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, MASTER_POSITION_MAP)
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
                           get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
-                          get_age_threshold, set_age_threshold)
+                          get_age_threshold, set_age_threshold, get_club_colors, set_club_colors,
+                          get_initial_theme_colors)
 from squad_logic import calculate_squad_and_surplus
 from ui_components import display_tactic_grid
 from definitions_handler import get_definitions, save_definitions
 
+# --- Add this path-finding logic ---
+# Get the absolute path to the directory this file is in (i.e., .../project/src)
+_CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the project root directory by going one level up from 'src'
+_PROJECT_ROOT = os.path.dirname(_CURRENT_FILE_DIR)
+
+
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
-st.markdown(CSS_STYLES, unsafe_allow_html=True)
+#st.markdown(CSS_STYLES, unsafe_allow_html=True)
 
 def clear_all_caches():
     st.cache_data.clear()
@@ -43,42 +55,254 @@ def format_role_display(role_abbr):
 def format_role_display_with_all(role_abbr):
     return "All Roles" if role_abbr == "All Roles" else get_role_display_map().get(role_abbr, role_abbr)
 
+def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    """Converts a hex color string to an (R, G, B) tuple."""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+def get_luminance(rgb: tuple[int, int, int]) -> float:
+    """Calculates the relative luminance of an RGB color."""
+    vals = []
+    for val in rgb:
+        s = val / 255.0
+        if s <= 0.03928:
+            vals.append(s / 12.92)
+        else:
+            vals.append(((s + 0.055) / 1.055) ** 2.4)
+    return vals[0] * 0.2126 + vals[1] * 0.7152 + vals[2] * 0.0722
+
+def calculate_contrast_ratio(hex1: str, hex2: str) -> float:
+    """Calculates the contrast ratio between two hex colors."""
+    lum1 = get_luminance(hex_to_rgb(hex1))
+    lum2 = get_luminance(hex_to_rgb(hex2))
+    if lum1 > lum2:
+        return (lum1 + 0.05) / (lum2 + 0.05)
+    else:
+        return (lum2 + 0.05) / (lum1 + 0.05)
+
+@st.cache_data
+def get_image_as_base64(path):
+    """Encodes an image file into base64 string for embedding in CSS."""
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def load_custom_css():
+    primary_color, secondary_color = get_club_colors()
+    st.markdown(f"""
+        <style>
+            /* --- Core App Layout --- */
+            .main {{
+                background-color: #1e1e1e;
+                color: #FFFFFF; /* Keeping main text white for readability */
+            }}
+            /* --- Sidebar Customization --- */
+            .st-emotion-cache-16txtl3 {{
+                background-color: #2e2e2e;
+            }}
+
+            /* --- Primary Color Applications (Actions & Selections) --- */
+
+            /* Generic Buttons */
+            div[data-testid="stButton"] > button {{
+                background-color: transparent;
+                border: 1px solid {primary_color};
+                color: {primary_color};
+                transition: all 0.2s ease-in-out;
+            }}
+            div[data-testid="stButton"] > button:hover {{
+                background-color: {primary_color};
+                color: #FFFFFF;
+            }}
+            
+            /* Form Submit Buttons */
+            div[data-testid="stFormSubmitButton"] > button {{
+                background-color: {primary_color};
+                color: #FFFFFF;
+                border: 1px solid {primary_color};
+            }}
+
+            /* Selected nav link in sidebar */
+            .nav-link-selected {{
+                background-color: {primary_color} !important;
+            }}
+
+            /* Dataframe Headers */
+            .st-emotion-cache-1629p8f th {{
+                background-color: {primary_color};
+                color: #FFFFFF;
+            }}
+
+            /* --- NEW: Multi-Select Pills/Tags --- */
+            span[data-testid="stMultiSelectPill"] {{
+                background-color: {primary_color};
+                color: #FFFFFF; /* Text color inside the pill */
+                border-radius: 5px;
+            }}
+            /* Style for the 'x' remove icon inside the pill */
+            span[data-testid="stMultiSelectPill"] svg {{
+                fill: #FFFFFF;
+            }}
+            
+
+            /* --- Secondary "Accent" Color Applications (Details & Borders) --- */
+
+            /* Dividers */
+            hr[data-testid="stDivider"] {{
+                background: {secondary_color};
+            }}
+
+            /* Expander Headers */
+            summary[data-testid="stExpanderHeader"] {{
+                border: 1px solid {secondary_color};
+                border-radius: 5px;
+                color: {secondary_color};
+            }}
+            
+            /* Input box border glow on focus */
+            div[data-testid="stTextInput"] input:focus,
+            div[data-testid="stNumberInput"] input:focus,
+            div[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within {{
+                border-color: {secondary_color} !important;
+                box-shadow: 0 0 0 1px {secondary_color};
+            }}
+
+            /* Sidebar Navigation Icons */
+            /* (This is handled in the sidebar function itself) */
+
+            /* Captions */
+            p[data-testid="stCaption"] {{
+                color: {secondary_color};
+                opacity: 0.8;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
+
+def apply_global_styles():
+    primary_color, secondary_color = get_club_colors()
+    
+    # This CSS is designed to be extremely specific to override stubborn default styles.
+    styling_css = f"""
+        <style>
+            /* --- Core App Layout --- */
+            .main {{ background-color: #1e1e1e !important; color: #FFFFFF !important; }}
+            .st-emotion-cache-16txtl3 {{ background-color: #2e2e2e !important; }}
+
+            /* --- Primary Color (Actions & Selections) --- */
+            .nav-link-selected {{ background-color: {primary_color} !important; }}
+            .st-emotion-cache-1629p8f th {{ background-color: {primary_color} !important; color: #FFFFFF !important; }}
+
+            /* Buttons */
+            div[data-testid="stButton"] > button, div[data-testid="stFormSubmitButton"] > button {{
+                border: 1px solid {primary_color} !important;
+                background-color: {primary_color} !important;
+                color: #FFFFFF !important;
+            }}
+            div[data-testid="stButton"] > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {{
+                border: 1px solid {primary_color} !important;
+                background-color: #FFFFFF !important;
+                color: {primary_color} !important;
+            }}
+            
+            /* --- THE DEFINITIVE FIX FOR CHECKBOXES & MULTISELECT --- */
+
+            /* Checkbox Square */
+            div[data-testid="stCheckbox"] [data-baseweb="checkbox"] > div:first-child {{
+                border-color: {primary_color} !important;
+            }}
+            /* Checkbox Checkmark */
+            div[data-testid="stCheckbox"] input:checked + div svg {{
+                fill: {primary_color} !important;
+            }}
+            
+            /* Multi-Select Pills/Tags */
+            div[data-baseweb="tag"] span {{
+                background-color: {primary_color} !important;
+                color: #FFFFFF !important;
+            }}
+            /* Multi-Select Pill 'x' icon */
+             div[data-baseweb="tag"] span svg {{
+                fill: #FFFFFF !important;
+            }}
+
+            /* --- Secondary "Accent" Color (Details & Borders) --- */
+
+            hr[data-testid="stDivider"] {{ background: {secondary_color} !important; }}
+            summary[data-testid="stExpanderHeader"] {{
+                border: 1px solid {secondary_color} !important;
+                color: {secondary_color} !important;
+            }}
+            div[data-testid="stTextInput"] input:focus,
+            div[data-testid="stNumberInput"] input:focus,
+            div[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within {{
+                border-color: {secondary_color} !important;
+                box-shadow: 0 0 0 1px {secondary_color} !important;
+            }}
+            p[data-testid="stCaption"] {{ color: {secondary_color} !important; opacity: 0.8; }}
+        </style>
+    """
+    st.html(styling_css)
 
 def sidebar(df):
     with st.sidebar:
-        st.header("Navigation")
-        page_options = ["All Players", "Assign Roles", "Role Analysis", "Player-Role Matrix", "Best Position Calculator", 
-                        "Transfer & Loan Management", "Player Comparison", "DWRS Progress", "Edit Player Data", "Create New Role", 
-                        "Create New Tactic", "Settings"]
-        page = st.radio("Go to", page_options)
+        # --- NEW: Centered Logo & Fallback Text ---
+        # We use columns to center the logo and header.
+        col1, col2, col3 = st.columns([1, 2, 1]) # [Spacer, Content, Spacer]
+        with col2:
+            logo_path = os.path.join(_PROJECT_ROOT, 'config', 'assets', 'logo.png')
+            if os.path.exists(logo_path):
+                st.image(logo_path) # st.image in a column is auto-centered
+            else:
+                # The header is also placed in the central column
+                st.header("FM Dashboard")
+
+        # --- Get colors for the nav bar ---
+        primary_color, secondary_color = get_club_colors()
+
+        # Convert hex primary color to an RGBA with low opacity for the hover effect
+        rgb = hex_to_rgb(primary_color)
+        hover_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
+        
+        # This is the improved option_menu navigation
+        page = option_menu(
+            menu_title="Navigation",
+            options=["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player", "New Role", "New Tactic", "Settings"],
+            icons=["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square", "person-badge", "clipboard-plus", "gear"],
+            menu_icon="cast",
+            default_index=0,
+            styles={
+                "container": {"padding": "5px !important", "background-color": "transparent"},
+                "icon": {"color": secondary_color, "font-size": "20px"},
+                "nav-link": {"font-size": "16px", "text-align": "left", "margin":"0px", "--hover-color": hover_color},
+                "nav-link-selected": {"background-color": primary_color},
+            }
+        )
+        page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data", "New Role": "Create New Role", "New Tactic": "Create New Tactic", "Settings": "Settings" }
+        actual_page = page_mapping.get(page, "All Players")
+
+        st.divider()
         uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
-        #df = load_data()
         club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
         current_club = get_user_club() or "Select a club"
-                # --- ADD THIS BUTTON ---
-        if st.button("🚨 Clear Cache & Rerun"):
-            clear_all_caches()
-            st.rerun()
-        # --- END OF BUTTON CODE ---
-        # --- NEW ROBUST LOGIC ---
-        # Check if the current club from settings is actually in the options from the (potentially stale) cache.
-        # If not, default the index to 0 ("Select a club") to prevent a crash.
         club_index = 0
         if current_club in club_options:
             club_index = club_options.index(current_club)
-        
         selected_club = st.selectbox("Your Club", options=club_options, index=club_index)
-        # --- END ROBUST LOGIC ---
 
         if selected_club != current_club and selected_club != "Select a club":
             set_user_club(selected_club)
             st.rerun()
+        
         current_second = get_second_team_club() or "Select a club"
-        selected_second = st.selectbox("Your Second Team", options=club_options, index=club_options.index(current_second))
+        selected_second = st.selectbox("Your Second Team", options=club_options, index=club_options.index(current_second) if current_second in club_options else 0)
+
         if selected_second != current_second and selected_second != "Select a club":
             set_second_team_club(selected_second)
             st.rerun()
-        return page, uploaded_file
+            
+        return actual_page, uploaded_file
 
 def main_page(uploaded_file, df):
     st.title("Player Dashboard")
@@ -1274,6 +1498,45 @@ def settings_page():
         with c2:
             new_fav_tactic2 = st.selectbox("Secondary Favorite Tactic", options=all_tactics, index=index2)
 
+    with st.expander("🎨 Club Identity & Theme", expanded=True):
+        st.info("Upload your club's logo and select its primary and secondary colors to personalize the app's theme.")
+
+        logo_file = st.file_uploader("Upload Club Logo", type=['png', 'jpg', 'jpeg'], help="Recommended size: 200x200 pixels.")
+        if logo_file is not None:
+            try:
+                assets_dir = os.path.join(_PROJECT_ROOT, 'config', 'assets')
+                os.makedirs(assets_dir, exist_ok=True)
+                with open(os.path.join(assets_dir, "logo.png"), "wb") as f:
+                    f.write(logo_file.getbuffer())
+                st.success("Logo uploaded successfully!")
+            except Exception as e:
+                st.error(f"Error saving logo: {e}")
+
+        # --- NEW: Two Color Pickers ---
+        primary_color, secondary_color = get_club_colors()
+        c1, c2 = st.columns(2)
+        with c1:
+            new_primary = st.color_picker("Primary Color (Buttons, Headers, etc.)", primary_color)
+        with c2:
+            new_secondary = st.color_picker("Secondary Color (Dividers, Expanders, etc.)", secondary_color)
+        
+        # --- NEW: Live Contrast Warning ---
+        st.caption("The secondary color is used for most text. For best readability, ensure it has strong contrast with the app's dark background and your primary color.")
+        
+        # Check contrast against the dark background
+        bg_contrast_ratio = calculate_contrast_ratio(new_secondary, "#1e1e1e")
+        # Check contrast against the primary color (for text on buttons etc.)
+        primary_contrast_ratio = calculate_contrast_ratio(new_secondary, new_primary)
+        
+        if bg_contrast_ratio < 4.5 or primary_contrast_ratio < 3.0:
+            st.warning(f"""
+                **Low Contrast Warning!**
+                - Text on background contrast: {bg_contrast_ratio:.2f}:1 (Aim for 4.5:1)
+                - Text on primary color contrast: {primary_contrast_ratio:.2f}:1 (Aim for 3:1)
+                
+                Text may be difficult to read with this combination.
+            """)
+
     with st.expander("📄 Agreed Playing Time (APT) Weights"):
         st.info("Adjust the multiplier for a player's selection score based on their promised playing time. A higher value makes them more likely to be selected.")
         
@@ -1335,6 +1598,8 @@ def settings_page():
     # This button remains outside the expanders
     if st.button("Save All Settings"):
         set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
+        # Save the new color settings
+        set_club_colors(new_primary, new_secondary)
         
         # --- NEW: Save the APT weights ---
         for apt, val in new_apt_weights.items():
@@ -1355,6 +1620,8 @@ def settings_page():
 
 # --- FIXED: Main function with clear if/elif structure ---
 def main():
+    apply_global_styles()
+    #load_custom_css()
      # --- START REFACTOR ---
     df = load_data() # This hits the @st.cache_data function once
     players = get_all_players()
