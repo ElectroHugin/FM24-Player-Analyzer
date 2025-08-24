@@ -48,7 +48,7 @@
 
 ## Category 3: Advanced Player Personalization & Positional Intelligence
 
-- [ ] **Step 1: Database & Data Layer Update**
+- [x] **Step 1: Database & Data Layer Update**
     - **What it is:** Enhance the database and data pipeline to store "Preferred Foot" and a new manually-assigned "Natural Positions" field for each player.
     - **Why it's useful:** This is the foundational step to enable more nuanced tactical calculations.
     - **Implementation Notes:**
@@ -56,7 +56,7 @@
         - **Data Import:** In `data_parser.py`, when processing the HTML, check the "Left Foot" and "Right Foot" columns to determine the `preferred_foot` (e.g., 'Right', 'Left', 'Either').
         - **Manual Input:** On the "Edit Player" page (`edit_player_data_page`), add a `st.multiselect` widget allowing the user to select one or more "Natural Positions" for a player from the `MASTER_POSITION_MAP`. Store this as a JSON string or comma-separated list in the database.
 
-- [ ] **Step 2: Enhance the Best XI Algorithm**
+- [x] **Step 2: Enhance the Best XI Algorithm**
     - **What it is:** Update the `calculate_squad_and_surplus` logic to use the new `preferred_foot` and `natural_positions` data, adding a new layer of intelligence to player selection.
     - **Why it's useful:** Makes the Best XI more realistic by rewarding players for playing in their most comfortable positions and using foot preference as a smart tie-breaker for symmetrical roles.
     - **Implementation Notes:**
@@ -133,3 +133,106 @@ These are smaller, subtle changes that add a layer of polish and help the data t
     - **What it is:** After a complex calculation (like the Best XI), use an `st.info` or `st.success` block to provide a simple, human-readable summary of the results.
     - **Example:** After calculating surplus players: `st.info("💡 Manager's Insight: Your squad has excellent depth at Center Back but lacks cover for the Left Wing-Back role.")`
     - **Why it adds flavor:** It makes the app feel like an intelligent assistant rather than just a calculator. It bridges the gap between raw data and actionable strategy.
+
+
+
+# Development Roadmap & Feature Ideas for FM Player Analysis Dashboard
+
+Here is a collection of proposed features and enhancements to continue the development of the application, building upon its strong foundation.
+
+## 🚀 Proposed New Features
+
+### 1. Scouting & Shortlist Management Page
+Create a dedicated hub for tracking, shortlisting, and managing scouted players to streamline transfer target identification.
+
+*   **Functionality:**
+    *   A main table view showing all players who are not part of your club.
+    *   An "Add to Shortlist" button or checkbox next to each player.
+    *   A separate tab or filtered view on the page to display only shortlisted players.
+    *   The ability to add custom text notes and a "Scout Rating" (e.g., 1-5 stars) to each shortlisted player.
+*   **Implementation Steps:**
+    1.  **Database:** Add new columns to the `players` table in `sqlite_db.py`: `is_shortlisted` (INTEGER/BOOLEAN), `scout_notes` (TEXT), and `scout_rating` (INTEGER).
+    2.  **UI:** Create a new page function in `app.py` called `scouting_page()`.
+    3.  **Logic:** This page will use `get_all_players()` to fetch and filter the scouted players.
+    4.  **Database Interaction:** Implement new functions in `sqlite_db.py` to update the new columns (e.g., `update_shortlist_status()`, `update_scout_notes()`).
+
+### 2. Financial Overview Page
+Aggregate the existing `Wage` and `Transfer Value` data to provide valuable financial insights about your squad.
+
+*   **Functionality:**
+    *   Display key dashboard stats for your club: Total Wage Bill (per week/month), Average Wage, and Total Squad Market Value.
+    *   A bar chart visualizing the wage distribution across the squad (e.g., how many players are in the £0-5k, £5-10k brackets).
+    *   A scatter plot of Player Age vs. Transfer Value to identify players who may be peaking in value or are undervalued.
+    *   A simple table showing the highest earners and most valuable players.
+*   **Implementation Steps:**
+    1.  **UI:** Create a `financial_overview_page()` in `app.py`.
+    2.  **Data Parsing:** Create a new utility function to parse financial strings (e.g., "£5.5K p/w", "$1.2M") into numerical float values for calculation.
+    3.  **Logic:** Load your club's players and perform the necessary aggregations (sum, average).
+    4.  **Visualization:** Use Plotly or Streamlit's native charting functions (`st.bar_chart`, `st.scatter_chart`) to create the visualizations.
+
+### 3. Head-to-Head Team Comparison
+Allow users to compare the quality of their starting XI against any other team in the database for a specific tactic.
+
+*   **Functionality:**
+    *   Two select boxes: "Team A" (defaults to your club) and "Team B".
+    *   A select box for the tactic to use for the comparison.
+    *   The app will calculate the best Starting XI for both teams using the existing `calculate_squad_and_surplus` logic.
+    *   Display the two tactical grids side-by-side for a direct visual comparison.
+    *   Show a summary table comparing the average DWRS for each position (e.g., Your Striker: 85% vs. Their Striker: 82%).
+*   **Implementation Steps:**
+    1.  **UI:** Create a `team_comparison_page()` in `app.py`.
+    2.  **Core Logic:** The page will run the `calculate_squad_and_surplus` function twice, once for each selected club's player pool.
+    3.  **Presentation:** Use `st.columns(2)` to display the tactic grids side-by-side and an `st.dataframe` for the final positional breakdown.
+
+## ✨ UI/UX & Quality-of-Life Enhancements
+
+Smaller but impactful changes focused on improving the user experience and workflow.
+
+*   **Persistent Filters:**
+    *   **Goal:** User filter selections on pages like "Assign Roles" should be remembered during the session.
+    *   **Implementation:** You have already correctly implemented this using `st.session_state`. This pattern can be expanded to other pages with filters, such as the "Player-Role Matrix" or the proposed "Scouting" page.
+
+*   **Advanced Player Search:**
+    *   **Goal:** Go beyond the current name-only search to allow for more complex queries.
+    *   **Implementation:** Add a filtering component (perhaps in an `st.expander`) that allows users to filter by age range, position, or even specific attributes (e.g., show all players with "Pace > 15" and "Finishing > 14").
+
+*   **Data Export (CSV):**
+    *   **Goal:** Allow users to download the data from tables for offline analysis.
+    *   **Implementation:** On pages with data tables like "Role Analysis" and "Squad Matrix", add an `st.download_button`. The data from the DataFrame can be easily converted to a CSV string using `df.to_csv(index=False)`.
+
+*   **Full CRUD for Roles & Tactics:**
+    *   **Goal:** Allow users to not only create but also **Edit** and **Delete** their custom roles and tactics.
+    *   **Implementation:**
+        *   Create "Edit Role" and "Edit Tactic" pages. They would start with a dropdown to select an existing custom definition.
+        *   The form would be pre-populated with the current settings for that role/tactic.
+        *   Add a "Delete" button with a confirmation step (`st.warning` and a second button) to prevent accidental deletion.
+        *   Update `definitions_handler.py` with functions to modify or remove entries from the `definitions.json` file.
+
+## 🔧 Technical & Code Refinements
+
+Suggestions for refactoring and optimizing the existing codebase for better maintainability, performance, and flexibility.
+
+*   **Consolidate Data Loading:**
+    *   **Problem:** `load_data()` and `get_all_players()` are called in multiple page functions within `app.py`.
+    *   **Solution:** Refactor `app.py`'s `main()` function to call these functions **once** at the beginning. Then, pass the resulting DataFrame and list of players as arguments to the page functions that need them. This leverages Streamlit's caching more effectively and simplifies the page functions.
+    *   **Example:**
+      ```python
+      # In app.py
+      def main():
+          df = load_data() # Cached
+          players = get_all_players() # Also cached
+          page, uploaded_file = sidebar(df)
+
+          if page == "Assign Roles":
+              assign_roles_page(df) # Pass df as an argument
+          elif page == "Player Comparison":
+              player_comparison_page(players) # Pass players list
+      ```
+
+*   **Isolate Business Logic from UI:**
+    *   **Problem:** Some functions, like `transfer_loan_management_page`, contain complex data calculation logic mixed directly with Streamlit UI code (`st.columns`, `st.button`, etc.).
+    *   **Solution:** Move the data calculation part (e.g., the definitive identification of loan/sell candidates) into a dedicated function in `squad_logic.py`. The function in `app.py` then becomes much cleaner: it calls the logic function, receives a clean data structure (like a list of players), and then focuses only on displaying that data. This improves code readability and reusability.
+
+*   **Centralize Definitions:**
+    *   **Problem:** Key definitions like `GLOBAL_STAT_CATEGORIES` and `GK_STAT_CATEGORIES` are hardcoded in `constants.py`.
+    *   **Solution:** Move these dictionaries into `config/definitions.json`. This fully centralizes all user-configurable game logic into one file. The `constants.py` file can then load them from there. This would allow an advanced user to re-categorize which attributes are "Important" vs. "Good" without ever touching the Python code.

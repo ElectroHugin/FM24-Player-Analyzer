@@ -60,6 +60,11 @@ def load_config():
         }
         config_was_modified = True
 
+    # 7. Ensure [SelectionBonuses] section exists
+    if not config.has_section('SelectionBonuses'):
+        config['SelectionBonuses'] = {'natural_position_multiplier': '1.00'}
+        config_was_modified = True
+
     # 7. Ensure [ThemeSettings] section exists
     if not config.has_section('ThemeSettings'):
         config['ThemeSettings'] = {
@@ -193,3 +198,22 @@ def save_theme_settings(settings):
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
     load_config.clear() # Clear cache to reflect changes
+
+def get_selection_bonus(key):
+    """Gets a bonus multiplier from the [SelectionBonuses] section."""
+    config = load_config()
+    defaults = {'natural_position': 1.05}
+    # Construct the key name as it is in the .ini file
+    config_key = key + '_multiplier'
+    return float(config['SelectionBonuses'].get(config_key, str(defaults.get(key, 1.0))))
+
+def set_selection_bonus(key, value):
+    """Sets a bonus multiplier in the [SelectionBonuses] section."""
+    config = load_config()
+    if 'SelectionBonuses' not in config:
+        config['SelectionBonuses'] = {}
+    config_key = key + '_multiplier'
+    config['SelectionBonuses'][config_key] = str(value)
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    load_config.clear()

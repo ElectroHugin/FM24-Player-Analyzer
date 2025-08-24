@@ -1,6 +1,7 @@
 # squad_logic.py
 
-from config_handler import get_age_threshold, get_apt_weight
+from config_handler import get_age_threshold, get_apt_weight, get_selection_bonus
+from constants import get_position_to_role_mapping
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""
@@ -8,17 +9,67 @@ def get_last_name(full_name):
         return full_name.split(' ')[-1]
     return ""
 
+def _apply_footedness_swaps(team, all_players):
+    """
+    A helper function to swap players in symmetrical positions based on their preferred foot.
+    This is applied AFTER the team has been selected.
+    """
+    # Define the symmetrical pairs of tactical positions
+    symmetrical_pairs = [
+        ('DCL', 'DCR'), ('DMCL', 'DMCR'),
+        ('MCL', 'MCR'), ('AMCL', 'AMCR')
+    ]
+    
+    # Create a quick lookup map for player objects by their ID
+    player_map = {p['Unique ID']: p for p in all_players}
+
+    for pos_L, pos_R in symmetrical_pairs:
+        # Check if both symmetrical positions are actually in the team
+        if pos_L in team and pos_R in team:
+            player_L_data = team[pos_L]
+            player_R_data = team[pos_R]
+            
+            # Get the full player objects using the IDs we stored
+            player_L = player_map.get(player_L_data.get('player_id'))
+            player_R = player_map.get(player_R_data.get('player_id'))
+
+            if not player_L or not player_R:
+                continue
+
+            # The ideal swap condition: a right-footer is on the left and a left-footer is on the right
+            if player_L.get('Preferred Foot') == 'Right' and player_R.get('Preferred Foot') == 'Left':
+                # Swap them
+                team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
+                
+    return team
+
 def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings):
     """
     A single, reliable function to calculate the Starting XI, B-Team, Depth, and Surplus players.
-    This version includes special logic for goalkeepers and is corrected to prevent TypeErrors.
+    This version includes the Natural Position Bonus during selection and a post-selection
+    Footedness Swap for tactical optimization.
     """
+    
+    # --- START: NEW PRE-CALCULATION STEP for Natural Position logic ---
+    pos_to_role_map = get_position_to_role_mapping()
+    role_to_game_positions = {}
+    for game_pos, roles in pos_to_role_map.items():
+        for r in roles:
+            if r not in role_to_game_positions:
+                role_to_game_positions[r] = []
+            role_to_game_positions[r].append(game_pos)
+    # --- END: NEW PRE-CALCULATION STEP ---
+
     def select_team(team_positions, available_players):
-        team = {}
+        team_with_ids = {}
         players_team = set()
-        while len(team) < len(team_positions):
+
+        # Get the bonus multiplier from config.ini
+        natural_pos_multiplier = get_selection_bonus('natural_position')
+
+        while len(team_with_ids) < len(team_positions):
             best_candidate_for_each_pos = {}
-            empty_positions = [p for p in team_positions if p not in team]
+            empty_positions = [p for p in team_positions if p not in team_with_ids]
             for pos in empty_positions:
                 role = team_positions[pos]
                 best_candidate = None
@@ -27,33 +78,75 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
                     if player['Unique ID'] in players_team: continue
                     primary_role = player.get('primary_role')
                     if primary_role and primary_role != role: continue
+                    
                     rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
                     if rating > 0:
                         apt = player.get("Agreed Playing Time", "None") or "None"
                         apt_weight = get_apt_weight(apt)
-                        selection_score = rating * apt_weight
+                        
+                        # --- START: REVISED Natural Position Bonus Logic ---
+                        natural_pos_bonus = 1.0
+                        valid_game_positions_for_role = role_to_game_positions.get(role, [])
+                        player_natural_positions = player.get('natural_positions', [])
+                        if any(pnp in valid_game_positions_for_role for pnp in player_natural_positions):
+                            natural_pos_bonus = natural_pos_multiplier
+                        # --- END: REVISED Natural Position Bonus Logic ---
+                        
+                        selection_score = rating * apt_weight * natural_pos_bonus
+                        
                         if selection_score > max_score:
                             max_score = selection_score
-                            best_candidate = { "player_id": player['Unique ID'], "player_name": player['Name'], "player_apt": apt, "rating": rating, "selection_score": selection_score, "position": pos }
+                            best_candidate = { 
+                                "player_id": player['Unique ID'], 
+                                "player_name": player['Name'], 
+                                "player_apt": apt, 
+                                "rating": rating, 
+                                "selection_score": selection_score, 
+                                "position": pos 
+                            }
                 if best_candidate: best_candidate_for_each_pos[pos] = best_candidate
+            
             if not best_candidate_for_each_pos: break 
+            
             weakest_link_pos = min(best_candidate_for_each_pos, key=lambda p: best_candidate_for_each_pos[p]['selection_score'])
             winner = best_candidate_for_each_pos[weakest_link_pos]
-            team[weakest_link_pos] = { "name": winner['player_name'], "rating": f"{int(winner['rating'])}%", "apt": winner['player_apt'] }
+            
+            # Store the full winner object, including the player_id
+            team_with_ids[weakest_link_pos] = {
+                "player_id": winner['player_id'],
+                "name": winner['player_name'], 
+                "rating": f"{int(winner['rating'])}%", 
+                "apt": winner['player_apt']
+            }
             players_team.add(winner['player_id'])
             available_players = [p for p in available_players if p['Unique ID'] != winner['player_id']]
-        return team, available_players
+            
+        return team_with_ids, available_players
 
     # --- Main Logic Execution ---
-    starting_xi, remaining_players = select_team(positions, my_club_players)
-    b_team, depth_pool = select_team(positions, remaining_players)
     
+    # 1. Select the initial teams based on score
+    starting_xi_with_ids, remaining_players = select_team(positions, my_club_players)
+    b_team_with_ids, depth_pool = select_team(positions, remaining_players)
+    
+    # 2. Apply the post-selection footedness swap logic
+    starting_xi = _apply_footedness_swaps(starting_xi_with_ids, my_club_players)
+    b_team = _apply_footedness_swaps(b_team_with_ids, my_club_players)
+
+    # 3. Fill any empty slots with default players for display
     default_player = {"name": "-", "rating": "0%", "apt": ""}
     for pos in positions:
         if pos not in starting_xi: starting_xi[pos] = default_player.copy()
         if pos not in b_team: b_team[pos] = default_player.copy()
 
-    players_xi_or_b_team = {p['Unique ID'] for p in my_club_players if p not in depth_pool}
+    # (The rest of the function remains identical to your original version)
+    
+    # --- This part is now based on the players selected in the two teams ---
+    xi_ids = {p['player_id'] for p in starting_xi.values() if 'player_id' in p}
+    b_team_ids = {p['player_id'] for p in b_team.values() if 'player_id' in p}
+    players_xi_or_b_team = xi_ids.union(b_team_ids)
+    
+    depth_pool = [p for p in my_club_players if p['Unique ID'] not in players_xi_or_b_team]
     
     best_depth_options = {}
     depth_player_ids = set()
@@ -82,7 +175,7 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
 
     players_with_a_role_ids = players_xi_or_b_team.union(depth_player_ids)
     surplus_players = [p for p in my_club_players if p['Unique ID'] not in players_with_a_role_ids]
-
+    
     youth_surplus = []
     senior_surplus = []
 

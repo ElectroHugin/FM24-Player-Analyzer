@@ -39,6 +39,9 @@ def init_db():
     if "primary_role" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
 
+    if "natural_positions" not in existing_columns:
+        cursor.execute('ALTER TABLE players ADD COLUMN "natural_positions" TEXT')
+
     if "transfer_status" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "transfer_status" INTEGER DEFAULT 0')
     if "loan_status" not in existing_columns:
@@ -227,12 +230,10 @@ def get_all_players():
     cursor.execute('SELECT * FROM players')
     rows = cursor.fetchall()
     
-    # --- THIS IS THE CRITICAL FIX ---
     # Get column names directly from the cursor description.
     # This guarantees the names are in the same order as the data in each row.
     columns = [description[0] for description in cursor.description]
-    # --- END FIX ---
-    
+
     players = []
     for row in rows:
         player = dict(zip(columns, row))
@@ -240,6 +241,15 @@ def get_all_players():
             player['Assigned Roles'] = ast.literal_eval(player['Assigned Roles']) if player['Assigned Roles'] else []
         except (ValueError, SyntaxError):
             player['Assigned Roles'] = []
+
+        try:
+            # Safely parse the 'natural_positions' string back into a list
+            player['natural_positions'] = ast.literal_eval(player.get('natural_positions', '[]'))
+            if not isinstance(player['natural_positions'], list):
+                player['natural_positions'] = []
+        except (ValueError, SyntaxError):
+            player['natural_positions'] = []
+
         players.append(player)
     conn.close()
     return players if players else []
@@ -353,5 +363,15 @@ def update_player_loan_status(unique_id, status):
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute('UPDATE players SET loan_status = ? WHERE "Unique ID" = ?', (1 if status else 0, unique_id))
+    conn.commit()
+    conn.close()
+
+def update_player_natural_positions(unique_id, positions):
+    """Saves the list of natural positions for a player."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    # Convert the list to a string representation to store in the TEXT column
+    positions_str = str(positions)
+    cursor.execute('UPDATE players SET natural_positions = ? WHERE "Unique ID" = ?', (positions_str, unique_id))
     conn.commit()
     conn.close()
