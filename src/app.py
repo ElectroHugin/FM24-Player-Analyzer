@@ -13,18 +13,19 @@ from data_parser import load_data, parse_and_update_data, get_filtered_players, 
 from sqlite_db import (update_player_roles, get_user_club, set_user_club, update_dwrs_ratings, get_all_players, 
                      get_dwrs_history, get_second_team_club, set_second_team_club, update_player_club, set_primary_role, 
                      update_player_apt, get_favorite_tactics, set_favorite_tactics, 
-                     update_player_transfer_status, update_player_loan_status)
+                     update_player_transfer_status, update_player_loan_status, update_player_natural_positions)
 from constants import (SORTABLE_COLUMNS, FILTER_OPTIONS, get_valid_roles, get_position_to_role_mapping, 
                      get_tactic_roles, get_tactic_layouts, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS, 
                      get_role_specific_weights, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, MASTER_POSITION_MAP)
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
                           get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
-                          get_age_threshold, set_age_threshold, get_theme_settings, save_theme_settings)
+                          get_age_threshold, set_age_threshold, get_theme_settings, save_theme_settings,
+                          get_selection_bonus, set_selection_bonus)
 from squad_logic import calculate_squad_and_surplus, calculate_development_squads
 from ui_components import display_tactic_grid
 from definitions_handler import get_definitions, save_definitions, PROJECT_ROOT
 from utils import (get_last_name, format_role_display, get_role_display_map, get_available_databases, 
-                   calculate_contrast_ratio, hex_to_rgb)
+                   calculate_contrast_ratio, hex_to_rgb, parse_position_string)
 from theme_handler import set_theme_toml
 
 # --- Page Config ---
@@ -144,20 +145,6 @@ def main_page(uploaded_file, df):
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Please upload an HTML file to display player data.")
-
-def parse_position_string(pos_str):
-    if not isinstance(pos_str, str): return set()
-    final_pos = set()
-    for part in [p.strip() for p in pos_str.split(',')]:
-        match = re.match(r'([A-Z/]+) *(?:\(([RLC]+)\))?$', part.strip())
-        if match:
-            bases, sides = match.groups()
-            for base in bases.split('/'):
-                if sides:
-                    for side in list(sides): final_pos.add(f"{base} ({side})")
-                else:
-                    final_pos.add(f"{base} (C)" if base == "ST" else base)
-    return final_pos
 
 def assign_roles_page(df):
     st.title("Assign Roles to Players")
@@ -1087,6 +1074,9 @@ def edit_player_data_page(players):
         # Check for Agreed Playing Time
         if not bool(player.get('Agreed Playing Time')):
             markers.append('📄')
+        # Check for Natural Positions
+        if not bool(player.get('natural_positions')):
+            markers.append('📍')
         
         # Join the markers with a space if there are multiple
         marker = f" {' '.join(markers)}" if markers else ""
@@ -1151,6 +1141,38 @@ def edit_player_data_page(players):
                 st.success(f"Set Agreed Playing Time to '{new_apt}'.")
                 st.rerun()
 
+            st.divider()
+
+            st.subheader("Set Natural Positions")
+            st.info("From the player's available positions below, select the ones where they are most natural and effective.")
+            
+            # Step 1: Get the player's position string from the database (e.g., "AM (RL), ST (C)")
+            player_position_string = player.get('Position', '')
+
+            # Step 2: Use our utility function to parse it into a clean, sorted list
+            player_specific_positions = sorted(list(parse_position_string(player_position_string)))
+            
+            # Step 3: Load the currently saved natural positions from the database
+            current_natural_positions = player.get('natural_positions', [])
+            
+            # Step 4: Create the multiselect widget using the player-specific list as options
+            if player_specific_positions:
+                new_natural_positions = st.multiselect(
+                    "Natural Positions", 
+                    options=player_specific_positions,
+                    default=current_natural_positions, # This now correctly receives the list of saved positions
+                    key=f"nat_pos_{player['Unique ID']}",
+                    help="Select from the positions this player is capable of playing."
+                )
+                
+                if st.button("Save Natural Positions"):
+                    update_player_natural_positions(player['Unique ID'], new_natural_positions)
+                    clear_all_caches()
+                    st.success(f"Updated natural positions for {player['Name']}.")
+                    st.rerun()
+            else:
+                st.warning("This player has no positions listed. Cannot set natural positions.")
+            
             st.divider()
 
             st.subheader("Set Primary Role")
@@ -1524,9 +1546,22 @@ def settings_page():
         new_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight(cat.lower().replace(" ", "_"), val), 0.1) for cat, val in { "Extremely Important": 8.0, "Important": 4.0, "Good": 2.0, "Decent": 1.0, "Almost Irrelevant": 0.2 }.items()}
         st.subheader("Goalkeeper Stat Weights")
         new_gk_weights = {cat: st.number_input(f"{cat} Weight", 0.0, 10.0, get_weight("gk_" + cat.lower().replace(" ", "_"), val), 0.1, key=f"gk_{cat}") for cat, val in { "Top Importance": 10.0, "High Importance": 8.0, "Medium Importance": 6.0, "Key": 4.0, "Preferable": 2.0, "Other": 0.5 }.items()}
-        st.subheader("Role Multipliers")
-        key_mult = st.number_input("Key Attributes Multiplier", 1.0, 20.0, get_role_multiplier('key'), 0.1)
-        pref_mult = st.number_input("Preferable Attributes Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
+        st.subheader("Role & Position Multipliers")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            key_mult = st.number_input("Key Attributes Multiplier", 1.0, 20.0, get_role_multiplier('key'), 0.1)
+        with c2:
+            pref_mult = st.number_input("Preferable Attr. Multiplier", 1.0, 20.0, get_role_multiplier('preferable'), 0.1)
+        with c3:
+            natural_pos_mult = st.number_input(
+                "Natural Position Bonus", 
+                min_value=1.0, 
+                max_value=2.0, 
+                value=get_selection_bonus('natural_position'), 
+                step=0.01, # <-- Using 0.01 for finer control like 1.05
+                help="Bonus multiplier applied in the Best XI calculator if a player is in one of their 'Natural Positions'. 1.0 = No bonus."
+            )
+
 
     with st.expander("👶 Surplus Player Age Thresholds"):
         st.info(
@@ -1615,6 +1650,7 @@ def settings_page():
         set_role_multiplier('preferable', pref_mult)
         set_age_threshold('outfielder', new_outfielder_age)
         set_age_threshold('goalkeeper', new_goalkeeper_age)
+        set_selection_bonus('natural_position', natural_pos_mult)
 
         # --- START: NEW DATABASE SAVE LOGIC ---
         # Save only if the selection is a valid new DB name or different from the current one

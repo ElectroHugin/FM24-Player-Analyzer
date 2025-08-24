@@ -3,11 +3,6 @@
 import os
 from definitions_loader import load_definitions
 
-# --- Path finding logic ---
-_CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(_CURRENT_FILE_DIR)
-
-
 # --- DYNAMIC DEFINITION FUNCTIONS ---
 # By wrapping these in functions, we ensure the app can get the latest
 # definitions after they have been modified by the user.
@@ -92,7 +87,8 @@ attribute_mapping = {
     "UID": "Unique ID",
     "Cor": "Corners",
     "Club": "Club",
-    "Agreed Playing Time": "Agreed Playing Time"
+    "Agreed Playing Time": "Agreed Playing Time",
+    "Preferred Foot": "Preferred Foot"
 }
 
 # Columns available for sorting in the Assign Roles page

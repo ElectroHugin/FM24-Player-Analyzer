@@ -3,6 +3,7 @@
 import os
 import base64
 import streamlit as st
+import re
 
 from constants import get_player_roles
 from definitions_loader import PROJECT_ROOT
@@ -65,3 +66,29 @@ def get_available_databases():
     
     db_files = [f for f in os.listdir(db_folder) if f.endswith('.db') and os.path.isfile(os.path.join(db_folder, f))]
     return sorted([os.path.splitext(f)[0] for f in db_files])
+
+def parse_position_string(pos_str):
+    """
+    Parses a complex position string like 'AM (RL), ST (C)' into a clean set of individual positions.
+    Returns a set to automatically handle duplicates.
+    """
+    if not isinstance(pos_str, str):
+        return set()
+    
+    final_pos = set()
+    # Split by comma for multiple positions like "D (C), DM"
+    for part in [p.strip() for p in pos_str.split(',')]:
+        # Use regex to find the base position(s) and the sides (R, L, C)
+        match = re.match(r'([A-Z/]+) *(?:\(([RLC]+)\))?$', part.strip())
+        if match:
+            bases, sides = match.groups()
+            # Split bases like "D/WB"
+            for base in bases.split('/'):
+                if sides:
+                    # For "AM (RL)", create "AM (R)" and "AM (L)"
+                    for side in list(sides):
+                        final_pos.add(f"{base} ({side})")
+                else:
+                    # For "ST", which implies "ST (C)"
+                    final_pos.add(f"{base} (C)" if base == "ST" else base)
+    return final_pos
