@@ -1,5 +1,11 @@
 # constants.py
+
+import os
 from definitions_loader import load_definitions
+
+# --- Path finding logic ---
+_CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(_CURRENT_FILE_DIR)
 
 
 # --- DYNAMIC DEFINITION FUNCTIONS ---

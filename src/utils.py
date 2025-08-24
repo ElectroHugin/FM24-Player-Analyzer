@@ -5,6 +5,7 @@ import base64
 import streamlit as st
 
 from constants import get_player_roles
+from definitions_loader import PROJECT_ROOT
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""
@@ -55,3 +56,12 @@ def get_image_as_base64(path):
     with open(path, "rb") as f:
         data = f.read()
     return base64.b64encode(data).decode()
+
+def get_available_databases():
+    """Scans the databases directory and returns a list of DB names without the .db extension."""
+    db_folder = os.path.join(PROJECT_ROOT, 'databases')
+    # Ensure the databases directory exists
+    os.makedirs(db_folder, exist_ok=True)
+    
+    db_files = [f for f in os.listdir(db_folder) if f.endswith('.db') and os.path.isfile(os.path.join(db_folder, f))]
+    return sorted([os.path.splitext(f)[0] for f in db_files])

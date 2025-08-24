@@ -4,14 +4,10 @@ import configparser
 import os
 import streamlit as st
 from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS
-
-# Get the absolute path to the directory this file is in (i.e., .../project/src)
-_CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Get the project root directory by going one level up from 'src'
-_PROJECT_ROOT = os.path.dirname(_CURRENT_FILE_DIR)
+from definitions_loader import PROJECT_ROOT
 
 # Build the absolute path to the config file
-CONFIG_FILE = os.path.join(_PROJECT_ROOT, 'config', 'config.ini')
+CONFIG_FILE = os.path.join(PROJECT_ROOT, 'config', 'config.ini')
 
 @st.cache_data
 def load_config():
@@ -56,11 +52,28 @@ def load_config():
                 config['APTWeights'][key] = '1.0'
         config_was_modified = True
     
-        # 6. Ensure [AgeThresholds] section exists
+    # 6. Ensure [AgeThresholds] section exists
     if not config.has_section('AgeThresholds'):
         config['AgeThresholds'] = {
             'outfielder_youth_age': '20',
             'goalkeeper_youth_age': '25'
+        }
+        config_was_modified = True
+
+    # 7. Ensure [ThemeSettings] section exists
+    if not config.has_section('ThemeSettings'):
+        config['ThemeSettings'] = {
+            'current_mode': 'night',
+            # Default Night Theme (your current dark theme)
+            'night_primary_color': '#0055a4',
+            'night_text_color': '#FFFFFF',
+            'night_background_color': '#0E1117',
+            'night_secondary_background_color': '#262730',
+            # Default Day Theme (a clean, light theme)
+            'day_primary_color': '#0055a4',
+            'day_text_color': '#31333F', # Dark gray for text
+            'day_background_color': '#F0F2F6', # Off-white for background
+            'day_secondary_background_color': '#FFFFFF'
         }
         config_was_modified = True
 
@@ -76,7 +89,7 @@ def load_config():
 def get_db_file():
     # Construct the full, absolute path to the database file
     db_name = load_config()['Database']['db_name']
-    db_folder = os.path.join(_PROJECT_ROOT, 'databases')
+    db_folder = os.path.join(PROJECT_ROOT, 'databases')
     # Create the databases directory if it doesn't exist
     os.makedirs(db_folder, exist_ok=True)
     return os.path.join(db_folder, db_name + '.db')
@@ -161,3 +174,22 @@ def set_age_threshold(player_type, value):
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
     load_config.clear()
+
+
+def get_theme_settings():
+    """Gets the entire theme settings dictionary from the config."""
+    config = load_config()
+    return dict(config['ThemeSettings'])
+
+def save_theme_settings(settings):
+    """Saves the provided theme settings dictionary to the config."""
+    config = load_config()
+    if 'ThemeSettings' not in config:
+        config['ThemeSettings'] = {}
+    
+    for key, value in settings.items():
+        config['ThemeSettings'][key] = str(value)
+        
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    load_config.clear() # Clear cache to reflect changes
