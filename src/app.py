@@ -20,7 +20,7 @@ from constants import (SORTABLE_COLUMNS, FILTER_OPTIONS, get_valid_roles, get_po
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
                           get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
                           get_age_threshold, set_age_threshold, get_theme_settings, save_theme_settings)
-from squad_logic import calculate_squad_and_surplus
+from squad_logic import calculate_squad_and_surplus, calculate_development_squads
 from ui_components import display_tactic_grid
 from definitions_handler import get_definitions, save_definitions, PROJECT_ROOT
 from utils import (get_last_name, format_role_display, get_role_display_map, get_available_databases, 
@@ -373,26 +373,69 @@ def player_role_matrix_page():
 
 def best_position_calculator_page(players):
     st.title("Best Position Calculator")
-    with st.expander("How does it work?"):
-        st.info("This tool uses a 'weakest link first' algorithm. Instead of picking the best player for each position one by one, it evaluates all open positions simultaneously and fills the one where the best available player provides the smallest upgrade. This creates a more balanced and often stronger overall team.")
 
-    @st.cache_data
-    def _get_master_role_ratings(user_club):
-        master_ratings = {}
-        all_club_players_df = pd.DataFrame([p for p in get_all_players() if p['Club'] == user_club])
-        if all_club_players_df.empty: return {}
-        for role in get_valid_roles():
-            ratings_df, _, _ = get_players_by_role(role, user_club)
-            if not ratings_df.empty:
-                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
-                master_ratings[role] = ratings_df.set_index('Unique ID')['DWRS'].to_dict()
-        return master_ratings
-
+    # --- 1. SETUP & INITIAL DATA FETCH (Done once for both tabs) ---
     user_club = get_user_club()
+    second_team_club = get_second_team_club()
+
     if not user_club:
         st.warning("Please select your club in the sidebar.")
         return
 
+    # Create player pools
+    my_club_players = [p for p in players if p.get('Club') == user_club]
+    second_team_players = [p for p in players if p.get('Club') == second_team_club] if second_team_club else []
+
+    @st.cache_data
+    def _get_master_role_ratings(club_list):
+        master_ratings = {}
+        # Get all players from the relevant clubs to calculate ratings
+        all_relevant_players = [p for p in get_all_players() if p.get('Club') in club_list]
+        if not all_relevant_players: return {}
+        
+        for role in get_valid_roles():
+            # Pass all relevant clubs to the function
+            ratings_df, _, _ = get_players_by_role(role, club_list[0], club_list[1] if len(club_list) > 1 else None)
+            if not ratings_df.empty:
+                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
+                # Ensure we only consider players from the specified clubs
+                valid_ratings = ratings_df[ratings_df['Club'].isin(club_list)]
+                master_ratings[role] = valid_ratings.set_index('Unique ID')['DWRS'].to_dict()
+        return master_ratings
+    
+    def create_detailed_surplus_df(player_list, master_role_ratings):
+        if not player_list:
+            return pd.DataFrame()
+
+        data = []
+        for player in player_list:
+            best_dwrs = 0
+            best_role_abbr = ''
+            # Find the best DWRS rating among the player's assigned roles
+            assigned_roles = player.get('Assigned Roles', [])
+            if assigned_roles:
+                for role in assigned_roles:
+                    rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
+                    if rating > best_dwrs:
+                        best_dwrs = rating
+                        best_role_abbr = role
+            
+            player_data = {
+                "Name": player['Name'],
+                "Age": player.get('Age', 'N/A'),
+                "Position": player.get('Position', 'N/A'),
+                "Best Role": format_role_display(best_role_abbr) if best_role_abbr else "N/A",
+                "Best DWRS": int(best_dwrs),
+                "Det": player.get('Determination', 'N/A'),
+                "Wor": player.get('Work Rate', 'N/A'),
+                "Transfer": "✅" if player.get('transfer_status', 0) else "❌",
+                "Loan": "✅" if player.get('loan_status', 0) else "❌",
+            }
+            data.append(player_data)
+        
+        return pd.DataFrame(data)
+
+    # Tactic selection
     fav_tactic1, fav_tactic2 = get_favorite_tactics()
     all_tactics = sorted(list(get_tactic_roles().keys()))
     sorted_tactics = []
@@ -403,97 +446,123 @@ def best_position_calculator_page(players):
     tactic = st.selectbox("Select Tactic", options=sorted_tactics, index=0)
     
     positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
-    #my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
-    my_club_players = [p for p in players if p['Club'] == user_club]
-
     theme_settings = get_theme_settings()
     current_mode = theme_settings.get('current_mode', 'night')
-    
-    with st.spinner("Calculating best teams and surplus players..."):
-        master_role_ratings = _get_master_role_ratings(user_club)
-        squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
 
-    # --- NEW: Side-by-side layout for Starting XI and B-Team ---
-    xi_col, b_team_col = st.columns(2)
-
-    with xi_col:
-        display_tactic_grid(squad_data["starting_xi"], "Starting XI", positions, layout, mode=current_mode)
-
-    with b_team_col:
-        display_tactic_grid(squad_data["b_team"], "B Team", positions, layout, mode=current_mode)
-    
-    st.divider() # Keep a divider after the two pitches
-
-    st.subheader("Additional Depth")
-    best_depth_options = squad_data["best_depth_options"]
-    if best_depth_options:
-        for pos in sorted(best_depth_options.keys()):
-            players = best_depth_options.get(pos, [])
-            if players:
-                player_strs = [f"{p['name']} ({p['rating']}){' - ' + p['apt'] if p['apt'] else ''}" for p in players]
-                display_str = ', '.join(player_strs)
-                st.markdown(f"**{pos} ({positions[pos]})**: {display_str}")
-    else:
-        st.info("No other players were suitable as depth options for this tactic.")
-
-    st.divider()
-    st.subheader(f"Surplus Players for '{tactic}' tactic")
-    st.success("✔️ To manage these players, go to the **Transfer & Loan Management** page in the sidebar!")
-
-    outfielder_age_limit = get_age_threshold('outfielder')
-    goalkeeper_age_limit = get_age_threshold('goalkeeper')
-
-    if not squad_data["surplus_players"]:
-        st.info("No surplus players found for this tactic. Your squad is perfectly balanced!")
-    else:
-        senior_surplus = squad_data["senior_surplus"]
-        if senior_surplus:
-            
-            # --- Corrected Title ---
-            st.markdown(f"**For Sale / Release (Outfielders {outfielder_age_limit}+ , GKs {goalkeeper_age_limit}+):**")
-            df_senior_data = {
-                'Name': [p['Name'] for p in senior_surplus], 'Age': [p.get('Age', 'N/A') for p in senior_surplus],
-                'On Transfer List': ["✅" if p.get('transfer_status', 0) else "❌" for p in senior_surplus],
-                'On Loan List': ["✅" if p.get('loan_status', 0) else "❌" for p in senior_surplus]
-            }
-            st.dataframe(pd.DataFrame(df_senior_data), hide_index=True, use_container_width=True)
+    # --- 2. PERFORM ALL CALCULATIONS (Done once, before displaying UI) ---
+    with st.spinner("Calculating all team structures..."):
+        # We need ratings for both your club and the second team club for all calculations
+        clubs_to_rate = [user_club]
+        if second_team_club:
+            clubs_to_rate.append(second_team_club)
         
-        youth_surplus = squad_data["youth_surplus"]
-        if youth_surplus:
-            # --- Corrected Title ---
-            st.markdown(f"**For Loan (Outfielders U{outfielder_age_limit}, GKs U{goalkeeper_age_limit}):**")
-            df_youth_data = {
-                'Name': [p['Name'] for p in youth_surplus], 'Age': [p.get('Age', 'N/A') for p in youth_surplus],
-                'On Transfer List': ["✅" if p.get('transfer_status', 0) else "❌" for p in youth_surplus],
-                'On Loan List': ["✅" if p.get('loan_status', 0) else "❌" for p in youth_surplus]
-            }
-            st.dataframe(pd.DataFrame(df_youth_data), hide_index=True, use_container_width=True)
+        master_role_ratings = _get_master_role_ratings(clubs_to_rate)
+
+        # First, calculate the main squad as before
+        first_team_squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
+
+        # Then, use those results to calculate the development squads
+        dev_squad_data = calculate_development_squads(
+            second_team_players, 
+            first_team_squad_data["depth_pool"], 
+            positions,           
+            master_role_ratings  
+        )
+
+    # --- 3. CREATE UI ---
+    
+    # Define the column configuration ONCE to be reused everywhere
+    column_config = {
+        "Best DWRS": st.column_config.NumberColumn(format="%d%%"),
+        "Det": st.column_config.TextColumn(help="Determination"),
+        "Wor": st.column_config.TextColumn(help="Work Rate"),
+    }
+
+    tab1, tab2 = st.tabs(["First Team Squad", "Youth & Second Team"])
+
+    # --- All content for the first tab goes inside this "with" block ---
+    with tab1:
+        st.header("First Team Analysis")
+        with st.expander("How does it work?"):
+            st.info("This tool uses a 'weakest link first' algorithm. Instead of picking the best player for each position one by one, it evaluates all open positions simultaneously and fills the one where the best available player provides the smallest upgrade. This creates a more balanced and often stronger overall team.")
+
+        xi_col, b_team_col = st.columns(2)
+        with xi_col:
+            display_tactic_grid(first_team_squad_data["starting_xi"], "Starting XI", positions, layout, mode=current_mode)
+        with b_team_col:
+            display_tactic_grid(first_team_squad_data["b_team"], "B Team", positions, layout, mode=current_mode)
+        
+        st.divider()
+
+        st.subheader("Additional Depth")
+        best_depth_options = first_team_squad_data["best_depth_options"]
+        if best_depth_options:
+            for pos in sorted(best_depth_options.keys()):
+                players_list = best_depth_options.get(pos, [])
+                if players_list:
+                    player_strs = [f"{p['name']} ({p['rating']}){' - ' + p['apt'] if p['apt'] else ''}" for p in players_list]
+                    display_str = ', '.join(player_strs)
+                    st.markdown(f"**{pos} ({positions[pos]})**: {display_str}")
+        else:
+            st.info("No other players were suitable as depth options for this tactic.")
+
+    # --- All content for the second tab goes inside this "with" block ---
+    with tab2:
+        with st.expander("Development Squad Analysis"):
+            st.info("This section displays the optimal Youth XI from your young players and the best XI for your Second Team based on the selected tactic.")
+
+        second_col, youth_col = st.columns(2)
+
+        with second_col:
+            second_team_title = f"Second Team XI ({second_team_club or 'From Main Club Surplus'})"
+            display_tactic_grid(dev_squad_data["second_team_xi"], second_team_title, positions, layout, mode=current_mode)
+        
+        with youth_col:
+            display_tactic_grid(dev_squad_data["youth_xi"], "Youth XI", positions, layout, mode=current_mode)
+
+        st.divider()
+        st.subheader("Development & Transfer Candidates")
+        st.success("✔️ To manage these players, go to the **Transfer & Loan Management** page in the sidebar!")
+
+        loan_candidates_df = create_detailed_surplus_df(dev_squad_data.get("loan_candidates", []), master_role_ratings)
+        if not loan_candidates_df.empty:
+            st.markdown(f"**Promising Youth for Loan (Work Rate + Determination >= 20):**")
+            st.dataframe(loan_candidates_df, hide_index=True, use_container_width=True, column_config=column_config)
+        else:
+            st.info("No promising youth players identified for loan.")
+
+        sell_candidates_df = create_detailed_surplus_df(dev_squad_data.get("sell_candidates", []), master_role_ratings)
+        if not sell_candidates_df.empty:
+            st.markdown(f"**Surplus Players for Sale / Release:**")
+            st.dataframe(sell_candidates_df, hide_index=True, use_container_width=True, column_config=column_config)
+        else:
+            st.info("No surplus players identified for sale.")
 
   
 def transfer_loan_management_page(players):
     st.title("Transfer & Loan Management")
-    st.info("Manage surplus players based on your selected tactic. Use the save buttons to commit your changes.")
+    st.info("Manage the definitive list of surplus players based on your selected tactic. These are the players who did not make the First, B, Second, or Youth teams.")
 
-    # --- Helper functions for color-coding ---
+    # --- Helper functions for color-coding (from your original code) ---
     def color_attribute(value_str):
         try:
             value = int(value_str)
-            if value >= 13: color = '#85f585' # Green
-            elif value >= 10: color = '#f5f585' # Yellow
-            else: color = '#f58585' # Red
+            if value >= 13: color = '#85f585'
+            elif value >= 10: color = '#f5f585'
+            else: color = '#f58585'
             return f"<span style='color: {color}; font-weight: bold;'>{value}</span>"
-        except (ValueError, TypeError):
-            return "N/A"
+        except (ValueError, TypeError): return "N/A"
 
     def color_age(age_str):
         try:
             age = int(age_str)
             color = '#f58585' if age <= 17 else 'white'
             return f"<span style='color: {color};'>{age}</span>"
-        except (ValueError, TypeError):
-            return "N/A"
+        except (ValueError, TypeError): return "N/A"
         
+    # --- 1. SETUP & TACTIC SELECTION ---
     user_club = get_user_club()
+    second_team_club = get_second_team_club()
     if not user_club:
         st.warning("Please select your club in the sidebar to use this feature.")
         return
@@ -502,81 +571,69 @@ def transfer_loan_management_page(players):
     all_tactics = sorted(list(get_tactic_roles().keys()))
     try:
         default_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
-    except ValueError:
-        default_index = 0
+    except ValueError: default_index = 0
     tactic = st.selectbox("Select Tactic to Analyze Surplus Players", options=all_tactics, index=default_index)
-
     positions = get_tactic_roles()[tactic]
-    #my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
-    my_club_players = [p for p in players if p['Club'] == user_club]
-    
-    master_ratings = {}
-    for role in get_valid_roles():
-        ratings_df, _, _ = get_players_by_role(role, user_club)
-        if not ratings_df.empty:
-            ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
-            master_ratings[role] = ratings_df.set_index('Unique ID')['DWRS'].to_dict()
-            
-    squad_data = calculate_squad_and_surplus(my_club_players, positions, master_ratings)
 
-    # --- Calculate Best DWRS AND Best Role for each surplus player ---
-    tactic_roles = set(get_tactic_roles().get(tactic, {}).values())
+    # --- 2. PERFORM THE DEFINITIVE SURPLUS CALCULATION ---
+    # This section now mirrors the calculation from the Best Position page
+    with st.spinner("Calculating definitive surplus lists..."):
+        my_club_players = [p for p in players if p.get('Club') == user_club]
+        second_team_players = [p for p in players if p.get('Club') == second_team_club] if second_team_club else []
 
-    surplus_players_with_best_dwrs = []
-    for player in squad_data["surplus_players"]:
-        best_dwrs = 0
-        best_role_abbr = ''
-        assigned_roles = player.get('Assigned Roles', [])
-        for role in assigned_roles:
-            # NEW: Check if the player's role is relevant to the current tactic
-            if role in tactic_roles:
+        clubs_to_rate = [user_club]
+        if second_team_club: clubs_to_rate.append(second_team_club)
+        
+        # We need master ratings to calculate the teams and to display player's best roles
+        master_ratings = {}
+        for role in get_valid_roles():
+            ratings_df, _, _ = get_players_by_role(role, user_club, second_team_club)
+            if not ratings_df.empty:
+                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
+                master_ratings[role] = ratings_df.set_index('Unique ID')['DWRS'].to_dict()
+
+        first_team_squad_data = calculate_squad_and_surplus(my_club_players, positions, master_ratings)
+        dev_squad_data = calculate_development_squads(
+            second_team_players,
+            first_team_squad_data["depth_pool"],
+            positions,
+            master_ratings
+        )
+        
+        loan_candidates = dev_squad_data.get("loan_candidates", [])
+        sell_candidates = dev_squad_data.get("sell_candidates", [])
+
+        # Enrich the player lists with their best DWRS for display purposes
+        for player in (loan_candidates + sell_candidates):
+            best_dwrs, best_role_abbr = 0, ''
+            for role in player.get('Assigned Roles', []):
                 rating = master_ratings.get(role, {}).get(player['Unique ID'], 0)
                 if rating > best_dwrs:
-                    best_dwrs = rating
-                    best_role_abbr = role
-        
-        player['Best DWRS'] = f"{int(best_dwrs)}%"
-        player['Best Role Abbr'] = best_role_abbr
-        surplus_players_with_best_dwrs.append(player)
+                    best_dwrs, best_role_abbr = rating, role
+            player['Best DWRS'] = f"{int(best_dwrs)}%"
+            player['Best Role Abbr'] = best_role_abbr
     
-    senior_surplus = [p for p in surplus_players_with_best_dwrs if p in squad_data["senior_surplus"]]
-    youth_surplus = [p for p in surplus_players_with_best_dwrs if p in squad_data["youth_surplus"]]
-    senior_surplus.sort(key=lambda p: get_last_name(p['Name']))
-    youth_surplus.sort(key=lambda p: get_last_name(p['Name']))
-    
-    # --- COMPLETELY REFACTORED UI FOR MANAGEMENT ---
+    # --- 3. DISPLAY MANAGEMENT UI (Your original, excellent UI code) ---
     def display_management_table(player_list, title, is_youth=False):
         st.subheader(title)
         if not player_list:
             st.info(f"No players in this category for the '{tactic}' tactic.")
             return
 
-        # Define column widths and headers
-        if is_youth:
-            cols = [2.5, 0.5, 1.5, 0.5, 0.5, 0.8, 0.8, 2, 1]
-            headers = ["Name", "Age", "Best DWRS (Role)", "Det", "Wor", "Transfer", "Loan", "New Club", "Action"]
-        else: # Senior players
-            cols = [3, 0.5, 1.5, 0.8, 0.8, 2, 1]
-            headers = ["Name", "Age", "Best DWRS (Role)", "Transfer", "Loan", "New Club", "Action"]
+        cols = [2.5, 0.5, 1.5, 0.5, 0.5, 0.8, 0.8, 2, 1] if is_youth else [3, 0.5, 1.5, 0.8, 0.8, 2, 1]
+        headers = ["Name", "Age", "Best DWRS (Role)", "Det", "Wor", "Transfer", "Loan", "New Club", "Action"] if is_youth else ["Name", "Age", "Best DWRS (Role)", "Transfer", "Loan", "New Club", "Action"]
 
-        # Render Header
         header_cols = st.columns(cols)
         for i, header in enumerate(headers):
             header_cols[i].markdown(f"**{header}**")
         st.markdown("---")
 
-        # Render Player Rows
         for player in player_list:
             uid = player['Unique ID']
             row_cols = st.columns(cols)
-            
-            # --- Set widgets for this player's row ---
-            # Populate text input first to ensure its state is available
             if f"club_input_{uid}" not in st.session_state: st.session_state[f"club_input_{uid}"] = ""
             
-            # Combine DWRS and Role for display
-            best_role_abbr = player.get('Best Role Abbr', '')
-            best_role_display = f"({best_role_abbr})" if best_role_abbr else ""
+            best_role_display = f"({player.get('Best Role Abbr', '')})" if player.get('Best Role Abbr') else ""
             dwrs_display = f"{player.get('Best DWRS', 'N/A')} {best_role_display}"
             
             if is_youth:
@@ -585,65 +642,49 @@ def transfer_loan_management_page(players):
                 row_cols[2].write(dwrs_display)
                 row_cols[3].markdown(color_attribute(player.get('Determination')), unsafe_allow_html=True)
                 row_cols[4].markdown(color_attribute(player.get('Work Rate')), unsafe_allow_html=True)
-                row_cols[5].checkbox(label=f"transfer_{uid}", label_visibility="collapsed", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}")
-                row_cols[6].checkbox(label=f"loan_{uid}", label_visibility="collapsed", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}")
-                row_cols[7].text_input("New Club", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
-                
-                # Individual Save Button
+                row_cols[5].checkbox("", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}", label_visibility="collapsed")
+                row_cols[6].checkbox("", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}", label_visibility="collapsed")
+                row_cols[7].text_input("", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
                 if row_cols[8].button("Save", key=f"save_{uid}"):
-                    # Read values from session state and update DB
-                    transfer_status = st.session_state[f"transfer_{uid}"]
-                    loan_status = st.session_state[f"loan_{uid}"]
-                    new_club = st.session_state[f"club_input_{uid}"].strip()
-                    update_player_transfer_status(uid, transfer_status)
-                    update_player_loan_status(uid, loan_status)
-                    if new_club:
-                        update_player_club(uid, new_club)
+                    # Save logic... (copied from your code)
+                    update_player_transfer_status(uid, st.session_state[f"transfer_{uid}"])
+                    update_player_loan_status(uid, st.session_state[f"loan_{uid}"])
+                    if st.session_state[f"club_input_{uid}"].strip():
+                        update_player_club(uid, st.session_state[f"club_input_{uid}"].strip())
                     st.toast(f"Saved changes for {player['Name']}!", icon="✔️")
-
             else: # Senior players
                 row_cols[0].write(player['Name'])
                 row_cols[1].write(player.get('Age', 'N/A'))
                 row_cols[2].write(dwrs_display)
-                row_cols[3].checkbox(label=f"transfer_{uid}", label_visibility="collapsed", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}")
-                row_cols[4].checkbox(label=f"loan_{uid}", label_visibility="collapsed", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}")
-                row_cols[5].text_input("New Club", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
-                
-                # Individual Save Button
+                row_cols[3].checkbox("", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}", label_visibility="collapsed")
+                row_cols[4].checkbox("", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}", label_visibility="collapsed")
+                row_cols[5].text_input("", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
                 if row_cols[6].button("Save", key=f"save_{uid}"):
-                    transfer_status = st.session_state[f"transfer_{uid}"]
-                    loan_status = st.session_state[f"loan_{uid}"]
-                    new_club = st.session_state[f"club_input_{uid}"].strip()
-                    update_player_transfer_status(uid, transfer_status)
-                    update_player_loan_status(uid, loan_status)
-                    if new_club:
-                        update_player_club(uid, new_club)
+                    # Save logic... (copied from your code)
+                    update_player_transfer_status(uid, st.session_state[f"transfer_{uid}"])
+                    update_player_loan_status(uid, st.session_state[f"loan_{uid}"])
+                    if st.session_state[f"club_input_{uid}"].strip():
+                        update_player_club(uid, st.session_state[f"club_input_{uid}"].strip())
                     st.toast(f"Saved changes for {player['Name']}!", icon="✔️")
         
         st.markdown("---")
-        # "Save All" button for this specific table
         if st.button(f"Save All Changes for this List", key=f"save_all_{title.replace(' ', '_')}", type="primary"):
             with st.spinner(f"Saving all players in '{title}'..."):
                 for p in player_list:
                     p_uid = p['Unique ID']
-                    transfer_status = st.session_state[f"transfer_{p_uid}"]
-                    loan_status = st.session_state[f"loan_{p_uid}"]
-                    new_club = st.session_state[f"club_input_{p_uid}"].strip()
-                    update_player_transfer_status(p_uid, transfer_status)
-                    update_player_loan_status(p_uid, loan_status)
-                    if new_club:
-                        update_player_club(p_uid, new_club)
+                    update_player_transfer_status(p_uid, st.session_state[f"transfer_{p_uid}"])
+                    update_player_loan_status(p_uid, st.session_state[f"loan_{p_uid}"])
+                    if st.session_state[f"club_input_{p_uid}"].strip():
+                        update_player_club(p_uid, st.session_state[f"club_input_{p_uid}"].strip())
             st.success(f"All changes for players in '{title}' have been saved!")
             st.rerun()
-
 
     outfielder_age = get_age_threshold('outfielder')
     gk_age = get_age_threshold('goalkeeper')
     
-    # --- Display tables in a single column, youth first ---
-    display_management_table(youth_surplus, f"For Loan (Outfielders U{outfielder_age}, GKs U{gk_age})", is_youth=True)
+    display_management_table(loan_candidates, f"For Loan (Promising Youth)", is_youth=True)
     st.divider()
-    display_management_table(senior_surplus, f"For Sale / Release (Outfielders {outfielder_age}+, GKs {gk_age}+)")
+    display_management_table(sell_candidates, f"For Sale / Release")
 
 def player_comparison_page(players):
     st.title("Player Comparison")

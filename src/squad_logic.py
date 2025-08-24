@@ -1,4 +1,4 @@
-# app.py
+# squad_logic.py
 
 from config_handler import get_age_threshold, get_apt_weight
 
@@ -105,5 +105,78 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     
     return {
         "starting_xi": starting_xi, "b_team": b_team, "best_depth_options": best_depth_options,
-        "surplus_players": surplus_players, "youth_surplus": youth_surplus, "senior_surplus": senior_surplus
+        "surplus_players": surplus_players, "youth_surplus": youth_surplus, "senior_surplus": senior_surplus,
+        "depth_pool": depth_pool
+    }
+
+def calculate_development_squads(second_team_club_players, first_team_remnants, positions, master_role_ratings):
+    """
+    Calculates the Youth XI and Second Team XI using a robust process of elimination
+    to ensure every surplus player is correctly categorized.
+    """
+    outfielder_age_limit = get_age_threshold('outfielder')
+    goalkeeper_age_limit = get_age_threshold('goalkeeper')
+
+    # --- 1. Calculate Second Team ---
+    second_team_pool = second_team_club_players if second_team_club_players else first_team_remnants
+    second_team_squad_data = calculate_squad_and_surplus(second_team_pool, positions, master_role_ratings)
+    second_team_xi = second_team_squad_data["starting_xi"]
+
+    second_team_xi_names = {player['name'] for player in second_team_xi.values() if player['name'] != '-'}
+    second_team_player_ids = {p['Unique ID'] for p in second_team_pool if p['Name'] in second_team_xi_names}
+
+    # --- 2. Calculate Youth Team ---
+    youth_pool = []
+    for player in first_team_remnants:
+        if player['Unique ID'] in second_team_player_ids:
+            continue
+        age_str = player.get('Age')
+        age = int(age_str) if age_str and age_str.isdigit() else 99
+        is_gk = 'GK' in player.get('Position', '')
+        if (is_gk and age <= goalkeeper_age_limit) or (not is_gk and age <= outfielder_age_limit):
+            youth_pool.append(player)
+    
+    youth_squad_data = calculate_squad_and_surplus(youth_pool, positions, master_role_ratings)
+    youth_xi = youth_squad_data["starting_xi"]
+
+    youth_xi_names = {player['name'] for player in youth_xi.values() if player['name'] != '-'}
+    youth_player_ids = {p['Unique ID'] for p in youth_pool if p['Name'] in youth_xi_names}
+
+    # --- 3. Definitive Surplus Calculation (BUG FIX) ---
+    # The final surplus is anyone in the remnant pool who is NOT in the Second XI and NOT in the Youth XI.
+    final_surplus_players = []
+    for player in first_team_remnants:
+        if player['Unique ID'] not in second_team_player_ids and player['Unique ID'] not in youth_player_ids:
+            final_surplus_players.append(player)
+
+    # --- 4. Categorize the Final Surplus ---
+    loan_candidates = []
+    sell_candidates = []
+    for player in final_surplus_players:
+        age_str = player.get('Age')
+        age = int(age_str) if age_str and age_str.isdigit() else 99
+        is_gk = 'GK' in player.get('Position', '')
+        is_young = (is_gk and age <= goalkeeper_age_limit) or (not is_gk and age <= outfielder_age_limit)
+
+        if is_young:
+            try:
+                work_rate = int(player.get('Work Rate', 0) or 0)
+                determination = int(player.get('Determination', 0) or 0)
+                if (work_rate + determination) >= 20:
+                    loan_candidates.append(player)
+                else:
+                    sell_candidates.append(player) # Young but not "promising" -> SELL
+            except (ValueError, TypeError):
+                sell_candidates.append(player)
+        else:
+            sell_candidates.append(player) # Too old -> SELL
+
+    loan_candidates.sort(key=lambda p: get_last_name(p['Name']))
+    sell_candidates.sort(key=lambda p: get_last_name(p['Name']))
+
+    return {
+        "youth_xi": youth_xi,
+        "second_team_xi": second_team_xi,
+        "loan_candidates": loan_candidates,
+        "sell_candidates": sell_candidates
     }
