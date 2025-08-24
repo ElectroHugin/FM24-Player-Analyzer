@@ -405,6 +405,9 @@ def best_position_calculator_page(players):
     positions, layout = get_tactic_roles()[tactic], get_tactic_layouts()[tactic]
     #my_club_players = [p for p in get_all_players() if p['Club'] == user_club]
     my_club_players = [p for p in players if p['Club'] == user_club]
+
+    theme_settings = get_theme_settings()
+    current_mode = theme_settings.get('current_mode', 'night')
     
     with st.spinner("Calculating best teams and surplus players..."):
         master_role_ratings = _get_master_role_ratings(user_club)
@@ -414,10 +417,10 @@ def best_position_calculator_page(players):
     xi_col, b_team_col = st.columns(2)
 
     with xi_col:
-        display_tactic_grid(squad_data["starting_xi"], "Starting XI", positions, layout)
+        display_tactic_grid(squad_data["starting_xi"], "Starting XI", positions, layout, mode=current_mode)
 
     with b_team_col:
-        display_tactic_grid(squad_data["b_team"], "B Team", positions, layout)
+        display_tactic_grid(squad_data["b_team"], "B Team", positions, layout, mode=current_mode)
     
     st.divider() # Keep a divider after the two pitches
 
@@ -644,6 +647,29 @@ def transfer_loan_management_page(players):
 
 def player_comparison_page(players):
     st.title("Player Comparison")
+
+    # --- START: THEME-AWARE SETUP ---
+    theme_settings = get_theme_settings()
+    current_mode = theme_settings.get('current_mode', 'night')
+
+    # Define chart colors and palettes based on the current mode
+    if current_mode == 'day':
+        # Day Mode: Dark text, light backgrounds, saturated trace colors
+        chart_bg_color = 'rgba(230, 230, 230, 0.5)' # Light gray background
+        font_color = theme_settings.get('day_text_color', '#31333F')
+        grid_color = 'rgba(0, 0, 0, 0.2)'
+        # Palette designed for high contrast on light backgrounds
+        primary_color = theme_settings.get('day_primary_color', '#0055a4')
+        trace_palette = [primary_color, '#D32F2F', '#7B1FA2', '#0288D1', '#FFA000']
+    else:
+        # Night Mode: Light text, dark backgrounds, bright trace colors
+        chart_bg_color = 'rgba(46, 46, 46, 0.8)' # Original dark gray
+        font_color = theme_settings.get('night_text_color', '#FFFFFF')
+        grid_color = 'rgba(255, 255, 255, 0.4)'
+        # Palette designed for high contrast on dark backgrounds
+        primary_color = theme_settings.get('night_primary_color', '#0055a4')
+        trace_palette = [primary_color, '#F50057', '#00E5FF', '#FFDE03', '#76FF03']
+    # --- END: THEME-AWARE SETUP ---
     
     df = pd.DataFrame(players)
     if df.empty:
@@ -676,8 +702,6 @@ def player_comparison_page(players):
         player_pool = player_pool[player_pool['Club'] == user_club]
     
     player_pool = player_pool[player_pool['Assigned Roles'].apply(lambda roles: selected_role in roles if isinstance(roles, list) else False)]
-    
-    # --- START: BUG FIX FOR DUPLICATE NAMES ---
 
     # Create a mapping from Unique ID to a descriptive, unique display name
     player_map = {
@@ -701,7 +725,6 @@ def player_comparison_page(players):
         # Filter the main DataFrame using the list of selected Unique IDs
         comparison_df = df[df['Unique ID'].isin(selected_ids)].copy()
         
-        # --- END: BUG FIX ---
         
         all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
         is_gk_role = selected_role in all_gk_roles
@@ -743,23 +766,86 @@ def player_comparison_page(players):
         with chart_col1:
             st.subheader("Gameplay Areas")
             fig1 = go.Figure()
-            # Loop through the selected IDs to build the chart
-            for uid in selected_ids:
+
+            # --- FIX: Define the theta values for the loop ONCE ---
+            gameplay_theta = list(gameplay_attrs.keys())
+
+            # --- UPDATED: Loop to build chart with dynamic colors ---
+            for i, uid in enumerate(selected_ids):
                 player_data = comparison_df[comparison_df['Unique ID'] == uid].iloc[0]
                 category_values = [sum(parse_attribute_value(player_data.get(attr, 0)) for attr in attrs) / len(attrs) if attrs else 0 for attrs in gameplay_attrs.values()]
-                fig1.add_trace(go.Scatterpolar(r=category_values, theta=list(gameplay_attrs.keys()), fill='toself', name=player_map[uid]))
-            fig1.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 20], tickfont=dict(color='white'), gridcolor='rgba(255, 255, 255, 0.4)'), angularaxis=dict(tickfont=dict(size=12, color='white'), direction="clockwise"), bgcolor='rgba(46, 46, 46, 0.8)'), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=40, r=40, t=40, b=40))
+                
+                
+                # --- FIX: Append the first value to the end to CLOSE the shape ---
+                if category_values:
+                    category_values.append(category_values[0])
+
+                # Assign a color from the palette, looping if necessary
+                color = trace_palette[i % len(trace_palette)]
+                
+                fig1.add_trace(go.Scatterpolar(
+                    r=category_values, 
+                    # --- FIX: Use a closed list of labels that matches the data ---
+                    theta=gameplay_theta + [gameplay_theta[0]], 
+                    fill='toself', 
+                    name=player_map[uid],
+                    line=dict(color=color),
+                    fillcolor=f"rgba({','.join(str(c) for c in hex_to_rgb(color))}, 0.2)"
+                ))
+            
+            # --- UPDATED: Dynamic layout styling ---
+            fig1.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 20], tickfont=dict(color=font_color), gridcolor=grid_color),
+                    angularaxis=dict(tickfont=dict(size=12, color=font_color), direction="clockwise"),
+                    bgcolor=chart_bg_color
+                ),
+                showlegend=False, 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                margin=dict(l=40, r=40, t=40, b=40)
+            )
             st.plotly_chart(fig1, use_container_width=True)
 
         with chart_col2:
             st.subheader(meta_chart_title)
             fig2 = go.Figure()
-            # Loop through the selected IDs to build the chart
-            for uid in selected_ids:
+            # --- FIX: Define the theta values for the loop ONCE ---
+            meta_theta = list(meta_categories.keys())
+
+            # --- UPDATED: Loop to build chart with dynamic colors ---
+            for i, uid in enumerate(selected_ids):
                 player_data = comparison_df[comparison_df['Unique ID'] == uid].iloc[0]
                 category_values = [sum(parse_attribute_value(player_data.get(attr, 0)) for attr in attrs) / len(attrs) if attrs else 0 for attrs in meta_categories.values()]
-                fig2.add_trace(go.Scatterpolar(r=category_values, theta=list(meta_categories.keys()), fill='toself', name=player_map[uid]))
-            fig2.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 20], tickfont=dict(color='white'), gridcolor='rgba(255, 255, 255, 0.4)'), angularaxis=dict(tickfont=dict(size=12, color='white'), direction="clockwise"), bgcolor='rgba(46, 46, 46, 0.8)'), legend=dict(font=dict(color='white')), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=40, r=40, t=40, b=40))
+
+                # --- FIX: Append the first value to the end to CLOSE the shape ---
+                if category_values:
+                    category_values.append(category_values[0])
+
+                color = trace_palette[i % len(trace_palette)]
+
+                fig2.add_trace(go.Scatterpolar(
+                    r=category_values, 
+                    # --- FIX: Use a closed list of labels that matches the data ---
+                    theta=meta_theta + [meta_theta[0]], 
+                    fill='toself', 
+                    name=player_map[uid],
+                    line=dict(color=color),
+                    fillcolor=f"rgba({','.join(str(c) for c in hex_to_rgb(color))}, 0.2)"
+                ))
+
+            # --- UPDATED: Dynamic layout styling ---
+            fig2.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 20], tickfont=dict(color=font_color), gridcolor=grid_color),
+                    angularaxis=dict(tickfont=dict(size=12, color=font_color), direction="clockwise"),
+                    bgcolor=chart_bg_color
+                ),
+                legend=dict(font=dict(color=font_color)), 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                margin=dict(l=40, r=40, t=40, b=40)
+            )
             st.plotly_chart(fig2, use_container_width=True)
 
         st.divider()
