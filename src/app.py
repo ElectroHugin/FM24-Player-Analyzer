@@ -39,32 +39,6 @@ def sidebar(df):
         theme_settings = get_theme_settings()
         current_mode = theme_settings.get('current_mode', 'night')
 
-        # The toggle's state reflects the current mode
-        is_day_mode = st.toggle("☀️ Day Mode", value=(current_mode == 'day'))
-        
-        # Check if the toggle was flipped by the user
-        new_mode = 'day' if is_day_mode else 'night'
-        if new_mode != current_mode:
-            theme_settings['current_mode'] = new_mode
-            save_theme_settings(theme_settings)
-            
-            # Apply the new theme immediately
-            if new_mode == 'day':
-                set_theme_toml(
-                    theme_settings['day_primary_color'],
-                    theme_settings['day_text_color'],
-                    theme_settings['day_background_color'],
-                    theme_settings['day_secondary_background_color']
-                )
-            else: # night mode
-                set_theme_toml(
-                    theme_settings['night_primary_color'],
-                    theme_settings['night_text_color'],
-                    theme_settings['night_background_color'],
-                    theme_settings['night_secondary_background_color']
-                )
-            st.rerun()
-
         # --- NEW: Centered Logo & Fallback Text ---
         # We use columns to center the logo and header.
         col1, col2, col3 = st.columns([1, 2, 1]) # [Spacer, Content, Spacer]
@@ -122,6 +96,32 @@ def sidebar(df):
 
         if selected_second != current_second and selected_second != "Select a club":
             set_second_team_club(selected_second)
+            st.rerun()
+
+        # The toggle's state reflects the current mode
+        is_day_mode = st.toggle("☀️ Day Mode", value=(current_mode == 'day'))
+        
+        # Check if the toggle was flipped by the user
+        new_mode = 'day' if is_day_mode else 'night'
+        if new_mode != current_mode:
+            theme_settings['current_mode'] = new_mode
+            save_theme_settings(theme_settings)
+            
+            # Apply the new theme immediately
+            if new_mode == 'day':
+                set_theme_toml(
+                    theme_settings['day_primary_color'],
+                    theme_settings['day_text_color'],
+                    theme_settings['day_background_color'],
+                    theme_settings['day_secondary_background_color']
+                )
+            else: # night mode
+                set_theme_toml(
+                    theme_settings['night_primary_color'],
+                    theme_settings['night_text_color'],
+                    theme_settings['night_background_color'],
+                    theme_settings['night_secondary_background_color']
+                )
             st.rerun()
             
         return actual_page, uploaded_file
