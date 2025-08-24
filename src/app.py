@@ -19,16 +19,13 @@ from constants import (SORTABLE_COLUMNS, FILTER_OPTIONS, get_valid_roles, get_po
                      get_role_specific_weights, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, MASTER_POSITION_MAP)
 from config_handler import (get_weight, set_weight, get_role_multiplier, set_role_multiplier, 
                           get_db_name, set_db_name, get_apt_weight, set_apt_weight, 
-                          get_age_threshold, set_age_threshold)
+                          get_age_threshold, set_age_threshold, get_theme_settings, save_theme_settings)
 from squad_logic import calculate_squad_and_surplus
 from ui_components import display_tactic_grid
-from definitions_handler import get_definitions, save_definitions
-from utils import get_last_name, format_role_display, get_role_display_map # <-- Cleaned up utils imports
-from theme_handler import get_theme_from_toml, set_theme_toml, calculate_contrast_ratio, hex_to_rgb
-
-# --- Path finding logic ---
-_CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_CURRENT_FILE_DIR)
+from definitions_handler import get_definitions, save_definitions, PROJECT_ROOT
+from utils import (get_last_name, format_role_display, get_role_display_map, get_available_databases, 
+                   calculate_contrast_ratio, hex_to_rgb)
+from theme_handler import set_theme_toml
 
 # --- Page Config ---
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
@@ -38,11 +35,41 @@ def clear_all_caches():
 
 def sidebar(df):
     with st.sidebar:
+        # --- NEW: Theme Switch Logic ---
+        theme_settings = get_theme_settings()
+        current_mode = theme_settings.get('current_mode', 'night')
+
+        # The toggle's state reflects the current mode
+        is_day_mode = st.toggle("☀️ Day Mode", value=(current_mode == 'day'))
+        
+        # Check if the toggle was flipped by the user
+        new_mode = 'day' if is_day_mode else 'night'
+        if new_mode != current_mode:
+            theme_settings['current_mode'] = new_mode
+            save_theme_settings(theme_settings)
+            
+            # Apply the new theme immediately
+            if new_mode == 'day':
+                set_theme_toml(
+                    theme_settings['day_primary_color'],
+                    theme_settings['day_text_color'],
+                    theme_settings['day_background_color'],
+                    theme_settings['day_secondary_background_color']
+                )
+            else: # night mode
+                set_theme_toml(
+                    theme_settings['night_primary_color'],
+                    theme_settings['night_text_color'],
+                    theme_settings['night_background_color'],
+                    theme_settings['night_secondary_background_color']
+                )
+            st.rerun()
+
         # --- NEW: Centered Logo & Fallback Text ---
         # We use columns to center the logo and header.
         col1, col2, col3 = st.columns([1, 2, 1]) # [Spacer, Content, Spacer]
         with col2:
-            logo_path = os.path.join(_PROJECT_ROOT, 'config', 'assets', 'logo.png')
+            logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'logo.png')
             if os.path.exists(logo_path):
                 st.image(logo_path) # st.image in a column is auto-centered
             else:
@@ -51,7 +78,8 @@ def sidebar(df):
 
         # --- Get colors for the nav bar ---
         # --- UPDATED: Uses the new theme_handler function ---
-        primary_color, secondary_color = get_theme_from_toml()
+        primary_color = theme_settings.get(f"{current_mode}_primary_color")
+        secondary_color = theme_settings.get(f"{current_mode}_text_color")
         rgb = hex_to_rgb(primary_color)
         hover_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
 
@@ -1273,6 +1301,10 @@ def create_new_tactic_page():
                 st.error(f"Failed to save tactic: {message}")
 
 def settings_page():
+    # --- Fetch current theme settings once at the top ---
+    theme_settings = get_theme_settings()
+    current_mode = theme_settings.get('current_mode', 'night')
+
     with st.expander("⭐ Favorite Tactic Selection", expanded=True):
         st.info("The selected tactics will appear at the top of the list on the analysis pages.")
         
@@ -1292,13 +1324,14 @@ def settings_page():
         with c2:
             new_fav_tactic2 = st.selectbox("Secondary Favorite Tactic", options=all_tactics, index=index2)
 
-    with st.expander("🎨 Club Identity & Theme", expanded=True):
+    with st.expander("🎨 Club Identity & Theme"):
+        st.info(f"You are currently customizing the **{current_mode.capitalize()} Mode** theme. Use the toggle in the sidebar to switch modes.")
         st.info("Upload your club's logo and select its primary and secondary colors to personalize the app's theme.")
 
         logo_file = st.file_uploader("Upload Club Logo", type=['png', 'jpg', 'jpeg'], help="Recommended size: 200x200 pixels.")
         if logo_file is not None:
             try:
-                assets_dir = os.path.join(_PROJECT_ROOT, 'config', 'assets')
+                assets_dir = os.path.join(PROJECT_ROOT, 'config', 'assets')
                 os.makedirs(assets_dir, exist_ok=True)
                 with open(os.path.join(assets_dir, "logo.png"), "wb") as f:
                     f.write(logo_file.getbuffer())
@@ -1307,20 +1340,27 @@ def settings_page():
                 st.error(f"Error saving logo: {e}")
 
         # --- NEW: Two Color Pickers ---
-        primary_color, text_color = get_theme_from_toml()
+        st.subheader(f"{current_mode.capitalize()} Mode Colors")
+        
+        # Dynamically get the colors for the current mode
+        primary_val = theme_settings.get(f"{current_mode}_primary_color")
+        text_val = theme_settings.get(f"{current_mode}_text_color")
+        bg_val = theme_settings.get(f"{current_mode}_background_color")
+        sec_bg_val = theme_settings.get(f"{current_mode}_secondary_background_color")
         c1, c2 = st.columns(2)
         with c1:
-            new_primary = st.color_picker("Primary Color (Buttons, Highlights)", primary_color)
+            new_primary = st.color_picker("Primary Color (Buttons, Highlights)", primary_val)
+            new_bg = st.color_picker("Background Color", bg_val)
         with c2:
-            new_secondary = st.color_picker("Text & Accent Color", text_color)
+            new_text = st.color_picker("Text & Accent Color", text_val)
+            new_sec_bg = st.color_picker("Secondary Background Color", sec_bg_val)
         
         # --- NEW: Live Contrast Warning ---
         st.caption("The secondary color is used for most text. For best readability, ensure it has strong contrast with the app's dark background and your primary color.")
         
-        # Check contrast against the dark background
-        bg_contrast_ratio = calculate_contrast_ratio(new_secondary, "#1e1e1e")
-        # Check contrast against the primary color (for text on buttons etc.)
-        primary_contrast_ratio = calculate_contrast_ratio(new_secondary, new_primary)
+        # --- Live Contrast Warning ---
+        bg_contrast_ratio = calculate_contrast_ratio(new_text, new_bg)
+        primary_contrast_ratio = calculate_contrast_ratio(new_text, new_primary)
         
         if bg_contrast_ratio < 4.5 or primary_contrast_ratio < 3.0:
             st.warning(f"""
@@ -1386,15 +1426,57 @@ def settings_page():
                 step=1
             )
 
+# --- START: NEW DATABASE SETTINGS SECTION ---
     with st.expander("⚙️ Database Settings"):
-        db_name = st.text_input("Database Name (no .db)", value=get_db_name())
+        db_action = st.radio("Action", ["Select Existing Database", "Create New Database"], horizontal=True)
+        
+        current_db_name = get_db_name()
+        db_to_set = current_db_name # Default to current DB
+        is_valid_new_db = False
+
+        if db_action == "Select Existing Database":
+            available_dbs = get_available_databases()
+            if not available_dbs:
+                st.warning("No existing databases found. Create one below.")
+            else:
+                try:
+                    current_index = available_dbs.index(current_db_name)
+                except ValueError:
+                    current_index = 0
+                
+                selected_db = st.selectbox("Select a database", options=available_dbs, index=current_index)
+                db_to_set = selected_db
+
+        else: # Create New Database
+            new_db_name = st.text_input("Enter new database name (e.g., 'My FM24 Save')")
+            if new_db_name:
+                # Sanitize the name to create a valid filename
+                sanitized_name = re.sub(r'[^\w\s-]', '', new_db_name).strip()
+                if not sanitized_name:
+                    st.error("Invalid name. Please use letters, numbers, spaces, or hyphens.")
+                elif sanitized_name in get_available_databases():
+                    st.error(f"A database named '{sanitized_name}' already exists.")
+                else:
+                    st.success(f"Ready to create and switch to '{sanitized_name}.db' on save.")
+                    db_to_set = sanitized_name
+                    is_valid_new_db = True
+    # --- END: NEW DATABASE SETTINGS SECTION ---
 
     # This button remains outside the expanders
-    if st.button("Save All Settings"):
+    if st.button("Save All Settings", type="primary"):
         set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
-        # Save the new color settings
-        # --- UPDATED: Uses the new theme_handler function ---
-        set_theme_toml(new_primary, new_secondary)
+
+        # --- Update the theme settings dictionary with new values ---
+        theme_settings[f"{current_mode}_primary_color"] = new_primary
+        theme_settings[f"{current_mode}_text_color"] = new_text
+        theme_settings[f"{current_mode}_background_color"] = new_bg
+        theme_settings[f"{current_mode}_secondary_background_color"] = new_sec_bg
+
+        # Save the updated dictionary back to config.ini
+        save_theme_settings(theme_settings)
+
+        # Apply the just-saved settings to the live theme
+        set_theme_toml(new_primary, new_text, new_bg, new_sec_bg)
         
         # --- NEW: Save the APT weights ---
         for apt, val in new_apt_weights.items():
@@ -1406,14 +1488,21 @@ def settings_page():
         set_role_multiplier('preferable', pref_mult)
         set_age_threshold('outfielder', new_outfielder_age)
         set_age_threshold('goalkeeper', new_goalkeeper_age)
-        set_db_name(db_name)
+
+        # --- START: NEW DATABASE SAVE LOGIC ---
+        # Save only if the selection is a valid new DB name or different from the current one
+        if (db_action == "Create New Database" and is_valid_new_db) or (db_action == "Select Existing Database" and db_to_set != current_db_name):
+            set_db_name(db_to_set)
+            st.toast(f"Switched active database to '{db_to_set}.db'", icon="💾")
+        # --- END: NEW DATABASE SAVE LOGIC ---
+
         clear_all_caches()
         df = load_data()
         if df is not None: update_dwrs_ratings(df, get_valid_roles())
-        st.success("Settings saved! Please stop and restart the application for the new theme to take full effect.")
+        st.success("Settings saved successfully!")
+        st.info("Theme changes may require a full app restart (Ctrl+C in terminal and `streamlit run app.py`) to apply correctly.")
         st.rerun()
 
-# --- FIXED: Main function with clear if/elif structure ---
 def main():
      # --- START REFACTOR ---
     df = load_data() # This hits the @st.cache_data function once

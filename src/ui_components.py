@@ -12,10 +12,6 @@ def display_tactic_grid(team, title, positions, layout):
     st.subheader(title)
     default_player = {"name": "-", "rating": "0%", "apt": ""}
 
-    if isinstance(layout, list):
-        # ... (Backward compatibility code remains unchanged) ...
-        return
-
     # --- Dynamic Pitch Grid Logic ---
     occupied_columns = set()
     for stratum, player_keys in layout.items():
