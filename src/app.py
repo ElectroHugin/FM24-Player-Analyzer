@@ -530,7 +530,7 @@ def transfer_loan_management_page(players):
     st.title("Transfer & Loan Management")
     st.info("Manage the definitive list of surplus players based on your selected tactic. These are the players who did not make the First, B, Second, or Youth teams.")
 
-    # --- Helper functions for color-coding (from your original code) ---
+    # --- Helper functions for color-coding ---
     def color_attribute(value_str):
         try:
             value = int(value_str)
@@ -563,7 +563,6 @@ def transfer_loan_management_page(players):
     positions = get_tactic_roles()[tactic]
 
     # --- 2. PERFORM THE DEFINITIVE SURPLUS CALCULATION ---
-    # This section now mirrors the calculation from the Best Position page
     with st.spinner("Calculating definitive surplus lists..."):
         my_club_players = [p for p in players if p.get('Club') == user_club]
         second_team_players = [p for p in players if p.get('Club') == second_team_club] if second_team_club else []
@@ -571,7 +570,6 @@ def transfer_loan_management_page(players):
         clubs_to_rate = [user_club]
         if second_team_club: clubs_to_rate.append(second_team_club)
         
-        # We need master ratings to calculate the teams and to display player's best roles
         master_ratings = {}
         for role in get_valid_roles():
             ratings_df, _, _ = get_players_by_role(role, user_club, second_team_club)
@@ -590,7 +588,6 @@ def transfer_loan_management_page(players):
         loan_candidates = dev_squad_data.get("loan_candidates", [])
         sell_candidates = dev_squad_data.get("sell_candidates", [])
 
-        # Enrich the player lists with their best DWRS for display purposes
         for player in (loan_candidates + sell_candidates):
             best_dwrs, best_role_abbr = 0, ''
             for role in player.get('Assigned Roles', []):
@@ -600,7 +597,7 @@ def transfer_loan_management_page(players):
             player['Best DWRS'] = f"{int(best_dwrs)}%"
             player['Best Role Abbr'] = best_role_abbr
     
-    # --- 3. DISPLAY MANAGEMENT UI (Your original, excellent UI code) ---
+    # --- 3. DISPLAY MANAGEMENT UI ---
     def display_management_table(player_list, title, is_youth=False):
         st.subheader(title)
         if not player_list:
@@ -629,11 +626,12 @@ def transfer_loan_management_page(players):
                 row_cols[2].write(dwrs_display)
                 row_cols[3].markdown(color_attribute(player.get('Determination')), unsafe_allow_html=True)
                 row_cols[4].markdown(color_attribute(player.get('Work Rate')), unsafe_allow_html=True)
-                row_cols[5].checkbox("", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}", label_visibility="collapsed")
-                row_cols[6].checkbox("", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}", label_visibility="collapsed")
-                row_cols[7].text_input("", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
+                # --- FIX START ---
+                row_cols[5].checkbox("Transfer Status", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}", label_visibility="collapsed")
+                row_cols[6].checkbox("Loan Status", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}", label_visibility="collapsed")
+                row_cols[7].text_input("New Club Name", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
+                # --- FIX END ---
                 if row_cols[8].button("Save", key=f"save_{uid}"):
-                    # Save logic... (copied from your code)
                     update_player_transfer_status(uid, st.session_state[f"transfer_{uid}"])
                     update_player_loan_status(uid, st.session_state[f"loan_{uid}"])
                     if st.session_state[f"club_input_{uid}"].strip():
@@ -643,11 +641,12 @@ def transfer_loan_management_page(players):
                 row_cols[0].write(player['Name'])
                 row_cols[1].write(player.get('Age', 'N/A'))
                 row_cols[2].write(dwrs_display)
-                row_cols[3].checkbox("", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}", label_visibility="collapsed")
-                row_cols[4].checkbox("", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}", label_visibility="collapsed")
-                row_cols[5].text_input("", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
+                # --- FIX START ---
+                row_cols[3].checkbox("Transfer Status", value=bool(player.get('transfer_status', 0)), key=f"transfer_{uid}", label_visibility="collapsed")
+                row_cols[4].checkbox("Loan Status", value=bool(player.get('loan_status', 0)), key=f"loan_{uid}", label_visibility="collapsed")
+                row_cols[5].text_input("New Club Name", key=f"club_input_{uid}", label_visibility="collapsed", placeholder="New club...")
+                # --- FIX END ---
                 if row_cols[6].button("Save", key=f"save_{uid}"):
-                    # Save logic... (copied from your code)
                     update_player_transfer_status(uid, st.session_state[f"transfer_{uid}"])
                     update_player_loan_status(uid, st.session_state[f"loan_{uid}"])
                     if st.session_state[f"club_input_{uid}"].strip():
@@ -672,7 +671,6 @@ def transfer_loan_management_page(players):
     display_management_table(loan_candidates, f"For Loan (Promising Youth)", is_youth=True)
     st.divider()
     display_management_table(sell_candidates, f"For Sale / Release")
-
 def player_comparison_page(players):
     st.title("Player Comparison")
 
@@ -1506,7 +1504,7 @@ def settings_page():
             with cols[col_idx % 3]:
                 # Use the new get_apt_weight function to get the current value
                 current_weight = get_apt_weight(apt)
-                new_apt_weights[apt] = st.number_input(f"Weight for '{apt}'", 0.0, 5.0, current_weight, 0.05, key=f"apt_{apt}")
+                new_apt_weights[apt] = st.number_input(f"Weight for '{apt}'", 0.0, 5.0, current_weight, 0.01, key=f"apt_{apt}")
             col_idx += 1
 
     with st.expander("⚖️ DWRS Weights & Multipliers"):
