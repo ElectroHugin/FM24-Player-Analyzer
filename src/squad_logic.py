@@ -10,27 +10,37 @@ def get_last_name(full_name):
         return full_name.split(' ')[-1]
     return ""
 
-def _apply_footedness_swaps(team, all_players):
+# --- START: CORRECTED HELPER FUNCTION ---
+def _apply_footedness_swaps(team, all_players, positions):
     """
     A helper function to swap players in symmetrical positions based on their preferred foot.
     This is applied AFTER the team has been selected.
+    A swap only occurs if the roles for the two positions are identical.
     """
     # Define the symmetrical pairs of tactical positions
     symmetrical_pairs = [
         ('DCL', 'DCR'), ('DMCL', 'DMCR'),
-        ('MCL', 'MCR'), ('AMCL', 'AMCR')
+        ('MCL', 'MCR'), ('AMCL', 'AMCR'),
+        ('STL', 'STR')
     ]
     
-    # Create a quick lookup map for player objects by their ID
     player_map = {p['Unique ID']: p for p in all_players}
 
     for pos_L, pos_R in symmetrical_pairs:
-        # Check if both symmetrical positions are actually in the team
+        # Check if both symmetrical positions are in the team
         if pos_L in team and pos_R in team:
+            
+            # --- NEW: Check if the roles for these positions are the same ---
+            role_L = positions.get(pos_L)
+            role_R = positions.get(pos_R)
+            
+            if role_L != role_R:
+                continue # If roles are different, do not swap.
+            # --- END NEW ---
+
             player_L_data = team[pos_L]
             player_R_data = team[pos_R]
             
-            # Get the full player objects using the IDs we stored
             player_L = player_map.get(player_L_data.get('player_id'))
             player_R = player_map.get(player_R_data.get('player_id'))
 
@@ -39,10 +49,10 @@ def _apply_footedness_swaps(team, all_players):
 
             # The ideal swap condition: a right-footer is on the left and a left-footer is on the right
             if player_L.get('Preferred Foot') == 'Right' and player_R.get('Preferred Foot') == 'Left':
-                # Swap them
                 team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
                 
     return team
+# --- END: CORRECTED HELPER FUNCTION ---
 
 def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings):
     """
@@ -144,8 +154,9 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     b_team_with_ids, depth_pool = select_team(positions, remaining_players)
     
     # 2. Apply the post-selection footedness swap logic
-    starting_xi = _apply_footedness_swaps(starting_xi_with_ids, my_club_players)
-    b_team = _apply_footedness_swaps(b_team_with_ids, my_club_players)
+    # --- CHANGE: Pass the 'positions' dictionary to the swap function ---
+    starting_xi = _apply_footedness_swaps(starting_xi_with_ids, my_club_players, positions)
+    b_team = _apply_footedness_swaps(b_team_with_ids, remaining_players, positions)
 
     # 3. Fill any empty slots with default players for display
     default_player = {"name": "-", "rating": "0%", "apt": ""}
