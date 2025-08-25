@@ -260,6 +260,8 @@ MASTER_POSITION_MAP = {
 
 # Defines the specific game positions that are valid for a given tactical slot.
 TACTICAL_SLOT_TO_GAME_POSITIONS = {
+    # Goalkeeper
+    'GK': ['GK'],
     # Defense
     'DL': ['D (L)', 'WB (L)'],
     'WBL': ['WB (L)'],
