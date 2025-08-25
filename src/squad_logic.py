@@ -1,7 +1,8 @@
 # squad_logic.py
 
 from config_handler import get_age_threshold, get_apt_weight, get_selection_bonus
-from constants import get_position_to_role_mapping
+from constants import get_position_to_role_mapping, TACTICAL_SLOT_TO_GAME_POSITIONS
+from utils import parse_position_string
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""
@@ -76,6 +77,19 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
                 max_score = -1
                 for player in available_players:
                     if player['Unique ID'] in players_team: continue
+
+                    # --- BUG FIX START: POSITIONAL COMPATIBILITY CHECK ---
+                    # 1. Get the game positions this tactical slot allows (e.g., 'ML' -> ['M (L)'])
+                    allowed_game_positions = TACTICAL_SLOT_TO_GAME_POSITIONS.get(pos, [])
+                    
+                    # 2. Get the player's own playable game positions (e.g., ['AM (L)'])
+                    player_game_positions = parse_position_string(player.get('Position', ''))
+                    
+                    # 3. If there is no overlap, the player is not eligible for this slot. Skip them.
+                    if not any(p_pos in allowed_game_positions for p_pos in player_game_positions):
+                        continue # This is the crucial line that fixes the bug.
+                    # --- BUG FIX END ---
+
                     primary_role = player.get('primary_role')
                     if primary_role and primary_role != role: continue
                     

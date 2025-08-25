@@ -257,3 +257,38 @@ MASTER_POSITION_MAP = {
     "STC": ("Strikers", 1), "ST": ("Strikers", 1), # Both ST and STC map to the central slot
     "STR": ("Strikers", 2)
 }
+
+# Defines the specific game positions that are valid for a given tactical slot.
+TACTICAL_SLOT_TO_GAME_POSITIONS = {
+    # Defense
+    'DL': ['D (L)', 'WB (L)'],
+    'WBL': ['WB (L)'],
+    'DCL': ['D (C)'],
+    'DC': ['D (C)'],
+    'DCR': ['D (C)'],
+    'DR': ['D (R)', 'WB (R)'],
+    'WBR': ['WB (R)'],
+    # Defensive Midfield
+    'DML': ['DM'],
+    'DMCL': ['DM'],
+    'DMC': ['DM'],
+    'DMCR': ['DM'],
+    'DMR': ['DM'],
+    # Midfield
+    'ML': ['M (L)'],
+    'MCL': ['M (C)'],
+    'MC': ['M (C)'],
+    'MCR': ['M (C)'],
+    'MR': ['M (R)'],
+    # Attacking Midfield
+    'AML': ['AM (L)'],
+    'AMCL': ['AM (C)'],
+    'AMC': ['AM (C)'],
+    'AMCR': ['AM (C)'],
+    'AMR': ['AM (R)'],
+    # Strikers (Note: all striker slots map to the central striker game position)
+    'STL': ['ST (C)'],
+    'STC': ['ST (C)'],
+    'ST': ['ST (C)'],
+    'STR': ['ST (C)'],
+}
