@@ -271,11 +271,11 @@ TACTICAL_SLOT_TO_GAME_POSITIONS = {
     'DR': ['D (R)', 'WB (R)'],
     'WBR': ['WB (R)'],
     # Defensive Midfield
-    'DML': ['DM'],
+    'DML': ['WB (L)'],
     'DMCL': ['DM'],
     'DMC': ['DM'],
     'DMCR': ['DM'],
-    'DMR': ['DM'],
+    'DMR': ['WB (R)'],
     # Midfield
     'ML': ['M (L)'],
     'MCL': ['M (C)'],
