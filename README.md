@@ -90,6 +90,10 @@ your-project-folder/
 │   └── definitions.json    # Core definitions for roles, tactics, and mappings.
 ├── databases/
 │   └── *.db                # SQLite database files (ignored by git).
+├── page_views/
+│   ├── ...
+│   ├── ...
+│   └── ...                 # Other source files.
 ├── src/
 │   ├── app.py              # Main Streamlit application, handles UI and pages.
 │   ├── analytics.py        # Core logic for the DWRS calculation.

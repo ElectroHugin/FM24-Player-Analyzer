@@ -65,7 +65,14 @@ def load_config():
         config['SelectionBonuses'] = {'natural_position_multiplier': '1.00'}
         config_was_modified = True
 
-    # 7. Ensure [ThemeSettings] section exists
+    # 8. Ensure [SquadManagement] section exists
+    if not config.has_section('SquadManagement'):
+        config['SquadManagement'] = {
+            'max_roles_per_depth_player': '2' # Default to 2
+        }
+        config_was_modified = True
+
+    # 9. Ensure [ThemeSettings] section exists
     if not config.has_section('ThemeSettings'):
         config['ThemeSettings'] = {
             'current_mode': 'night',
@@ -217,3 +224,10 @@ def set_selection_bonus(key, value):
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
     load_config.clear()
+
+def get_squad_management_setting(key):
+    """Gets a setting from the [SquadManagement] section."""
+    config = load_config()
+    defaults = {'max_core_squad_size': 25, 'max_roles_per_depth_player': 2}
+    # Use .get() for safety, falling back to a default if the section or key is missing
+    return int(config.get('SquadManagement', key, fallback=str(defaults.get(key))))
