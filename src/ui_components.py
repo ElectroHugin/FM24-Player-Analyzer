@@ -1,7 +1,10 @@
 # src/ui_components.py
 
 import streamlit as st
-from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS
+from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS
+
+def clear_all_caches():
+    st.cache_data.clear()
 
 def display_tactic_grid(team, title, positions, layout, mode='night'):
     """
@@ -166,3 +169,72 @@ def display_tactic_grid(team, title, positions, layout, mode='night'):
 
     html_out += '</div>'
     st.markdown(html_out, unsafe_allow_html=True)
+
+
+def player_quick_edit_dialog(player, user_club):
+    """
+    Creates and manages a st.dialog for quick player edits.
+    Takes a player dictionary and the current user_club as input.
+    """
+    with st.dialog(f"Quick Edit: {player['Name']}"):
+        st.write(f"#### {player['Name']} ({player.get('Position', 'N/A')})")
+
+        # --- Organize into two columns for a cleaner layout ---
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Administrative")
+            # --- Update Club ---
+            new_club = st.text_input("Club", value=player['Club'], key=f"dialog_club_{player['Unique ID']}")
+            
+            # --- Transfer & Loan Status ---
+            new_transfer_status = st.checkbox("Listed for Transfer", value=bool(player.get('transfer_status', 0)), key=f"dialog_transfer_{player['Unique ID']}")
+            new_loan_status = st.checkbox("Listed for Loan", value=bool(player.get('loan_status', 0)), key=f"dialog_loan_{player['Unique ID']}")
+
+        with col2:
+            st.subheader("Tactical Profile")
+            # This section is only active for players in the user's club
+            if player['Club'] == user_club:
+                # --- Agreed Playing Time ---
+                is_gk = "GK" in player.get('Position', '')
+                apt_options = GK_APT_OPTIONS if is_gk else FIELD_PLAYER_APT_OPTIONS
+                current_apt = player.get('Agreed Playing Time')
+                apt_index = apt_options.index(current_apt) if current_apt in apt_options else 0
+                new_apt = st.selectbox("Agreed Playing Time", options=apt_options, index=apt_index, key=f"dialog_apt_{player['Unique ID']}")
+
+                # --- Primary Role ---
+                role_options = ["None"] + sorted(player.get('Assigned Roles', []))
+                current_role = player.get('primary_role')
+                role_index = role_options.index(current_role) if current_role in role_options else 0
+                new_primary_role = st.selectbox("Primary Role", role_options, index=role_index, format_func=lambda x: "None" if x == "None" else format_role_display(x), key=f"dialog_role_{player['Unique ID']}")
+
+                # --- Natural Positions ---
+                player_specific_positions = sorted(list(parse_position_string(player.get('Position', ''))))
+                current_natural_pos = player.get('natural_positions', [])
+                new_natural_pos = st.multiselect("Natural Positions", options=player_specific_positions, default=current_natural_pos, key=f"dialog_nat_pos_{player['Unique ID']}")
+            else:
+                st.info("Tactical Profile can only be edited for players from your club.")
+
+        if st.button("Save Changes", key=f"dialog_save_{player['Unique ID']}", type="primary"):
+            # --- Perform all updates ---
+            if new_club != player['Club']:
+                update_player_club(player['Unique ID'], new_club)
+            if new_transfer_status != bool(player.get('transfer_status', 0)):
+                update_player_transfer_status(player['Unique ID'], new_transfer_status)
+            if new_loan_status != bool(player.get('loan_status', 0)):
+                 update_player_loan_status(player['Unique ID'], new_loan_status)
+
+            if player['Club'] == user_club:
+                apt_to_save = None if new_apt == "None" else new_apt
+                if apt_to_save != player.get('Agreed Playing Time'):
+                    update_player_apt(player['Unique ID'], apt_to_save)
+                
+                role_to_save = None if new_primary_role == "None" else new_primary_role
+                if role_to_save != player.get('primary_role'):
+                    set_primary_role(player['Unique ID'], role_to_save)
+
+                if set(new_natural_pos) != set(current_natural_pos):
+                    update_player_natural_positions(player['Unique ID'], new_natural_pos)
+
+            clear_all_caches()
+            st.rerun()

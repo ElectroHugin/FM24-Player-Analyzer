@@ -92,3 +92,4 @@ def parse_position_string(pos_str):
                     # For "ST", which implies "ST (C)"
                     final_pos.add(f"{base} (C)" if base == "ST" else base)
     return final_pos
+
