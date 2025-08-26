@@ -91,8 +91,9 @@ your-project-folder/
 ├── databases/
 │   └── *.db                # SQLite database files (ignored by git).
 ├── page_views/
-│   ├── ...
-│   ├── ...
+│   ├── assign_roles.py     # Assign Roles page code
+│   ├── best_position.py    # Best XI page code
+│   └── role_analysis.py    # Role Analysis page code
 │   └── ...                 # Other source files.
 ├── src/
 │   ├── app.py              # Main Streamlit application, handles UI and pages.

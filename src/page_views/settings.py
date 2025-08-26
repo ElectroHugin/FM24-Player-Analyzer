@@ -7,7 +7,7 @@ from constants import get_tactic_roles, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS
 from config_handler import (get_theme_settings, save_theme_settings, 
                           get_apt_weight, set_apt_weight, get_weight, set_weight, get_role_multiplier, 
                           set_role_multiplier, get_age_threshold, set_age_threshold, get_selection_bonus, 
-                          set_selection_bonus, get_db_name, set_db_name)
+                          set_selection_bonus, get_db_name, set_db_name, get_squad_management_setting)
 from definitions_handler import PROJECT_ROOT
 from utils import calculate_contrast_ratio, get_available_databases
 from ui_components import clear_all_caches
@@ -155,7 +155,6 @@ def settings_page():
                 step=1
             )
 
-# --- START: NEW DATABASE SETTINGS SECTION ---
     with st.expander("⚙️ Database Settings"):
         db_action = st.radio("Action", ["Select Existing Database", "Create New Database"], horizontal=True)
         
@@ -189,7 +188,6 @@ def settings_page():
                     st.success(f"Ready to create and switch to '{sanitized_name}.db' on save.")
                     db_to_set = sanitized_name
                     is_valid_new_db = True
-    # --- END: NEW DATABASE SETTINGS SECTION ---
 
     # This button remains outside the expanders
     if st.button("Save All Settings", type="primary"):

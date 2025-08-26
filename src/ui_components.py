@@ -2,6 +2,9 @@
 
 import streamlit as st
 from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS
+from sqlite_db import update_player_natural_positions
+from utils import parse_position_string, format_role_display
+from sqlite_db import update_player_club, update_player_apt, update_player_transfer_status, update_player_loan_status, set_primary_role
 
 def clear_all_caches():
     st.cache_data.clear()
@@ -214,27 +217,33 @@ def player_quick_edit_dialog(player, user_club):
                 new_natural_pos = st.multiselect("Natural Positions", options=player_specific_positions, default=current_natural_pos, key=f"dialog_nat_pos_{player['Unique ID']}")
             else:
                 st.info("Tactical Profile can only be edited for players from your club.")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            if st.button("Save Changes", key=f"dialog_save_{player['Unique ID']}", type="primary"):
+                # --- Perform all updates ---
+                if new_club != player['Club']:
+                    update_player_club(player['Unique ID'], new_club)
+                if new_transfer_status != bool(player.get('transfer_status', 0)):
+                    update_player_transfer_status(player['Unique ID'], new_transfer_status)
+                if new_loan_status != bool(player.get('loan_status', 0)):
+                    update_player_loan_status(player['Unique ID'], new_loan_status)
 
-        if st.button("Save Changes", key=f"dialog_save_{player['Unique ID']}", type="primary"):
-            # --- Perform all updates ---
-            if new_club != player['Club']:
-                update_player_club(player['Unique ID'], new_club)
-            if new_transfer_status != bool(player.get('transfer_status', 0)):
-                update_player_transfer_status(player['Unique ID'], new_transfer_status)
-            if new_loan_status != bool(player.get('loan_status', 0)):
-                 update_player_loan_status(player['Unique ID'], new_loan_status)
+                if player['Club'] == user_club:
+                    apt_to_save = None if new_apt == "None" else new_apt
+                    if apt_to_save != player.get('Agreed Playing Time'):
+                        update_player_apt(player['Unique ID'], apt_to_save)
+                    
+                    role_to_save = None if new_primary_role == "None" else new_primary_role
+                    if role_to_save != player.get('primary_role'):
+                        set_primary_role(player['Unique ID'], role_to_save)
 
-            if player['Club'] == user_club:
-                apt_to_save = None if new_apt == "None" else new_apt
-                if apt_to_save != player.get('Agreed Playing Time'):
-                    update_player_apt(player['Unique ID'], apt_to_save)
-                
-                role_to_save = None if new_primary_role == "None" else new_primary_role
-                if role_to_save != player.get('primary_role'):
-                    set_primary_role(player['Unique ID'], role_to_save)
-
-                if set(new_natural_pos) != set(current_natural_pos):
-                    update_player_natural_positions(player['Unique ID'], new_natural_pos)
-
-            clear_all_caches()
-            st.rerun()
+                    if set(new_natural_pos) != set(current_natural_pos):
+                        update_player_natural_positions(player['Unique ID'], new_natural_pos)
+                st.session_state.player_to_edit_id = None # Reset state on save
+                clear_all_caches()
+                st.rerun()
+        with c2:
+            # Add a dedicated close button
+            if st.button("Cancel", key=f"dialog_cancel_{player['Unique ID']}"):
+                st.session_state.player_to_edit_id = None # Reset state on cancel
+                st.rerun()

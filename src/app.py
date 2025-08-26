@@ -22,7 +22,7 @@ from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club
                         get_favorite_tactics)
 from constants import get_valid_roles, get_tactic_roles
 from config_handler import save_theme_settings, get_theme_settings
-from ui_components import clear_all_caches
+from ui_components import clear_all_caches, player_quick_edit_dialog
 from data_parser import get_player_role_matrix
 from definitions_handler import PROJECT_ROOT
 from squad_logic import get_cached_squad_analysis
@@ -78,6 +78,9 @@ def sidebar(df, players):
 
         st.divider()
 
+        if 'player_to_edit_id' not in st.session_state:
+            st.session_state.player_to_edit_id = None
+
         # --- START: GLOBAL PLAYER SEARCH ---
         st.subheader("Global Player Search")
         search_query = st.text_input("Find Player by Name", label_visibility="collapsed", placeholder="Find Player by Name...")
@@ -89,11 +92,20 @@ def sidebar(df, players):
                 # Display up to 5 results as buttons in the sidebar
                 for player in results[:5]:
                     if st.button(f"{player['Name']} ({player['Club']})", key=f"search_result_{player['Unique ID']}", use_container_width=True):
-                        # When a button is clicked, call the dialog function
-                        #player_quick_edit_dialog(player, get_user_club())
-                        pass
+                        st.session_state.player_to_edit_id = player['Unique ID']
+                        st.rerun() # Rerun to open the dialog
             else:
                 st.caption("No players found.")
+
+        if st.session_state.player_to_edit_id:
+            # Find the full player dictionary
+            player_object = next((p for p in players if p['Unique ID'] == st.session_state.player_to_edit_id), None)
+            if player_object:
+                # Pass the player object to the dialog function
+                player_quick_edit_dialog(player_object, get_user_club())
+            else:
+                # If player not found, reset the state
+                st.session_state.player_to_edit_id = None
         # --- END: GLOBAL PLAYER SEARCH ---
 
         st.divider()
