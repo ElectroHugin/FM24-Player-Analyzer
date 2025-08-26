@@ -6,7 +6,7 @@ import pandas as pd
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics, update_player_transfer_status, update_player_loan_status, update_player_club
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_players_by_role
-from squad_logic import calculate_squad_and_surplus, calculate_development_squads
+from squad_logic import calculate_squad_and_surplus, calculate_development_squads, get_master_role_ratings
 from config_handler import get_age_threshold
 
 def transfer_loan_management_page(players):
@@ -50,15 +50,8 @@ def transfer_loan_management_page(players):
         my_club_players = [p for p in players if p.get('Club') == user_club]
         second_team_players = [p for p in players if p.get('Club') == second_team_club] if second_team_club else []
 
-        clubs_to_rate = [user_club]
-        if second_team_club: clubs_to_rate.append(second_team_club)
-        
-        master_ratings = {}
-        for role in get_valid_roles():
-            ratings_df, _, _ = get_players_by_role(role, user_club, second_team_club)
-            if not ratings_df.empty:
-                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
-                master_ratings[role] = ratings_df.set_index('Unique ID')['DWRS'].to_dict()
+        # --- REFACTORED: Use the new centralized function ---
+        master_ratings = get_master_role_ratings(user_club, second_team_club)
 
         first_team_squad_data = calculate_squad_and_surplus(my_club_players, positions, master_ratings)
         dev_squad_data = calculate_development_squads(

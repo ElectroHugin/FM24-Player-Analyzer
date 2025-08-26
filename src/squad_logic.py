@@ -16,7 +16,6 @@ def get_last_name(full_name):
         return full_name.split(' ')[-1]
     return ""
 
-# --- START: CORRECTED HELPER FUNCTION ---
 def _apply_footedness_swaps(team, all_players, positions):
     """
     A helper function to swap players in symmetrical positions based on their preferred foot.
@@ -60,6 +59,32 @@ def _apply_footedness_swaps(team, all_players, positions):
     return team
 
 @st.cache_data
+def get_master_role_ratings(user_club, second_team_club=None):
+    """
+    Calculates and caches a master dictionary of DWRS ratings for all players 
+    in the user's club and second team across all valid roles.
+    """
+    master_ratings = {}
+    clubs_to_rate = [user_club]
+    if second_team_club:
+        clubs_to_rate.append(second_team_club)
+    
+    # This ensures we only query for players from the relevant clubs
+    all_club_players = [p for p in get_all_players() if p.get('Club') in clubs_to_rate]
+
+    if all_club_players:
+        for role in get_valid_roles():
+            # The get_players_by_role is already cached, so this is efficient
+            ratings_df, _, _ = get_players_by_role(role, user_club, second_team_club)
+            if not ratings_df.empty:
+                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
+                # Ensure we only add ratings for players in our specified clubs
+                valid_ratings = ratings_df[ratings_df['Club'].isin(clubs_to_rate)]
+                master_ratings[role] = valid_ratings.set_index('Unique ID')['DWRS'].to_dict()
+                
+    return master_ratings
+
+@st.cache_data
 def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
     """
     A single, cached function to perform all squad calculations.
@@ -75,20 +100,7 @@ def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
         return {}
 
     # --- This is the robust master rating calculation ---
-    master_role_ratings = {}
-    clubs_to_rate = [user_club]
-    if second_team_club:
-        clubs_to_rate.append(second_team_club)
-    
-    all_relevant_players = [p for p in get_all_players() if p.get('Club') in clubs_to_rate]
-    if all_relevant_players:
-        for role in get_valid_roles():
-            ratings_df, _, _ = get_players_by_role(role, clubs_to_rate[0], clubs_to_rate[1] if len(clubs_to_rate) > 1 else None)
-            if not ratings_df.empty:
-                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
-                valid_ratings = ratings_df[ratings_df['Club'].isin(clubs_to_rate)]
-                master_role_ratings[role] = valid_ratings.set_index('Unique ID')['DWRS'].to_dict()
-    # --- End of master rating calculation ---
+    master_role_ratings = get_master_role_ratings(user_club, second_team_club)
 
     positions = get_tactic_roles().get(tactic, {})
     if not positions:
@@ -226,13 +238,11 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     player_unique_roles_covered = {}
 
     if available_depth_players:
-        # --- START OF THE FIX ---
         # Get the unique set of roles needed for this tactic
         unique_roles_needed = sorted(list(set(positions.values())))
 
         # Iterate through the UNIQUE ROLES, not every single position
         for role in unique_roles_needed:
-        # --- END OF THE FIX ---
             sorted_candidates = sorted(
                 available_depth_players,
                 key=lambda p: master_role_ratings.get(role, {}).get(p['Unique ID'], -1),
@@ -253,7 +263,6 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
             if best_pick:
                 rating = master_role_ratings.get(role, {}).get(best_pick['Unique ID'], 0)
                 if rating > 0:
-                    # --- START OF THE FIX ---
                     # The KEY is now the ROLE
                     best_depth_options[role] = [{
                         "name": best_pick['Name'],
@@ -261,7 +270,6 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
                         "apt": best_pick.get("Agreed Playing Time", "") or "",
                         "age": best_pick.get("Age", "N/A")
                     }]
-                    # --- END OF THE FIX ---
                     depth_player_ids.add(best_pick['Unique ID'])
                     
                     if best_pick['Unique ID'] not in player_unique_roles_covered:
@@ -270,26 +278,11 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     
     # --- 4. Finalize and Return ---
     core_squad_ids = players_xi_or_b_team.union(depth_player_ids)
-    surplus_players = [p for p in my_club_players if p['Unique ID'] not in core_squad_ids]
-    
-    youth_surplus, senior_surplus = [], []
-    outfielder_age_limit = get_age_threshold('outfielder')
-    goalkeeper_age_limit = get_age_threshold('goalkeeper')
-    for player in surplus_players:
-        age_str = player.get('Age')
-        age = int(age_str) if age_str and age_str.isdigit() else 99
-        is_gk = 'GK' in player.get('Position', '')
-        if (is_gk and age <= goalkeeper_age_limit) or (not is_gk and age <= outfielder_age_limit):
-            youth_surplus.append(player)
-        else:
-            senior_surplus.append(player)
-    
-    youth_surplus.sort(key=lambda p: get_last_name(p['Name']))
-    senior_surplus.sort(key=lambda p: get_last_name(p['Name']))
     
     return {
-        "starting_xi": starting_xi, "b_team": b_team, "best_depth_options": best_depth_options,
-        "surplus_players": surplus_players, "youth_surplus": youth_surplus, "senior_surplus": senior_surplus,
+        "starting_xi": starting_xi, 
+        "b_team": b_team, 
+        "best_depth_options": best_depth_options,
         "depth_pool": depth_pool,
         "core_squad_ids": core_squad_ids
     }
