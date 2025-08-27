@@ -7,7 +7,8 @@ from constants import get_tactic_roles, FIELD_PLAYER_APT_OPTIONS, GK_APT_OPTIONS
 from config_handler import (get_theme_settings, save_theme_settings, 
                           get_apt_weight, set_apt_weight, get_weight, set_weight, get_role_multiplier, 
                           set_role_multiplier, get_age_threshold, set_age_threshold, get_selection_bonus, 
-                          set_selection_bonus, get_db_name, set_db_name, get_squad_management_setting)
+                          set_selection_bonus, get_db_name, set_db_name, get_squad_management_setting, 
+                          set_squad_management_setting)
 from definitions_handler import PROJECT_ROOT
 from utils import calculate_contrast_ratio, get_available_databases
 from ui_components import clear_all_caches
@@ -155,6 +156,19 @@ def settings_page():
                 step=1
             )
 
+    with st.expander("👨‍👩‍👧‍👦 Squad Management"):
+        st.info(
+            "Configure the logic for the Best Position Calculator. This controls how the algorithm selects players for depth roles."
+        )
+        new_max_roles = st.number_input(
+            "Max Unique Roles per Depth Player",
+            min_value=1,
+            max_value=5,
+            value=get_squad_management_setting('max_roles_per_depth_player'),
+            step=1,
+            help="In the 'Best XI' calculator, this is the maximum number of different roles a single player can cover in the 'Additional Depth' section. A lower number encourages specialists, a higher number encourages versatile players."
+        )
+
     with st.expander("⚙️ Database Settings"):
         db_action = st.radio("Action", ["Select Existing Database", "Create New Database"], horizontal=True)
         
@@ -216,13 +230,12 @@ def settings_page():
         set_age_threshold('outfielder', new_outfielder_age)
         set_age_threshold('goalkeeper', new_goalkeeper_age)
         set_selection_bonus('natural_position', natural_pos_mult)
+        set_squad_management_setting('max_roles_per_depth_player', new_max_roles)
 
-        # --- START: NEW DATABASE SAVE LOGIC ---
         # Save only if the selection is a valid new DB name or different from the current one
         if (db_action == "Create New Database" and is_valid_new_db) or (db_action == "Select Existing Database" and db_to_set != current_db_name):
             set_db_name(db_to_set)
             st.toast(f"Switched active database to '{db_to_set}.db'", icon="💾")
-        # --- END: NEW DATABASE SAVE LOGIC ---
 
         clear_all_caches()
         df = load_data()
