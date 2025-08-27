@@ -4,9 +4,12 @@ import os
 import base64
 import streamlit as st
 import re
+from collections import defaultdict
 
-from constants import get_player_roles
+
+from constants import get_player_roles, get_valid_roles, get_position_to_role_mapping, MASTER_POSITION_MAP
 from definitions_loader import PROJECT_ROOT
+
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""
@@ -93,3 +96,72 @@ def parse_position_string(pos_str):
                     final_pos.add(f"{base} (C)" if base == "ST" else base)
     return final_pos
 
+@st.cache_data
+def get_natural_role_sorter():
+    """
+    Creates a dictionary mapping each role to a sortable tuple.
+    The tuple represents (stratum, column_index) for natural on-pitch sorting.
+    e.g., Goalkeepers first, then Defenders L-R, then DMs L-R, etc.
+    """
+    pos_to_role_map = get_position_to_role_mapping()
+    
+    # Create a reverse mapping: role -> list of game positions (e.g., 'BPD-D' -> ['D (C)'])
+    role_to_positions = defaultdict(list)
+    for pos, roles in pos_to_role_map.items():
+        for role in roles:
+            role_to_positions[role].append(pos)
+
+    # Define the numerical order for strata (vertical pitch sections)
+    stratum_order = {
+        # Lower numbers are further back on the pitch
+        "GK": 0,
+        "Defense": 1,
+        "Defensive Midfield": 2,
+        "Midfield": 3,
+        "Attacking Midfield": 4,
+        "Strikers": 5
+    }
+
+    # Define a mapping from the game position (e.g., 'D (C)') to a tactical slot (e.g., 'DC')
+    # We take the first match we find, which is sufficient for sorting purposes.
+    game_pos_to_slot = {}
+    for slot, game_positions in MASTER_POSITION_MAP.items():
+        # The key in MASTER_POSITION_MAP is the slot, but the data is a tuple. Let's use a different constant.
+        # Let's rebuild this logic slightly to be more direct.
+        pass # We'll build this map on the fly.
+
+    role_sorter = {}
+    
+    for role in get_valid_roles():
+        if "GK" in role or "SK" in role:
+            role_sorter[role] = (0, 0) # Goalkeepers are always first
+            continue
+
+        associated_positions = role_to_positions.get(role, [])
+        if not associated_positions:
+            role_sorter[role] = (99, 99) # Unassigned roles go to the end
+            continue
+            
+        best_score = (-1, -1)
+
+        # Find the "highest" position this role can play.
+        # e.g., if a Winger can be 'M (L)' and 'AM (L)', we use 'AM (L)' for sorting.
+        for pos_key, (stratum, col_index) in MASTER_POSITION_MAP.items():
+            # TACTICAL_SLOT_TO_GAME_POSITIONS maps a slot to its valid game positions
+            from constants import TACTICAL_SLOT_TO_GAME_POSITIONS
+            valid_game_positions = TACTICAL_SLOT_TO_GAME_POSITIONS.get(pos_key, [])
+            
+            # Check if any of the role's assigned positions match the valid positions for this slot
+            if any(p in valid_game_positions for p in associated_positions):
+                stratum_score = stratum_order.get(stratum, 99)
+                current_score = (stratum_score, col_index)
+                
+                # We want the highest stratum (most attacking), and for ties, the lowest column (most left)
+                if current_score[0] > best_score[0]:
+                    best_score = current_score
+                elif current_score[0] == best_score[0] and current_score[1] < best_score[1]:
+                    best_score = current_score
+
+        role_sorter[role] = best_score if best_score != (-1, -1) else (99, 99)
+
+    return role_sorter
