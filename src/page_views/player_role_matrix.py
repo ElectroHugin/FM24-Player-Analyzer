@@ -7,7 +7,7 @@ from io import StringIO
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
-from utils import get_last_name
+from utils import get_last_name, get_natural_role_sorter
 
 
 def player_role_matrix_page():
@@ -51,7 +51,9 @@ def player_role_matrix_page():
     with col4:
         hide_retired = st.checkbox("Hide 'Retired' Players", value=True)
     
-    selected_roles = get_valid_roles() if selected_tactic == "All Roles" else sorted(list(set(get_tactic_roles()[selected_tactic].values())))
+    role_sorter = get_natural_role_sorter()
+    base_roles = get_valid_roles() if selected_tactic == "All Roles" else list(set(get_tactic_roles()[selected_tactic].values()))
+    selected_roles = sorted(base_roles, key=lambda r: role_sorter.get(r, (99, 99)))
     full_matrix = get_player_role_matrix(user_club, second_team_club)
     
     if full_matrix.empty:

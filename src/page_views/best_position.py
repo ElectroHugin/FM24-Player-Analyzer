@@ -5,9 +5,8 @@ import pandas as pd
 
 from constants import get_tactic_roles, get_tactic_layouts
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
-from utils import get_last_name
 from config_handler import get_theme_settings
-from ui_components import display_tactic_grid, player_quick_edit_dialog
+from ui_components import display_tactic_grid
 from squad_logic import get_cached_squad_analysis, create_detailed_surplus_df
 
 def best_position_calculator_page(players):
@@ -67,27 +66,6 @@ def best_position_calculator_page(players):
 
         st.divider()
 
-        if 'player_to_edit_id' not in st.session_state:
-            st.session_state.player_to_edit_id = None
-
-        with st.expander("Quick Edit Squad Players"):
-            st.info("Quickly manage players from the Starting XI and B-Team shown above.")
-            xi_ids = {p['player_id'] for p in first_team_squad_data["starting_xi"].values() if 'player_id' in p}
-            b_team_ids = {p['player_id'] for p in first_team_squad_data["b_team"].values() if 'player_id' in p}
-            squad_player_ids = xi_ids.union(b_team_ids)
-            squad_players = [p for p in my_club_players if p['Unique ID'] in squad_player_ids]
-            squad_players.sort(key=lambda p: get_last_name(p['Name']))
-            cols = st.columns(3)
-            col_idx = 0
-            for player in squad_players:
-                with cols[col_idx % 3]:
-                    if st.button(f"✏️ Edit {player['Name']}", key=f"edit_squad_{player['Unique ID']}", use_container_width=True):
-                        st.session_state.player_to_edit_id = player['Unique ID']
-                        st.rerun() # Rerun to open the dialog
-                col_idx += 1
-
-        st.divider()
-
         with st.expander("Additional Depth", expanded=True):
             best_depth_options = first_team_squad_data["best_depth_options"]
             if best_depth_options:
@@ -139,13 +117,3 @@ def best_position_calculator_page(players):
             st.dataframe(sell_candidates_df, hide_index=True, use_container_width=True, column_config=column_config)
         else:
             st.info("No surplus players identified for sale.")
-
-    if st.session_state.player_to_edit_id:
-        # Find the full player dictionary
-        player_object = next((p for p in players if p['Unique ID'] == st.session_state.player_to_edit_id), None)
-        if player_object:
-            # Pass the player object to the dialog function
-            player_quick_edit_dialog(player_object, user_club)
-        else:
-            # If player not found, reset the state
-            st.session_state.player_to_edit_id = None

@@ -22,11 +22,11 @@ from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club
                         get_favorite_tactics)
 from constants import get_valid_roles, get_tactic_roles
 from config_handler import save_theme_settings, get_theme_settings
-from ui_components import clear_all_caches, player_quick_edit_dialog
+from ui_components import clear_all_caches
 from data_parser import get_player_role_matrix
 from definitions_handler import PROJECT_ROOT
 from squad_logic import get_cached_squad_analysis
-from utils import  hex_to_rgb, format_role_display
+from utils import  get_natural_role_sorter, hex_to_rgb, format_role_display
 from theme_handler import set_theme_toml
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
@@ -75,38 +75,6 @@ def sidebar(df, players):
         )
         page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data", "New Role": "Create New Role", "New Tactic": "Create New Tactic", "Settings": "Settings" }
         actual_page = page_mapping.get(page, "All Players")
-
-        st.divider()
-
-        if 'player_to_edit_id' not in st.session_state:
-            st.session_state.player_to_edit_id = None
-
-        # --- START: GLOBAL PLAYER SEARCH ---
-        st.subheader("Global Player Search")
-        search_query = st.text_input("Find Player by Name", label_visibility="collapsed", placeholder="Find Player by Name...")
-        if search_query:
-            # Filter players based on the search query (case-insensitive)
-            results = [p for p in players if search_query.lower() in p['Name'].lower()]
-            
-            if results:
-                # Display up to 5 results as buttons in the sidebar
-                for player in results[:5]:
-                    if st.button(f"{player['Name']} ({player['Club']})", key=f"search_result_{player['Unique ID']}", use_container_width=True):
-                        st.session_state.player_to_edit_id = player['Unique ID']
-                        st.rerun() # Rerun to open the dialog
-            else:
-                st.caption("No players found.")
-
-        if st.session_state.player_to_edit_id:
-            # Find the full player dictionary
-            player_object = next((p for p in players if p['Unique ID'] == st.session_state.player_to_edit_id), None)
-            if player_object:
-                # Pass the player object to the dialog function
-                player_quick_edit_dialog(player_object, get_user_club())
-            else:
-                # If player not found, reset the state
-                st.session_state.player_to_edit_id = None
-        # --- END: GLOBAL PLAYER SEARCH ---
 
         st.divider()
         #uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
@@ -260,7 +228,9 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
         st.subheader("Role Proficiency")
         
         # Calculate average DWRS for each role in the selected tactic
-        roles_tactic = sorted(list(set(get_tactic_roles()[selected_tactic].values())))
+        role_sorter = get_natural_role_sorter()
+        base_roles = list(set(get_tactic_roles()[selected_tactic].values()))
+        roles_tactic = sorted(base_roles, key=lambda r: role_sorter.get(r, (99, 99)))
         role_ratings = []
         
         # We need the full matrix to get DWRS scores
@@ -287,7 +257,6 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
 
 
 def main():
-     # --- START REFACTOR ---
     df = load_data() # This hits the @st.cache_data function once
     players = get_all_players()
     page = sidebar(df, players) 
