@@ -228,6 +228,16 @@ def set_selection_bonus(key, value):
 def get_squad_management_setting(key):
     """Gets a setting from the [SquadManagement] section."""
     config = load_config()
-    defaults = {'max_core_squad_size': 25, 'max_roles_per_depth_player': 2}
+    defaults = {'max_roles_per_depth_player': 2}
     # Use .get() for safety, falling back to a default if the section or key is missing
     return int(config.get('SquadManagement', key, fallback=str(defaults.get(key))))
+
+def set_squad_management_setting(key, value):
+    """Sets a setting in the [SquadManagement] section."""
+    config = load_config()
+    if 'SquadManagement' not in config:
+        config['SquadManagement'] = {}
+    config['SquadManagement'][key] = str(value)
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    load_config.clear()
