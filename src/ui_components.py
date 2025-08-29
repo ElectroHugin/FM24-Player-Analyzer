@@ -179,7 +179,7 @@ def display_strength_grid(positional_strengths, tactic, mode='night'):
     Renders a miniaturized, color-coded tactical grid showing the average, min, and max
     DWRS for each position. The color is relative to the squad's own strength.
     """
-    st.subheader("Positional Strength")
+    st.markdown("<h3 style='text-align: center;'>Positional Strength</h3>", unsafe_allow_html=True)
 
     # --- 1. Relative Color Calculation Logic ---
     avg_ratings = [data['avg'] for data in positional_strengths.values() if data['avg'] > 0]
@@ -228,9 +228,13 @@ def display_strength_grid(positional_strengths, tactic, mode='night'):
             border: 1px solid {markings_color};
             border-radius: 8px;
             padding: 8px;
-            min-height: 400px; /* Reduced height */
             position: relative;
             overflow: hidden;
+            aspect-ratio: 68 / 105;
+            
+            /* --- NEW: Add a max-width and center the pitch --- */
+            max-width: 280px;
+            margin: 0 auto;
         }}
         .strength-player-box, .strength-placeholder {{
             border-radius: 4px; padding: 4px; min-height: 55px; /* Reduced height & padding */
