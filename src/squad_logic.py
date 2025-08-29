@@ -8,7 +8,7 @@ from constants import get_position_to_role_mapping, TACTICAL_SLOT_TO_GAME_POSITI
 from utils import parse_position_string, format_role_display
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_players_by_role
-from sqlite_db import get_all_players
+from sqlite_db import get_all_players, get_latest_dwrs_ratings
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""
@@ -58,30 +58,35 @@ def _apply_footedness_swaps(team, all_players, positions):
                 
     return team
 
-@st.cache_data
+st.cache_data
 def get_master_role_ratings(user_club, second_team_club=None):
     """
     Calculates and caches a master dictionary of NUMERIC DWRS ratings for all players
     in the user's club and second team across all valid roles.
     This new version reads from pre-calculated data instead of recalculating.
     """
-    # Import the new, fast data loader
-    from sqlite_db import get_latest_dwrs_ratings
 
-    # 1. Get all pre-calculated ratings (cached, so it's instant after first run)
-    all_ratings_str = get_latest_dwrs_ratings()
+    all_ratings_data = get_latest_dwrs_ratings()
     master_ratings_numeric = {}
 
-    # 2. Convert the string percentages to numeric values for the algorithm to use
-    for role, player_ratings in all_ratings_str.items():
+    for role, player_ratings in all_ratings_data.items():
         if role not in master_ratings_numeric:
             master_ratings_numeric[role] = {}
-        for player_id, rating_str in player_ratings.items():
+            
+        # --- START OF CORRECTION ---
+        # The value from the dictionary is now a tuple: (absolute_val, normalized_str)
+        # We need to unpack it correctly.
+        for player_id, rating_tuple in player_ratings.items():
             try:
-                # Convert '85%' to 85.0
-                master_ratings_numeric[role][player_id] = float(rating_str.rstrip('%'))
-            except (ValueError, TypeError):
+                # We only need the second item from the tuple (the normalized string) for this function.
+                _absolute_val, normalized_str = rating_tuple
+                
+                # Convert '85%' to 85.0 for the squad building algorithm
+                master_ratings_numeric[role][player_id] = float(normalized_str.rstrip('%'))
+            except (ValueError, TypeError, AttributeError):
+                # This handles cases of bad data or if the tuple isn't structured as expected.
                 master_ratings_numeric[role][player_id] = 0.0
+        # --- END OF CORRECTION ---
                 
     return master_ratings_numeric
 

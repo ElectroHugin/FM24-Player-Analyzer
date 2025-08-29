@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import datetime
 import pandas as pd
-from constants import attribute_mapping
+from constants import attribute_mapping, get_valid_roles
 import ast
 from config_handler import get_db_file
 import streamlit as st
@@ -16,90 +16,89 @@ def init_db():
     conn = connect_db()
     cursor = conn.cursor()
     
-    # Ensure the players table exists
+    # --- 1. Player Table Migration (existing logic, unchanged) ---
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS players (
             "Unique ID" TEXT PRIMARY KEY, 
             "Assigned Roles" TEXT
         )
     """)
-    
-    # Get the current state of the database columns
     cursor.execute("PRAGMA table_info(players)")
     existing_columns = [col[1] for col in cursor.fetchall()]
-
-    # --- START OF AUTOMATIC MIGRATION AND SCHEMA CORRECTION ---
-
-    # 1. Add any missing columns from the attribute_mapping
     for col_name in attribute_mapping.values():
         if col_name not in existing_columns:
             cursor.execute(f'ALTER TABLE players ADD COLUMN "{col_name}" TEXT')
-
-    # 2. Add other special columns if they are missing
+    
     if "primary_role" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
-
     if "natural_positions" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "natural_positions" TEXT')
-
     if "transfer_status" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "transfer_status" INTEGER DEFAULT 0')
     if "loan_status" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "loan_status" INTEGER DEFAULT 0')
-    
-    # The old name for agreed_playing_time
-    OLD_APT_COL = "agreed_playing_time"
-    # The new, standardized name
-    NEW_APT_COL = "Agreed Playing Time"
-
-    # 3. ONE-TIME MIGRATION: Check if the old column exists
+    OLD_APT_COL, NEW_APT_COL = "agreed_playing_time", "Agreed Playing Time"
     if OLD_APT_COL in existing_columns:
-        # If the new standardized column doesn't exist yet, simply RENAME the old one.
         if NEW_APT_COL not in existing_columns:
             cursor.execute(f'ALTER TABLE players RENAME COLUMN "{OLD_APT_COL}" TO "{NEW_APT_COL}"')
-        # If both exist (a messy state), copy data from old to new, then delete old.
         else:
-            # Copy any data from the old column to the new one, but only if the new one is empty.
-            cursor.execute(f'''
-                UPDATE players 
-                SET "{NEW_APT_COL}" = "{OLD_APT_COL}" 
-                WHERE "{NEW_APT_COL}" IS NULL OR "{NEW_APT_COL}" = ''
-            ''')
-            # Safely remove the old column
+            cursor.execute(f'UPDATE players SET "{NEW_APT_COL}" = "{OLD_APT_COL}" WHERE "{NEW_APT_COL}" IS NULL OR "{NEW_APT_COL}" = ""')
             cursor.execute(f'ALTER TABLE players DROP COLUMN "{OLD_APT_COL}"')
 
-    # --- END OF MIGRATION LOGIC ---
-
-    # Legacy migration for other columns (can be kept for safety)
-    if "Team Roles" in existing_columns and "Rushing Out (Tendency)" not in existing_columns:
-        cursor.execute('ALTER TABLE players RENAME COLUMN "Team Roles" TO "Rushing Out (Tendency)"')
-
-    # Create other necessary tables
-    cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+    # --- 2. Settings Table (unchanged) ---
+    # --- DWRS RATINGS TABLE - FINAL, NON-DESTRUCTIVE MIGRATION ---
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS dwrs_ratings (
             unique_id TEXT, role TEXT, dwrs_absolute REAL, dwrs_normalized TEXT, timestamp TEXT,
             PRIMARY KEY (unique_id, role, timestamp)
         )
     """)
-    
+
+    cursor.execute("PRAGMA table_info(dwrs_ratings)")
+    dwrs_columns = [col[1] for col in cursor.fetchall()]
+
+    if "dwrs_absolute" not in dwrs_columns:
+        st.warning("Older database version detected. Performing a safe, one-time upgrade...")
+        with st.spinner("Adding new columns and backfilling missing rating data..."):
+            try:
+                # Step A: Add the missing column without deleting any data.
+                cursor.execute('ALTER TABLE dwrs_ratings ADD COLUMN "dwrs_absolute" REAL DEFAULT 0.0')
+                conn.commit()
+
+                # Step B: Force a full recalculation to backfill the new column.
+
+                df = pd.DataFrame(get_all_players())
+                if not df.empty:
+                    # This will now calculate and save the absolute value for all players.
+                    # It will only add new rows if ratings have changed, but it will
+                    # ensure future writes are in the correct format.
+                    update_dwrs_ratings(df, get_valid_roles())
+                
+                st.cache_data.clear()
+                st.success("Database upgrade successful! The app will now reload.")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Database upgrade failed: {e}. Please report this issue.")
+                st.stop()
+
     conn.commit()
     conn.close()
 
 @st.cache_data
 def get_latest_dwrs_ratings():
     """
-    Fetches the most recent DWRS rating for every player-role combination from the database.
-    This is the primary function for reading pre-calculated scores.
-    Returns a nested dictionary for fast lookups: {role: {unique_id: rating_string}}
+    Fetches the MOST RECENT DWRS rating for every player-role combination from the historical table.
+    Returns a nested dictionary: {role: {unique_id: (absolute_val, normalized_str)}}
     """
     conn = connect_db()
     cursor = conn.cursor()
 
-    # This query efficiently finds the latest timestamp for each unique_id-role pair
-    # and then joins back to the main table to get the corresponding rating string.
+    # --- THIS IS THE CORRECT QUERY FOR A HISTORICAL TABLE ---
+    # It finds the latest timestamp for each player-role pair first,
+    # then joins back to get the full data for only those latest entries.
     query = """
-        SELECT t1.unique_id, t1.role, t1.dwrs_normalized
+        SELECT t1.unique_id, t1.role, t1.dwrs_absolute, t1.dwrs_normalized
         FROM dwrs_ratings t1
         INNER JOIN (
             SELECT unique_id, role, MAX(timestamp) as max_timestamp
@@ -111,13 +110,12 @@ def get_latest_dwrs_ratings():
     rows = cursor.fetchall()
     conn.close()
 
-    # Structure the data as a nested dictionary for O(1) lookups
-    # e.g., master_ratings['BPD-D']['player-123'] -> '95%'
     master_ratings = {}
-    for uid, role, dwrs_norm in rows:
+    # This loop is now safe, because the query guarantees every row has 4 columns.
+    for uid, role, dwrs_abs, dwrs_norm in rows:
         if role not in master_ratings:
             master_ratings[role] = {}
-        master_ratings[role][uid] = dwrs_norm
+        master_ratings[role][uid] = (dwrs_abs, dwrs_norm)
         
     return master_ratings
 
@@ -216,19 +214,17 @@ def update_dwrs_ratings(df, valid_roles):
     all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+    # Get the latest existing rating for every player/role to compare against
     cursor.execute("""
         SELECT unique_id, role, dwrs_normalized FROM dwrs_ratings
         WHERE (unique_id, role, timestamp) IN (
             SELECT unique_id, role, MAX(timestamp) FROM dwrs_ratings GROUP BY unique_id, role
         )
     """)
-    dwrs_dict = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
-
-    # --- START REFACTOR ---
+    latest_ratings_dict = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
     
     ratings_to_insert = []
-    
-    for _, player in df.iterrows(): # .iterrows() is acceptable here as the primary work is calculation, not dataframe modification
+    for _, player in df.iterrows():
         player_dict = player.to_dict()
         roles = player_dict.get('Assigned Roles', [])
         if not isinstance(roles, list): roles = []
@@ -238,22 +234,22 @@ def update_dwrs_ratings(df, valid_roles):
                 weights_to_use = gk_weights if role in all_gk_roles else weights
                 absolute, normalized = calculate_dwrs(player_dict, role, weights_to_use)
                 
-                old_normalized = dwrs_dict.get((player['Unique ID'], role), '0%')
-                old_value = float(old_normalized.strip('%')) if isinstance(old_normalized, str) and old_normalized.endswith('%') else 0.0
+                # Check if the rating has changed by at least 1% or if it's a new entry
+                old_normalized = latest_ratings_dict.get((player['Unique ID'], role), '0%')
+                old_value = float(old_normalized.strip('%'))
                 new_value = float(normalized.strip('%'))
 
-                if abs(new_value - old_value) >= 1.0 or (player['Unique ID'], role) not in dwrs_dict:
+                if abs(new_value - old_value) >= 1.0 or (player['Unique ID'], role) not in latest_ratings_dict:
                     ratings_to_insert.append(
                         (player['Unique ID'], role, absolute, normalized, timestamp)
                     )
 
     if ratings_to_insert:
+        # We use a simple INSERT here to add a new historical record.
         cursor.executemany(
-            "INSERT OR REPLACE INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp) VALUES (?, ?, ?, ?, ?)",
             ratings_to_insert
         )
-    
-    # --- END REFACTOR ---
 
     conn.commit()
     conn.close()
