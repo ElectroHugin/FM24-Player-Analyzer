@@ -46,7 +46,9 @@ def sidebar(df, players):
                 st.image(logo_path) # st.image in a column is auto-centered
             else:
                 # The header is also placed in the central column
-                st.header("FM Dashboard")
+                st.header("Please upload club logo...")
+                default_logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'default.png')
+                st.image(default_logo_path)
 
         # --- Get colors for the nav bar ---
         # --- UPDATED: Uses the new theme_handler function ---
