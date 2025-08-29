@@ -8,10 +8,12 @@ from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
 from utils import get_last_name, get_natural_role_sorter
+from ui_components import display_custom_header
 
 
 def player_role_matrix_page():
-    st.title("Player-Role Matrix")
+    #st.title("Player-Role Matrix")
+    display_custom_header("Squad Matrix")
     st.write("View DWRS ratings for players in assigned roles. Select a tactic to see relevant roles, and toggle extra details.")
     
     user_club = get_user_club()

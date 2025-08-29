@@ -4,10 +4,11 @@ import streamlit as st
 from sqlite_db import get_user_club, update_player_club, update_player_apt, update_player_natural_positions, set_primary_role
 from utils import get_last_name, format_role_display, parse_position_string
 from constants import GK_APT_OPTIONS, FIELD_PLAYER_APT_OPTIONS
-from ui_components import clear_all_caches
+from ui_components import clear_all_caches, display_custom_header
 
 def edit_player_data_page(players):
-    st.title("Edit Player Data")
+    #st.title("Edit Player Data")
+    display_custom_header("Edit Player Data")
     user_club = get_user_club()
     if not user_club:
         st.warning("Please select your club from the sidebar to use this feature.")

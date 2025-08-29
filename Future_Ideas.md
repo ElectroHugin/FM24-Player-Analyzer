@@ -34,7 +34,7 @@
         - Compare the player's attributes against the role's "Key" and "Preferable" attributes from `definitions.json`.
         - Use thresholds (e.g., attribute > 15 is a "Pro", < 10 is a "Con") to build the lists.
 
-- [ ] **Youth Development Squad View**
+- [x] **Youth Development Squad View**
     - **What it is:** On the "Best XI" page, add a tab, checkbox, or selectbox to calculate a "Youth XI". This would run the Best XI algorithm using only players who are at or below the configured youth age thresholds.
     - **Why it's useful:** Essential for long-term saves and succession planning. It provides a clear view of the club's future and highlights gaps in youth development.
     - **Implementation Notes:** In `best_position_calculator_page`, add a UI element to trigger this mode. If active, filter the `my_club_players` list by age before passing it to `calculate_squad_and_surplus`. The `get_age_threshold` function is already available.

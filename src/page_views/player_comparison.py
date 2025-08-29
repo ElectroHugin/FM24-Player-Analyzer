@@ -8,9 +8,11 @@ from config_handler import get_theme_settings
 from sqlite_db import get_user_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_role_specific_weights
 from utils import format_role_display, hex_to_rgb
+from ui_components import display_custom_header
 
 def player_comparison_page(players):
-    st.title("Player Comparison")
+    #st.title("Player Comparison")
+    display_custom_header("Player Comparison")
 
     # --- START: THEME-AWARE SETUP ---
     theme_settings = get_theme_settings()

@@ -39,7 +39,7 @@ databases/*.db
 /config/config*
 
 # Pictures
-/config/assets/*
+/config/assets/logo.png
 
 # Virtual environment
 # Replace 'venv' with the name of your virtual environment folder if different.

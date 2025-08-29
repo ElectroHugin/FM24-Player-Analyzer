@@ -22,11 +22,11 @@ from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club
                         get_favorite_tactics)
 from constants import get_valid_roles, get_tactic_roles
 from config_handler import save_theme_settings, get_theme_settings
-from ui_components import clear_all_caches
+from ui_components import clear_all_caches, display_strength_grid, display_custom_header
 from data_parser import get_player_role_matrix
 from definitions_handler import PROJECT_ROOT
 from squad_logic import get_cached_squad_analysis
-from utils import  get_natural_role_sorter, hex_to_rgb, format_role_display
+from utils import  hex_to_rgb, format_role_display
 from theme_handler import set_theme_toml
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
@@ -126,7 +126,7 @@ def sidebar(df, players):
 
 
 def main_page(uploaded_file, df, players): # Add 'players' to the function signature
-    st.title("Club Dashboard")
+    display_custom_header("Dashboard")
     user_club = get_user_club()
 
     # --- 1. DEDICATED UPLOAD SECTION ---
@@ -213,7 +213,6 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     strength_col, table_col = st.columns([2, 3])
 
     with strength_col:
-        from ui_components import display_strength_grid
         
         positional_strengths = {}
         tactic_positions = get_tactic_roles()[selected_tactic]

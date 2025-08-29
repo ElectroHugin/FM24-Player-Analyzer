@@ -6,9 +6,11 @@ import pandas as pd
 from sqlite_db import get_user_club, get_dwrs_history, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles
 from utils import format_role_display, get_last_name
+from ui_components import display_custom_header
 
 def dwrs_progress_page(players):
-    st.title("DWRS Player Development")
+    #st.title("DWRS Player Development")
+    display_custom_header("DWRS Player Development")
     st.info("Analyze player development trends. Choose an analysis mode to compare squad averages by role, specific players, or an individual player's progress.")
 
     user_club = get_user_club()

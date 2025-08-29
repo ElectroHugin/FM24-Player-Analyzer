@@ -6,12 +6,13 @@ import pandas as pd
 from constants import get_tactic_roles, get_tactic_layouts
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from config_handler import get_theme_settings
-from ui_components import display_tactic_grid
+from ui_components import display_tactic_grid, display_custom_header
 from squad_logic import get_cached_squad_analysis, create_detailed_surplus_df
 from utils import get_natural_role_sorter
 
 def best_position_calculator_page(players):
-    st.title("Best Position Calculator")
+    #st.title("Best Position Calculator")
+    display_custom_header("Best XI Calculator")
     user_club = get_user_club()
     second_team_club = get_second_team_club()
 

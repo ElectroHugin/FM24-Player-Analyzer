@@ -11,13 +11,14 @@ from config_handler import (get_theme_settings, save_theme_settings,
                           set_squad_management_setting)
 from definitions_handler import PROJECT_ROOT
 from utils import calculate_contrast_ratio, get_available_databases
-from ui_components import clear_all_caches
+from ui_components import clear_all_caches, display_custom_header
 from theme_handler import set_theme_toml
-from sqlite_db import update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics
+from sqlite_db import update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics, get_club_identity, set_club_identity
 from data_parser import load_data
 from constants import get_valid_roles
 
 def settings_page():
+    display_custom_header("Settings")
     # --- Fetch current theme settings once at the top ---
     theme_settings = get_theme_settings()
     current_mode = theme_settings.get('current_mode', 'night')
@@ -55,6 +56,15 @@ def settings_page():
                 st.success("Logo uploaded successfully!")
             except Exception as e:
                 st.error(f"Error saving logo: {e}")
+
+        st.subheader("Club Details")
+        current_full_name, current_stadium_name = get_club_identity()
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            new_full_name = st.text_input("Full Club Name", value=current_full_name or "")
+        with c2:
+            new_stadium_name = st.text_input("Stadium Name", value=current_stadium_name or "")
 
         # --- NEW: Two Color Pickers ---
         st.subheader(f"{current_mode.capitalize()} Mode Colors")
@@ -231,6 +241,7 @@ def settings_page():
         set_age_threshold('goalkeeper', new_goalkeeper_age)
         set_selection_bonus('natural_position', natural_pos_mult)
         set_squad_management_setting('max_roles_per_depth_player', new_max_roles)
+        set_club_identity(new_full_name, new_stadium_name)
 
         # Save only if the selection is a valid new DB name or different from the current one
         if (db_action == "Create New Database" and is_valid_new_db) or (db_action == "Select Existing Database" and db_to_set != current_db_name):
