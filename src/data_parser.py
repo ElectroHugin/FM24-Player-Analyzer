@@ -114,10 +114,14 @@ def get_players_by_role(role, user_club, second_team_club=None):
     for p in players:
         if role in p.get('Assigned Roles', []) and p['Unique ID'] in ratings_for_role:
             player_data = p.copy()
-            normalized_str = ratings_for_role[p['Unique ID']]
-            # We add the rating to the player data
+            
+            absolute_val, normalized_str = ratings_for_role[p['Unique ID']]
+            
+            # Add both columns to the player data
+            player_data['DWRS Rating (Absolute)'] = absolute_val
             player_data['DWRS Rating (Normalized)'] = normalized_str
-            # We need a numeric version for sorting
+            
+            # We still need a numeric version for sorting
             player_data['DWRS_Sort_Value'] = int(normalized_str.rstrip('%'))
             players_with_role.append(player_data)
 
