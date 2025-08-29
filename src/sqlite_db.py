@@ -86,6 +86,41 @@ def init_db():
     conn.commit()
     conn.close()
 
+@st.cache_data
+def get_latest_dwrs_ratings():
+    """
+    Fetches the most recent DWRS rating for every player-role combination from the database.
+    This is the primary function for reading pre-calculated scores.
+    Returns a nested dictionary for fast lookups: {role: {unique_id: rating_string}}
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    # This query efficiently finds the latest timestamp for each unique_id-role pair
+    # and then joins back to the main table to get the corresponding rating string.
+    query = """
+        SELECT t1.unique_id, t1.role, t1.dwrs_normalized
+        FROM dwrs_ratings t1
+        INNER JOIN (
+            SELECT unique_id, role, MAX(timestamp) as max_timestamp
+            FROM dwrs_ratings
+            GROUP BY unique_id, role
+        ) t2 ON t1.unique_id = t2.unique_id AND t1.role = t2.role AND t1.timestamp = t2.max_timestamp
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Structure the data as a nested dictionary for O(1) lookups
+    # e.g., master_ratings['BPD-D']['player-123'] -> '95%'
+    master_ratings = {}
+    for uid, role, dwrs_norm in rows:
+        if role not in master_ratings:
+            master_ratings[role] = {}
+        master_ratings[role][uid] = dwrs_norm
+        
+    return master_ratings
+
 def update_player_apt(unique_id, playing_time):
     conn = connect_db()
     cursor = conn.cursor()

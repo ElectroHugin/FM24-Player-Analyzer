@@ -61,28 +61,29 @@ def _apply_footedness_swaps(team, all_players, positions):
 @st.cache_data
 def get_master_role_ratings(user_club, second_team_club=None):
     """
-    Calculates and caches a master dictionary of DWRS ratings for all players 
+    Calculates and caches a master dictionary of NUMERIC DWRS ratings for all players
     in the user's club and second team across all valid roles.
+    This new version reads from pre-calculated data instead of recalculating.
     """
-    master_ratings = {}
-    clubs_to_rate = [user_club]
-    if second_team_club:
-        clubs_to_rate.append(second_team_club)
-    
-    # This ensures we only query for players from the relevant clubs
-    all_club_players = [p for p in get_all_players() if p.get('Club') in clubs_to_rate]
+    # Import the new, fast data loader
+    from sqlite_db import get_latest_dwrs_ratings
 
-    if all_club_players:
-        for role in get_valid_roles():
-            # The get_players_by_role is already cached, so this is efficient
-            ratings_df, _, _ = get_players_by_role(role, user_club, second_team_club)
-            if not ratings_df.empty:
-                ratings_df['DWRS'] = pd.to_numeric(ratings_df['DWRS Rating (Normalized)'].str.rstrip('%'))
-                # Ensure we only add ratings for players in our specified clubs
-                valid_ratings = ratings_df[ratings_df['Club'].isin(clubs_to_rate)]
-                master_ratings[role] = valid_ratings.set_index('Unique ID')['DWRS'].to_dict()
+    # 1. Get all pre-calculated ratings (cached, so it's instant after first run)
+    all_ratings_str = get_latest_dwrs_ratings()
+    master_ratings_numeric = {}
+
+    # 2. Convert the string percentages to numeric values for the algorithm to use
+    for role, player_ratings in all_ratings_str.items():
+        if role not in master_ratings_numeric:
+            master_ratings_numeric[role] = {}
+        for player_id, rating_str in player_ratings.items():
+            try:
+                # Convert '85%' to 85.0
+                master_ratings_numeric[role][player_id] = float(rating_str.rstrip('%'))
+            except (ValueError, TypeError):
+                master_ratings_numeric[role][player_id] = 0.0
                 
-    return master_ratings
+    return master_ratings_numeric
 
 @st.cache_data
 def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
