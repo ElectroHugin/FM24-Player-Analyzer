@@ -28,6 +28,7 @@ from definitions_handler import PROJECT_ROOT
 from squad_logic import get_cached_squad_analysis
 from utils import  hex_to_rgb, format_role_display
 from theme_handler import set_theme_toml
+from role_logic import auto_assign_roles_to_unassigned
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
 
@@ -131,22 +132,40 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     display_custom_header("Dashboard")
     user_club = get_user_club()
 
-    # --- 1. DEDICATED UPLOAD SECTION ---
+    # --- 1. DEDICATED UPLOAD SECTION (IMPROVED) ---
     with st.expander("⬆️ Upload New Player Data"):
         with st.form("upload_form", clear_on_submit=True):
             uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
+            
+            # --- NEW: Add the auto-assign checkbox ---
+            auto_assign = st.checkbox("Automatically assign roles to new/unassigned players", value=True, help="After uploading, the app will automatically assign default roles to any player who doesn't have them, based on their positions.")
+            
             submitted = st.form_submit_button("Process File")
 
             if submitted and uploaded_file is not None:
                 with st.spinner("Processing file..."):
-                    df_new = parse_and_update_data(uploaded_file)
-                if df_new is None:
+                    # Step 1: Save player attributes to the database
+                    df_from_html = parse_and_update_data(uploaded_file)
+                
+                if df_from_html is None:
                     st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
                 else:
-                    clear_all_caches()
-                    update_dwrs_ratings(df_new, get_valid_roles())
-                    st.success("Data updated successfully!")
-                    st.rerun() # Rerun to reflect changes everywhere
+                    # Step 2 (Optional): Auto-assign roles if the box is checked
+                    if auto_assign:
+
+                        with st.spinner("Auto-assigning roles to new players..."):
+                            num_assigned = auto_assign_roles_to_unassigned()
+                        st.toast(f"Assigned roles to {num_assigned} players.", icon="✨")
+
+                    # Step 3: Now, calculate DWRS for everyone.
+                    # We reload the data to make sure we have the newly assigned roles.
+                    with st.spinner("Calculating DWRS for all players..."):
+                        clear_all_caches()
+                        final_df = load_data() # Reload data to get newly assigned roles
+                        update_dwrs_ratings(final_df, get_valid_roles())
+
+                    st.success("Data updated and ratings calculated successfully!")
+                    st.rerun()
 
     if df is None or not user_club:
         st.info("Please upload a player data file and select 'Your Club' in the sidebar to view the dashboard.")

@@ -16,7 +16,7 @@ def init_db():
     conn = connect_db()
     cursor = conn.cursor()
     
-    # --- 1. Player Table Migration (existing logic, unchanged) ---
+    # --- 1. Player Table Migration (Complete and Unabridged) ---
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS players (
             "Unique ID" TEXT PRIMARY KEY, 
@@ -37,6 +37,7 @@ def init_db():
         cursor.execute('ALTER TABLE players ADD COLUMN "transfer_status" INTEGER DEFAULT 0')
     if "loan_status" not in existing_columns:
         cursor.execute('ALTER TABLE players ADD COLUMN "loan_status" INTEGER DEFAULT 0')
+    
     OLD_APT_COL, NEW_APT_COL = "agreed_playing_time", "Agreed Playing Time"
     if OLD_APT_COL in existing_columns:
         if NEW_APT_COL not in existing_columns:
@@ -45,41 +46,76 @@ def init_db():
             cursor.execute(f'UPDATE players SET "{NEW_APT_COL}" = "{OLD_APT_COL}" WHERE "{NEW_APT_COL}" IS NULL OR "{NEW_APT_COL}" = ""')
             cursor.execute(f'ALTER TABLE players DROP COLUMN "{OLD_APT_COL}"')
 
-    # --- 2. Settings Table (unchanged) ---
-    # --- DWRS RATINGS TABLE - FINAL, NON-DESTRUCTIVE MIGRATION ---
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dwrs_ratings (
+    # --- 2. Settings Table (Complete and Unabridged) ---
+    cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+
+    # --- 3. DWRS RATINGS TABLE - FINAL, NON-DESTRUCTIVE MIGRATION (Complete and Unabridged) ---
+    correct_schema = """
+        CREATE TABLE dwrs_ratings (
             unique_id TEXT, role TEXT, dwrs_absolute REAL, dwrs_normalized TEXT, timestamp TEXT,
             PRIMARY KEY (unique_id, role, timestamp)
         )
-    """)
+    """
+    
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dwrs_ratings'")
+    table_exists = cursor.fetchone()
+    
+    needs_migration = not table_exists
+    if table_exists:
+        cursor.execute("PRAGMA table_info(dwrs_ratings)")
+        columns_info = cursor.fetchall()
+        pk_count = sum(1 for col in columns_info if col[5] > 0)
+        column_names = [col[1] for col in columns_info]
+        if pk_count != 3 or "dwrs_absolute" not in column_names:
+            needs_migration = True
 
-    cursor.execute("PRAGMA table_info(dwrs_ratings)")
-    dwrs_columns = [col[1] for col in cursor.fetchall()]
-
-    if "dwrs_absolute" not in dwrs_columns:
-        st.warning("Older database version detected. Performing a safe, one-time upgrade...")
-        with st.spinner("Adding new columns and backfilling missing rating data..."):
+    if needs_migration:
+        st.warning("Outdated database schema detected. Performing a safe, one-time upgrade...")
+        with st.spinner("Preserving historical data and rebuilding ratings table..."):
             try:
-                # Step A: Add the missing column without deleting any data.
-                cursor.execute('ALTER TABLE dwrs_ratings ADD COLUMN "dwrs_absolute" REAL DEFAULT 0.0')
+                # Rename the old table to keep the data safe
+                cursor.execute("ALTER TABLE dwrs_ratings RENAME TO dwrs_ratings_old")
+                
+                # Create the new table with the perfect schema
+                cursor.execute(correct_schema)
+                
+                # Check the structure of the old table
+                cursor.execute("PRAGMA table_info(dwrs_ratings_old)")
+                old_columns = [col[1] for col in cursor.fetchall()]
+                
+                # Copy the data from the old table to the new one
+                if "dwrs_absolute" in old_columns:
+                    # If the old table was only missing the PK, we can copy everything
+                    cursor.execute("""
+                        INSERT INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp)
+                        SELECT unique_id, role, dwrs_absolute, dwrs_normalized, timestamp FROM dwrs_ratings_old
+                    """)
+                else:
+                    # If the absolute column was missing, add it with a default
+                    cursor.execute("""
+                        INSERT INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp)
+                        SELECT unique_id, role, 0.0, dwrs_normalized, timestamp FROM dwrs_ratings_old
+                    """)
+
+                # Drop the old table now that the data is safe
+                cursor.execute("DROP TABLE dwrs_ratings_old")
                 conn.commit()
 
-                # Step B: Force a full recalculation to backfill the new column.
-
+                # Optional: Run an update to backfill the correct absolute values
+                from ..constants import get_valid_roles
                 df = pd.DataFrame(get_all_players())
                 if not df.empty:
-                    # This will now calculate and save the absolute value for all players.
-                    # It will only add new rows if ratings have changed, but it will
-                    # ensure future writes are in the correct format.
                     update_dwrs_ratings(df, get_valid_roles())
-                
+
                 st.cache_data.clear()
-                st.success("Database upgrade successful! The app will now reload.")
+                st.success("Database upgrade successful! Your history is safe. The app will now reload.")
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Database upgrade failed: {e}. Please report this issue.")
+                # If anything fails, try to restore the old table
+                cursor.execute("DROP TABLE IF EXISTS dwrs_ratings")
+                cursor.execute("ALTER TABLE dwrs_ratings_old RENAME TO dwrs_ratings")
+                st.error(f"Database upgrade failed: {e}. Your original data has been restored.")
                 st.stop()
 
     conn.commit()
@@ -131,42 +167,49 @@ def update_player(mapped_player_data):
     cursor = conn.cursor()
 
     uid = mapped_player_data.get('Unique ID')
-    # If there's no Unique ID, we cannot process the row.
     if not uid:
         conn.close()
         return
 
-    # Check if the player already exists in the database
     cursor.execute('SELECT "Unique ID" FROM players WHERE "Unique ID" = ?', (uid,))
     result = cursor.fetchone()
 
-    # --- START OF NEW, SAFER LOGIC ---
+    # --- START OF NEW, ROBUST LOGIC ---
+    
+    # These are columns managed *within the app* and should NOT be overwritten by an HTML import.
+    APP_MANAGED_COLUMNS = [
+        "Assigned Roles", 
+        "primary_role", 
+        "natural_positions", 
+        "transfer_status", 
+        "loan_status"
+    ]
 
-    # Create a clean dictionary of only the columns we want to insert or update.
-    # Exclude the Unique ID itself, as it's used to identify the row, not to be set.
-    data_to_update = {k: v for k, v in mapped_player_data.items() if k != 'Unique ID'}
+    # Create a clean dictionary of only the columns to update from the HTML file.
+    # We explicitly exclude the app-managed columns.
+    data_to_update = {
+        k: v for k, v in mapped_player_data.items() 
+        if k != 'Unique ID' and k not in APP_MANAGED_COLUMNS
+    }
 
     if result:
         # PLAYER EXISTS: Build a dynamic UPDATE statement.
-        # This ensures we only update the columns present in the uploaded file.
-        if data_to_update: # Proceed only if there's actually data to update
+        if data_to_update:
             set_clauses = [f'"{col}" = ?' for col in data_to_update.keys()]
             values = list(data_to_update.values())
-            values.append(uid)  # Add the UID for the WHERE clause at the end
+            values.append(uid)
 
             query = f'UPDATE players SET {", ".join(set_clauses)} WHERE "Unique ID" = ?'
             cursor.execute(query, values)
     else:
         # PLAYER IS NEW: Build a dynamic INSERT statement.
-        # Start with the Unique ID
         columns = ['"Unique ID"']
         values = [uid]
 
-        # Add the rest of the data from the file
         columns.extend([f'"{col}"' for col in data_to_update.keys()])
         values.extend(data_to_update.values())
 
-        # Explicitly set "Assigned Roles" to an empty list for new players
+        # Explicitly set "Assigned Roles" to an empty list for brand new players.
         columns.append('"Assigned Roles"')
         values.append('[]')
 
@@ -174,7 +217,7 @@ def update_player(mapped_player_data):
         query = f'INSERT INTO players ({", ".join(columns)}) VALUES ({placeholders})'
         cursor.execute(query, values)
 
-    # --- END OF NEW LOGIC ---
+    # --- END OF NEW, ROBUST LOGIC ---
 
     conn.commit()
     conn.close()
