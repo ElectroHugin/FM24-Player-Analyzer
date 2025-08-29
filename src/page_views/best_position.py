@@ -8,6 +8,7 @@ from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from config_handler import get_theme_settings
 from ui_components import display_tactic_grid
 from squad_logic import get_cached_squad_analysis, create_detailed_surplus_df
+from utils import get_natural_role_sorter
 
 def best_position_calculator_page(players):
     st.title("Best Position Calculator")
@@ -73,7 +74,10 @@ def best_position_calculator_page(players):
                 # The keys are now ROLES, not positions. We also need format_role_display.
                 from utils import format_role_display 
                 
-                for role in sorted(best_depth_options.keys()):
+                role_sorter = get_natural_role_sorter()
+                sorted_roles = sorted(best_depth_options.keys(), key=lambda r: role_sorter.get(r, (99,99)))
+
+                for role in sorted_roles:
                     players_list = best_depth_options.get(role, [])
                     if players_list:
                         player_strs = [

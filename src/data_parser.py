@@ -98,37 +98,34 @@ def get_filtered_players(filter_option="Unassigned Players", club_filter="All", 
 
 @st.cache_data
 def get_players_by_role(role, user_club, second_team_club=None):
+    # Import the new, fast data loader
+    from sqlite_db import get_latest_dwrs_ratings
+
     players = get_all_players()
     empty_df = pd.DataFrame(columns=ROLE_ANALYSIS_COLUMNS)
     if not players: return empty_df, empty_df, empty_df
 
-    players_with_role = [p for p in players if role in p.get('Assigned Roles', [])]
+    # 1. Get ALL pre-calculated ratings in one go. This is cached and fast.
+    all_ratings = get_latest_dwrs_ratings()
+    ratings_for_role = all_ratings.get(role, {}) # Get ratings just for the role we want
+
+    # 2. Filter players who can play the role and have a rating for it.
+    players_with_role = []
+    for p in players:
+        if role in p.get('Assigned Roles', []) and p['Unique ID'] in ratings_for_role:
+            player_data = p.copy()
+            normalized_str = ratings_for_role[p['Unique ID']]
+            # We add the rating to the player data
+            player_data['DWRS Rating (Normalized)'] = normalized_str
+            # We need a numeric version for sorting
+            player_data['DWRS_Sort_Value'] = int(normalized_str.rstrip('%'))
+            players_with_role.append(player_data)
+
     if not players_with_role: return empty_df, empty_df, empty_df
     
     df = pd.DataFrame(players_with_role)
 
-    # --- START REFACTOR ---
-
-    # Define weights once, outside the helper function, for efficiency
-    weights = {cat: get_weight(cat.lower().replace(" ", "_"), default) for cat, default in WEIGHT_DEFAULTS.items()}
-    gk_weights = {cat: get_weight("gk_" + cat.lower().replace(" ", "_"), default) for cat, default in GK_WEIGHT_DEFAULTS.items()}
-    all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
-    weights_to_use = gk_weights if role in all_gk_roles else weights
-
-    # Helper function to process a single row (player)
-    def calculate_dwrs_for_row(player):
-        absolute, normalized_str = calculate_dwrs(player.to_dict(), role, weights_to_use)
-        normalized_val = float(normalized_str.rstrip('%'))
-        return pd.Series([absolute, normalized_val], index=['DWRS Rating (Absolute)', 'DWRS Rating (Normalized)'])
-
-    # Apply the helper function to each row. This returns a new DataFrame with the calculated columns.
-    dwrs_ratings_df = df.apply(calculate_dwrs_for_row, axis=1)
-
-    # Join the new ratings back to the original DataFrame
-    df = df.join(dwrs_ratings_df)
-
-    # --- END REFACTOR ---
-
+    # 3. Split the DataFrame by club
     my_club_df = df[df['Club'] == user_club]
     second_team_df = df[df['Club'] == second_team_club] if second_team_club else pd.DataFrame()
     exclude_clubs = [user_club, second_team_club] if second_team_club else [user_club]
@@ -137,11 +134,8 @@ def get_players_by_role(role, user_club, second_team_club=None):
     final_dfs = []
     for temp_df in [my_club_df, second_team_df, scouted_df]:
         if not temp_df.empty:
-            # Sort by the numeric rating first
-            temp_df = temp_df.sort_values(by='DWRS Rating (Normalized)', ascending=False)
-            # Then format it as a string for display
-            temp_df['DWRS Rating (Normalized)'] = temp_df['DWRS Rating (Normalized)'].apply(lambda x: f"{int(x)}%")
-            # Ensure the final columns are in the correct order
+            # Sort by the numeric rating first, then format the display column
+            temp_df = temp_df.sort_values(by='DWRS_Sort_Value', ascending=False)
             final_dfs.append(temp_df.reindex(columns=ROLE_ANALYSIS_COLUMNS))
         else:
             final_dfs.append(empty_df)
@@ -150,38 +144,31 @@ def get_players_by_role(role, user_club, second_team_club=None):
 
 @st.cache_data
 def get_player_role_matrix(user_club, second_team_club=None):
+    # Import the new, fast data loader
+    from sqlite_db import get_latest_dwrs_ratings
+    
     players = get_all_players()
     if not players: return pd.DataFrame()
-    df_players = pd.DataFrame(players)
-    if df_players.empty: return pd.DataFrame()
 
-    weights = {cat: get_weight(cat.lower().replace(" ", "_"), default) for cat, default in WEIGHT_DEFAULTS.items()}
-    gk_weights = {cat: get_weight("gk_" + cat.lower().replace(" ", "_"), default) for cat, default in GK_WEIGHT_DEFAULTS.items()}
-    all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
-
-    # --- START REFACTOR ---
-
-    # 1. Define a helper function that processes one row (a player)
-    def calculate_player_roles(player):
-        row = {col: player.get(col, '') for col in PLAYER_ROLE_MATRIX_COLUMNS}
-        assigned_roles = player.get('Assigned Roles', [])
-        
-        for role in get_valid_roles():
-            if role in assigned_roles:
-                weights_to_use = gk_weights if role in all_gk_roles else weights
-                #_, normalized_str = calculate_dwrs(player, role, weights_to_use)
-                _, normalized_str = calculate_dwrs(player.to_dict(), role, weights_to_use)
-                try:
-                    row[role] = int(normalized_str.rstrip('%'))
-                except (ValueError, AttributeError):
-                    row[role] = None
-            else:
-                row[role] = None
-        return pd.Series(row)
-
-    # 2. Apply this function to every row of the DataFrame
-    matrix_df = df_players.apply(calculate_player_roles, axis=1)
-
-    # --- END REFACTOR ---
+    # 1. Get ALL pre-calculated ratings in one go. This is cached and fast.
+    all_ratings = get_latest_dwrs_ratings()
     
-    return matrix_df
+    matrix_data = []
+    for player in players:
+        # Start with the basic player info
+        row = {col: player.get(col, '') for col in PLAYER_ROLE_MATRIX_COLUMNS}
+        
+        # Now, fill in the ratings for each role by looking them up
+        for role in get_valid_roles():
+            rating_str = all_ratings.get(role, {}).get(player['Unique ID'])
+            if rating_str:
+                try:
+                    row[role] = int(rating_str.rstrip('%'))
+                except (ValueError, AttributeError):
+                    row[role] = None # Handle potential bad data
+            else:
+                row[role] = None # Player doesn't have a rating for this role
+        
+        matrix_data.append(row)
+
+    return pd.DataFrame(matrix_data)
