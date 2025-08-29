@@ -76,7 +76,7 @@
 
 These ideas build on your suggestion to add the full club name, creating a strong sense of place for the user.
 
-- [ ] **A Dynamic and Personalized Dashboard Header**
+- [x] **A Dynamic and Personalized Dashboard Header**
     - **What it is:** Replace the static `st.title("Player Dashboard")` on the main page with a dynamic header component. This header would appear at the top of every page.
     - **How it would look:**
         - Use `st.columns` to create a three-part header.
@@ -85,7 +85,7 @@ These ideas build on your suggestion to add the full club name, creating a stron
         - **Right:** Maybe the current in-app date or a small status indicator.
     - **Why it adds flavor:** It immediately brands the entire application for the user's club and reminds them which save file they are currently analyzing. It feels professional and bespoke.
 
-- [ ] **Add "Full Club Name" to Settings**
+- [x] **Add "Full Club Name" to Settings**
     - **What it is:** A new text input field in the Settings page under "Club Identity & Theme" for the user to enter their club's full name (e.g., "Manchester United" instead of just "Man UFC").
     - **Why it's needed:** This provides the data for the dynamic header.
     - **Implementation:** Store this in `sqlite_db` in the `settings` table, similar to how `user_club` is stored.
