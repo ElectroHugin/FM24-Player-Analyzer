@@ -169,7 +169,6 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
 
     if not analysis_results or analysis_results["core_squad_df"].empty:
         st.warning(f"Could not generate a squad for the '{selected_tactic}' tactic. There may be no suitable players in your club.")
-        # We can still show the main player table
         st.subheader(f"Players at {user_club}")
         my_club_df = df[df['Club'] == user_club]
         st.dataframe(my_club_df, use_container_width=True, hide_index=True)
@@ -185,27 +184,16 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     st.markdown("---")
     st.subheader(f"Core Squad Overview (Starting XI + B-Team for '{selected_tactic}')")
     
-    # Convert value strings like '€1.2M' to numbers
+    # Helper function to convert value strings like '€1.2M' to numbers
     def value_to_float(value_str):
-        if not isinstance(value_str, str):
-            return 0.0
-
-        # Handle ranges by taking the lower value
-        if ' - ' in value_str:
-            value_str = value_str.split(' - ')[0]
-
+        if not isinstance(value_str, str): return 0.0
+        if ' - ' in value_str: value_str = value_str.split(' - ')[0]
         value_str = value_str.replace('€', '').strip()
-        
         try:
-            if 'M' in value_str:
-                return float(value_str.replace('M', '')) * 1_000_000
-            elif 'K' in value_str:
-                return float(value_str.replace('K', '')) * 1_000
-            # Handle cases with no K/M suffix or empty strings
+            if 'M' in value_str: return float(value_str.replace('M', '')) * 1_000_000
+            elif 'K' in value_str: return float(value_str.replace('K', '')) * 1_000
             return float(value_str) if value_str else 0.0
-        except ValueError:
-            # If after all cleaning it's still not a valid number, return 0
-            return 0.0
+        except ValueError: return 0.0
 
     core_squad_df['Transfer Value Num'] = core_squad_df['Transfer Value'].apply(value_to_float)
     core_squad_df['Age'] = pd.to_numeric(core_squad_df['Age'], errors='coerce')
@@ -220,50 +208,35 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     col3.metric("Average Player Value", f"€{avg_value/1_000_000:.2f}M")
     col4.metric("Average Age", f"{avg_age:.1f}")
 
-    # --- 5. ROLE PROFICIENCY CHART & SQUAD TABLE ---
+    # --- 5. POSITIONAL STRENGTH & SQUAD TABLE ---
     st.markdown("---")
-    strength_col, table_col = st.columns([2, 3]) # Give more space to the table
+    strength_col, table_col = st.columns([2, 3])
 
     with strength_col:
-        # Import the new UI component
         from ui_components import display_strength_grid
         
-        # --- 1. Calculate the statistics for each POSITION ---
         positional_strengths = {}
         tactic_positions = get_tactic_roles()[selected_tactic]
-
         xi_squad = analysis_results["first_team_squad_data"]["starting_xi"]
         b_team_squad = analysis_results["first_team_squad_data"]["b_team"]
         depth_options = analysis_results["first_team_squad_data"]["best_depth_options"]
 
         for pos_key, role in tactic_positions.items():
             ratings = []
-            
-            # Helper to safely parse and add rating
             def add_rating(player_obj):
                 if player_obj and player_obj.get('name') != '-':
                     try: ratings.append(int(player_obj['rating'].rstrip('%')))
                     except (ValueError, TypeError): pass
 
-            # Get XI and B-Team player for this specific position
             add_rating(xi_squad.get(pos_key))
             add_rating(b_team_squad.get(pos_key))
-            
-            # Get depth player for the role associated with this position
-            for player in depth_options.get(role, []):
-                add_rating(player)
+            for player in depth_options.get(role, []): add_rating(player)
 
-            # --- 2. Store calculated stats ---
             if ratings:
-                positional_strengths[pos_key] = {
-                    'avg': sum(ratings) / len(ratings),
-                    'min': min(ratings),
-                    'max': max(ratings)
-                }
+                positional_strengths[pos_key] = {'avg': sum(ratings) / len(ratings), 'min': min(ratings), 'max': max(ratings)}
             else:
                 positional_strengths[pos_key] = {'avg': 0, 'min': 0, 'max': 0}
 
-        # --- 3. Call the new display component ---
         current_theme_mode = get_theme_settings().get('current_mode', 'night')
         display_strength_grid(positional_strengths, selected_tactic, mode=current_theme_mode)
 
@@ -271,6 +244,93 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
         st.subheader(f"Players at {user_club}")
         my_club_df = df[df['Club'] == user_club]
         st.dataframe(my_club_df, use_container_width=True, hide_index=True)
+
+    # ------------------- START OF NEW TRANSFER SUGGESTIONS SECTION -------------------
+    st.markdown("---")
+    st.subheader("🎯 Transfer Targets")
+    st.info("Discover potential upgrades from your scouted players list based on the roles in your current tactic.")
+
+    # --- 1. Get the complete player-role matrix data ---
+    full_matrix = get_player_role_matrix(user_club, second_team_club)
+    
+    if full_matrix.empty:
+        st.warning("No player matrix data available. Please upload player data.")
+        return
+
+    # --- 2. Prepare the data for filtering and comparison ---
+    my_club_matrix = full_matrix[full_matrix['Club'] == user_club].copy()
+    
+    exclude_clubs = [user_club]
+    if second_team_club: exclude_clubs.append(second_team_club)
+    scouted_matrix = full_matrix[~full_matrix['Club'].isin(exclude_clubs)].copy()
+
+    # Convert columns to numeric for filtering
+    scouted_matrix['AgeNum'] = pd.to_numeric(scouted_matrix['Age'], errors='coerce')
+    scouted_matrix['ValueNum'] = scouted_matrix['Transfer Value'].apply(value_to_float)
+    scouted_matrix.dropna(subset=['AgeNum', 'ValueNum'], inplace=True) # Drop players with no age/value
+
+    # --- 3. UI Filters (Sliders) ---
+    filter_c1, filter_c2 = st.columns(2)
+    with filter_c1:
+        max_age = st.slider("Maximum Age", 15, 40, 28)
+    with filter_c2:
+        # Determine a sensible max for the value slider
+        max_val_possible = scouted_matrix['ValueNum'].max() if not scouted_matrix.empty else 100000000
+        max_val_slider = st.slider("Maximum Transfer Value (€ Millions)", 0.0, max_val_possible / 1000000, (10.0), 0.5) * 1000000
+
+    # --- 4. Core Logic: Find Upgrades ---
+    filtered_scouts = scouted_matrix[
+        (scouted_matrix['AgeNum'] <= max_age) & 
+        (scouted_matrix['ValueNum'] <= max_val_slider)
+    ]
+
+    roles_tactic = sorted(list(set(get_tactic_roles()[selected_tactic].values())))
+    suggestions = []
+
+    for role in roles_tactic:
+        if role not in my_club_matrix.columns or role not in filtered_scouts.columns:
+            continue
+
+        my_best_rating = my_club_matrix[role].max()
+        # If we have no players for a role, any scouted player is an upgrade
+        if pd.isna(my_best_rating): my_best_rating = 0 
+
+        potential_upgrades = filtered_scouts[filtered_scouts[role] > my_best_rating]
+        
+        if not potential_upgrades.empty:
+            # Find the best of the potential upgrades
+            best_upgrade = potential_upgrades.loc[potential_upgrades[role].idxmax()]
+            suggestions.append({
+                "role": role,
+                "player": best_upgrade['Name'],
+                "rating": best_upgrade[role],
+                "value_str": best_upgrade['Transfer Value'],
+                "age": best_upgrade['Age'],
+                "club": best_upgrade['Club'],
+                "position": best_upgrade['Position']
+            })
+
+    # --- 5. Display Suggestions in a Visually Appealing Way ---
+    if not suggestions:
+        st.success("✅ Your squad is looking strong! No clear upgrades found within your filter criteria.")
+    else:
+        # Determine the number of columns (max 4)
+        num_cols = min(len(suggestions), 4)
+        cols = st.columns(num_cols)
+        
+        for i, sug in enumerate(suggestions):
+            with cols[i % num_cols]:
+                with st.container(border=True):
+                    st.markdown(f"**{sug['player']}**")
+                    st.markdown(f"Upgrade for **{format_role_display(sug['role'])}**")
+                    st.divider()
+                    st.markdown(f"🎯 **Rating:** {sug['rating']:.0f}% (Your Best: {my_club_matrix[sug['role']].max():.0f}%)")
+                    st.markdown(f"💰 **Value:** {sug['value_str']}")
+                    st.markdown(f"🎂 **Age:** {sug['age']}")
+                    st.caption(f"Club: {sug['club']}")
+                    st.caption(f"Positions: {sug['position']}")
+
+    # -------------------- END OF NEW TRANSFER SUGGESTIONS SECTION --------------------
 
 
 def main():
