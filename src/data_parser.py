@@ -4,7 +4,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from constants import (attribute_mapping, get_valid_roles, ROLE_ANALYSIS_COLUMNS, 
                      PLAYER_ROLE_MATRIX_COLUMNS, WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS)
-from sqlite_db import init_db, update_player, get_all_players
+from sqlite_db import init_db, update_player, get_all_players, get_latest_dwrs_ratings
 from analytics import calculate_dwrs
 from config_handler import get_weight
 import streamlit as st
@@ -114,7 +114,7 @@ def get_players_by_role(role, user_club, second_team_club=None):
     for p in players:
         if role in p.get('Assigned Roles', []) and p['Unique ID'] in ratings_for_role:
             player_data = p.copy()
-            
+
             absolute_val, normalized_str = ratings_for_role[p['Unique ID']]
             
             # Add both columns to the player data
@@ -122,7 +122,10 @@ def get_players_by_role(role, user_club, second_team_club=None):
             player_data['DWRS Rating (Normalized)'] = normalized_str
             
             # We still need a numeric version for sorting
-            player_data['DWRS_Sort_Value'] = int(normalized_str.rstrip('%'))
+            try:
+                player_data['DWRS_Sort_Value'] = int(float(normalized_str.rstrip('%')))
+            except (ValueError, TypeError):
+                player_data['DWRS_Sort_Value'] = 0 # Default if data is corrupted
             players_with_role.append(player_data)
 
     if not players_with_role: return empty_df, empty_df, empty_df
@@ -148,11 +151,11 @@ def get_players_by_role(role, user_club, second_team_club=None):
 
 @st.cache_data
 def get_player_role_matrix(user_club, second_team_club=None):
-    # Import the new, fast data loader
-    from sqlite_db import get_latest_dwrs_ratings
+    # This now uses the same fast, reliable data source as get_players_by_role.
     
     players = get_all_players()
-    if not players: return pd.DataFrame()
+    if not players:
+        return pd.DataFrame()
 
     # 1. Get ALL pre-calculated ratings in one go. This is cached and fast.
     all_ratings = get_latest_dwrs_ratings()
@@ -164,11 +167,16 @@ def get_player_role_matrix(user_club, second_team_club=None):
         
         # Now, fill in the ratings for each role by looking them up
         for role in get_valid_roles():
-            rating_str = all_ratings.get(role, {}).get(player['Unique ID'])
-            if rating_str:
+            # Safely get the rating tuple (abs, norm) for the player and role
+            rating_tuple = all_ratings.get(role, {}).get(player['Unique ID'])
+            
+            if rating_tuple:
                 try:
-                    row[role] = int(rating_str.rstrip('%'))
-                except (ValueError, AttributeError):
+                    # We only need the normalized string from the tuple
+                    _absolute_val, normalized_str = rating_tuple
+                    # Convert the percentage string to a number for display
+                    row[role] = int(float(normalized_str.rstrip('%')))
+                except (ValueError, AttributeError, TypeError):
                     row[role] = None # Handle potential bad data
             else:
                 row[role] = None # Player doesn't have a rating for this role

@@ -55,8 +55,17 @@ def assign_roles_page(df):
     def handle_role_update(role_changes):
         if role_changes:
             update_player_roles(role_changes)
-            affected = df[df['Unique ID'].isin(role_changes.keys())]
-            update_dwrs_ratings(affected, get_valid_roles())
+            # Get the dataframe of affected players
+            affected_df = df[df['Unique ID'].isin(role_changes.keys())].copy()
+            
+            # Manually update the 'Assigned Roles' in our copied dataframe to reflect the change
+            # This ensures the DWRS calculation uses the *new* roles.
+            def get_new_roles(row):
+                return role_changes.get(row['Unique ID'], row['Assigned Roles'])
+            affected_df['Assigned Roles'] = affected_df.apply(get_new_roles, axis=1)
+
+            # Now, recalculate with the correct, updated data
+            update_dwrs_ratings(affected_df, get_valid_roles())
             clear_all_caches()
             st.success(f"Successfully updated roles for {len(role_changes)} players!")
             st.rerun()
