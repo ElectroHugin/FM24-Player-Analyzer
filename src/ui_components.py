@@ -1,7 +1,7 @@
 # src/ui_components.py
 
 import streamlit as st
-from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS
+from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS, get_tactic_layouts
 
 def clear_all_caches():
     st.cache_data.clear()
@@ -166,6 +166,134 @@ def display_tactic_grid(team, title, positions, layout, mode='night'):
                   f"{apt_html_gk}"
                   f'</div>')
     html_out += gk_display
+
+    html_out += '</div>'
+    st.markdown(html_out, unsafe_allow_html=True)
+
+
+def display_strength_grid(positional_strengths, tactic, mode='night'):
+    """
+    Renders a miniaturized, color-coded tactical grid showing the average, min, and max
+    DWRS for each position. The color is relative to the squad's own strength.
+    """
+    st.subheader("Positional Strength")
+
+    # --- 1. Relative Color Calculation Logic ---
+    avg_ratings = [data['avg'] for data in positional_strengths.values() if data['avg'] > 0]
+    if not avg_ratings:
+        st.info("No rating data available to display the strength grid.")
+        return
+        
+    min_avg, max_avg = min(avg_ratings), max(avg_ratings)
+    delta = max_avg - min_avg
+
+    def _get_relative_color(value):
+        """Calculates a color on a red-yellow-green gradient based on the squad's min/max avg."""
+        if delta == 0:
+            return "100, 166, 100" # A neutral green if all values are the same
+
+        # Normalize the value from 0 (worst) to 1 (best)
+        normalized_val = (value - min_avg) / delta
+
+        if normalized_val < 0.5:
+            # Red to Yellow gradient
+            red = 221
+            green = 43 + int((240 - 43) * (normalized_val * 2))
+            blue = 43
+        else:
+            # Yellow to Green gradient
+            red = 240 - int((240 - 98) * ((normalized_val - 0.5) * 2))
+            green = 240 - int((240 - 186) * ((normalized_val - 0.5) * 2))
+            blue = 43 + int((98 - 43) * ((normalized_val - 0.5) * 2))
+            
+        return f"{red}, {green}, {blue}"
+
+    # --- 2. Miniaturized CSS ---
+    # Theme-aware colors for text and pitch markings
+    text_color = "#FFFFFF" if mode == 'night' else "#31333F"
+    markings_color = "rgba(255, 255, 255, 0.3)" if mode == 'night' else "rgba(0, 0, 0, 0.2)"
+    pitch_bg = "#2a5d34" if mode == 'night' else "#D3EED8"
+
+    grid_css = f"""
+    <style>
+        .strength-pitch-grid {{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(6, 1fr);
+            gap: 4px;
+            background-color: {pitch_bg};
+            border: 1px solid {markings_color};
+            border-radius: 8px;
+            padding: 8px;
+            min-height: 400px; /* Reduced height */
+            position: relative;
+            overflow: hidden;
+        }}
+        .strength-player-box, .strength-placeholder {{
+            border-radius: 4px; padding: 4px; min-height: 55px; /* Reduced height & padding */
+            text-align: center; color: {text_color};
+            display: flex; flex-direction: column; justify-content: center;
+            line-height: 1.1; font-size: 0.8em; /* Reduced font size */
+            border: 1px solid rgba(0,0,0,0.2);
+        }}
+        .strength-player-box b {{ font-size: 1.4em; }} /* Make average stand out */
+        .strength-gk-box {{ grid-row: 6; grid-column: 1 / 6; }}
+        /* Pitch markings for the mini-pitch */
+        .mini-marking {{ position: absolute; border: 1px solid {markings_color}; }}
+        .mini-center-line {{ position: absolute; width: 100%; height: 1px; top: 50%; background-color: {markings_color}; }}
+        .mini-center-circle {{ top: 50%; left: 50%; width: 60px; height: 60px; border-radius: 50%; transform: translate(-50%, -50%); }}
+        .mini-penalty-box {{ width: 40%; height: 16%; left: 50%; transform: translateX(-50%); border-top: none; }}
+        .mini-penalty-box.bottom {{ bottom: -1px; }}
+    </style>
+    """
+    st.markdown(grid_css, unsafe_allow_html=True)
+
+    # --- 3. HTML Rendering ---
+    html_out = '<div class="strength-pitch-grid">'
+    # Add markings
+    html_out += '<div class="mini-center-line"></div><div class="mini-marking mini-center-circle"></div>'
+    html_out += '<div class="mini-marking mini-penalty-box"></div><div class="mini-marking mini-penalty-box bottom"></div>'
+
+    layout = get_tactic_layouts().get(tactic, {})
+    stratum_to_row = {"Strikers": 1, "Attacking Midfield": 2, "Midfield": 3, "Defensive Midfield": 4, "Defense": 5}
+    
+    occupied_cells = set()
+
+    for stratum, positions in layout.items():
+        for pos_key in positions:
+            stratum_val, col_index = MASTER_POSITION_MAP.get(pos_key, (None, None))
+            if stratum_val is None: continue
+            
+            row = stratum_to_row.get(stratum)
+            col = col_index + 2 if stratum == "Strikers" else col_index + 1
+            occupied_cells.add((row, col))
+            
+            stats = positional_strengths.get(pos_key)
+            if stats and stats['avg'] > 0:
+                color_rgb = _get_relative_color(stats['avg'])
+                box_html = (
+                    f"<div class='strength-player-box' style='background-color: rgba({color_rgb}, 0.8); grid-row:{row}; grid-column:{col};'>"
+                    f"<b>{stats['avg']:.0f}%</b>"
+                    f"<small>({stats['min']:.0f}-{stats['max']:.0f})</small>"
+                    "</div>"
+                )
+            else: # Placeholder for empty positions
+                box_html = f"<div class='strength-placeholder' style='grid-row:{row}; grid-column:{col};'>-</div>"
+            html_out += box_html
+
+    # Handle GK separately
+    gk_stats = positional_strengths.get('GK')
+    if gk_stats and gk_stats['avg'] > 0:
+        color_rgb_gk = _get_relative_color(gk_stats['avg'])
+        gk_html = (
+            f"<div class='strength-player-box strength-gk-box' style='background-color: rgba({color_rgb_gk}, 0.8);'>"
+            f"<b>{gk_stats['avg']:.0f}%</b>"
+            f"<small>({gk_stats['min']:.0f}-{gk_stats['max']:.0f})</small>"
+            "</div>"
+        )
+    else:
+        gk_html = "<div class='strength-player-box strength-gk-box'>-</div>"
+    html_out += gk_html
 
     html_out += '</div>'
     st.markdown(html_out, unsafe_allow_html=True)

@@ -222,33 +222,50 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
 
     # --- 5. ROLE PROFICIENCY CHART & SQUAD TABLE ---
     st.markdown("---")
-    chart_col, table_col = st.columns([2, 3]) # Give more space to the table
+    strength_col, table_col = st.columns([2, 3]) # Give more space to the table
 
-    with chart_col:
-        st.subheader("Role Proficiency")
+    with strength_col:
+        # Import the new UI component
+        from ui_components import display_strength_grid
         
-        # Calculate average DWRS for each role in the selected tactic
-        role_sorter = get_natural_role_sorter()
-        base_roles = list(set(get_tactic_roles()[selected_tactic].values()))
-        roles_tactic = sorted(base_roles, key=lambda r: role_sorter.get(r, (99, 99)))
-        role_ratings = []
-        
-        # We need the full matrix to get DWRS scores
-        full_matrix = get_player_role_matrix(user_club)
-        if not full_matrix.empty:
-            # Filter the matrix to only include our core squad players
-            core_squad_matrix = full_matrix[full_matrix['Name'].isin(core_squad_df['Name'])]
+        # --- 1. Calculate the statistics for each POSITION ---
+        positional_strengths = {}
+        tactic_positions = get_tactic_roles()[selected_tactic]
+
+        xi_squad = analysis_results["first_team_squad_data"]["starting_xi"]
+        b_team_squad = analysis_results["first_team_squad_data"]["b_team"]
+        depth_options = analysis_results["first_team_squad_data"]["best_depth_options"]
+
+        for pos_key, role in tactic_positions.items():
+            ratings = []
             
-            for role in roles_tactic:
-                if role in core_squad_matrix.columns:
-                    avg_dwrs = core_squad_matrix[role].mean()
-                    role_ratings.append({'Role': format_role_display(role), 'Average DWRS': avg_dwrs})
-        
-        if role_ratings:
-            ratings_df = pd.DataFrame(role_ratings).sort_values('Average DWRS', ascending=False)
-            st.bar_chart(ratings_df, x='Role', y='Average DWRS')
-        else:
-            st.info("No rating data available for these roles.")
+            # Helper to safely parse and add rating
+            def add_rating(player_obj):
+                if player_obj and player_obj.get('name') != '-':
+                    try: ratings.append(int(player_obj['rating'].rstrip('%')))
+                    except (ValueError, TypeError): pass
+
+            # Get XI and B-Team player for this specific position
+            add_rating(xi_squad.get(pos_key))
+            add_rating(b_team_squad.get(pos_key))
+            
+            # Get depth player for the role associated with this position
+            for player in depth_options.get(role, []):
+                add_rating(player)
+
+            # --- 2. Store calculated stats ---
+            if ratings:
+                positional_strengths[pos_key] = {
+                    'avg': sum(ratings) / len(ratings),
+                    'min': min(ratings),
+                    'max': max(ratings)
+                }
+            else:
+                positional_strengths[pos_key] = {'avg': 0, 'min': 0, 'max': 0}
+
+        # --- 3. Call the new display component ---
+        current_theme_mode = get_theme_settings().get('current_mode', 'night')
+        display_strength_grid(positional_strengths, selected_tactic, mode=current_theme_mode)
 
     with table_col:
         st.subheader(f"Players at {user_club}")
