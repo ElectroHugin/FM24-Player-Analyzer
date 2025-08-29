@@ -5,10 +5,11 @@ from constants import FILTER_OPTIONS, SORTABLE_COLUMNS, get_valid_roles, get_pos
 from data_parser import get_filtered_players
 from sqlite_db import get_user_club, update_player_roles, update_dwrs_ratings
 from utils import format_role_display, parse_position_string
-from ui_components import clear_all_caches
+from ui_components import clear_all_caches, display_custom_header
 
 def assign_roles_page(df):
-    st.title("Assign Roles to Players")
+    #st.title("Assign Roles to Players")
+    display_custom_header("Assign Roles to Players")
     # --- START: Initialize session state for filters ---
     if 'ar_filter_option' not in st.session_state:
         st.session_state.ar_filter_option = "All Players"

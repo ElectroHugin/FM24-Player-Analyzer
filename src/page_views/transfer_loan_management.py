@@ -4,13 +4,14 @@ import streamlit as st
 import pandas as pd
 
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics, update_player_transfer_status, update_player_loan_status, update_player_club
-from constants import get_valid_roles, get_tactic_roles
-from data_parser import get_players_by_role
+from constants import get_tactic_roles
 from squad_logic import calculate_squad_and_surplus, calculate_development_squads, get_master_role_ratings
 from config_handler import get_age_threshold
+from ui_components import display_custom_header
 
 def transfer_loan_management_page(players):
-    st.title("Transfer & Loan Management")
+    #st.title("Transfer & Loan Management")
+    display_custom_header("Transfer & Loan Management")
     st.info("Manage the definitive list of surplus players based on your selected tactic. These are the players who did not make the First, B, Second, or Youth teams.")
 
     # --- Helper functions for color-coding ---

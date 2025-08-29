@@ -410,3 +410,35 @@ def update_player_natural_positions(unique_id, positions):
     cursor.execute('UPDATE players SET natural_positions = ? WHERE "Unique ID" = ?', (positions_str, unique_id))
     conn.commit()
     conn.close()
+
+def get_club_identity():
+    """Fetches the full club name and stadium name from the settings."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = "full_club_name"')
+    full_name_result = cursor.fetchone()
+    cursor.execute('SELECT value FROM settings WHERE key = "stadium_name"')
+    stadium_name_result = cursor.fetchone()
+    conn.close()
+    
+    full_name = full_name_result[0] if full_name_result else None
+    stadium_name = stadium_name_result[0] if stadium_name_result else None
+    return full_name, stadium_name
+
+def set_club_identity(full_name, stadium_name):
+    """Saves the full club name and stadium name to the settings."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    if full_name:
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ("full_club_name", full_name))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "full_club_name"')
+        
+    if stadium_name:
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ("stadium_name", stadium_name))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "stadium_name"')
+        
+    conn.commit()
+    conn.close()

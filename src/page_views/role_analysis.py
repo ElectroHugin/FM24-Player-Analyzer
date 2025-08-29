@@ -6,9 +6,11 @@ from sqlite_db import get_user_club, get_second_team_club
 from constants import get_valid_roles
 from data_parser import get_players_by_role
 from utils import format_role_display
+from ui_components import display_custom_header
 
 def role_analysis_page():
-    st.title("Role Analysis")
+    #st.title("Role Analysis")
+    display_custom_header("Role Analysis")
     user_club, second_club = get_user_club(), get_second_team_club()
     if not user_club:
         st.warning("Please select your club in the sidebar.")
