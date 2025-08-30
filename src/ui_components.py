@@ -40,6 +40,8 @@ def display_tactic_grid(team, title, positions, layout, mode='night'):
         rating_text_color = "#FFF"         # White for the rating
     # --- END: THEME-AWARE COLOR DEFINITIONS ---
 
+        injury_highlight_color = "#F80B1E"
+
     # --- Dynamic Pitch Grid Logic (Unchanged) ---
     occupied_columns = set()
     for stratum, player_keys in layout.items():
@@ -138,13 +140,15 @@ def display_tactic_grid(team, title, positions, layout, mode='night'):
                 if main_grid_col == c:
                     player_info = team.get(pos_key, default_player)
                     role = positions.get(pos_key, "")
+                    is_promoted = player_info.get('promoted_due_to_injury', False)
+                    name_style = f"color: {injury_highlight_color};" if is_promoted else ""
                     full_apt = player_info.get('apt', '')
                     display_apt = APT_ABBREVIATIONS.get(full_apt, full_apt)
                     apt_html = f"<small style='color: {secondary_text_color};'><i>{display_apt}</i></small>" if display_apt else ""
                     
                     # --- UPDATED HTML with dynamic colors ---
                     cell_content = (f'<div class="player-box">'
-                                    f'<div class="player-name">{player_info["name"]}</div>'
+                                    f'<div class="player-name" style="{name_style}">{player_info["name"]}</div>'
                                     f'<div class="player-rating"><b>{player_info["rating"]}</b></div>'
                                     f"<small style='color: {secondary_text_color};'><i>({role})</i></small>"
                                     f"{apt_html}"
@@ -158,12 +162,14 @@ def display_tactic_grid(team, title, positions, layout, mode='night'):
     gk_pos_key = 'GK'
     gk_role = positions.get(gk_pos_key, "GK")
     player_info = team.get(gk_pos_key, default_player)
+    is_gk_promoted = player_info.get('promoted_due_to_injury', False)
+    gk_name_style = f"color: {injury_highlight_color};" if is_gk_promoted else ""
     full_apt_gk = player_info.get('apt', '')
     apt_html_gk = f"<small style='color: {secondary_text_color};'><i>{full_apt_gk}</i></small>" if full_apt_gk else ""
     
     # --- UPDATED GK HTML with dynamic colors ---
     gk_display = (f'<div class="player-box gk-box">'
-                  f'<div class="player-name">{player_info["name"]}</div>'
+                  f'<div class="player-name" style="{gk_name_style}">{player_info["name"]}</div>'
                   f'<div class="player-rating"><b>{player_info["rating"]}</b></div>'
                   f"<small style='color: {secondary_text_color};'><i>({gk_role})</i></small>"
                   f"{apt_html_gk}"
