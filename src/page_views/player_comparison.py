@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from config_handler import get_theme_settings
 from sqlite_db import get_user_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_role_specific_weights
-from utils import format_role_display, hex_to_rgb
+from utils import format_role_display, hex_to_rgb, color_attribute_by_value
 from ui_components import display_custom_header
 
 def player_comparison_page(players):
@@ -216,11 +216,37 @@ def player_comparison_page(players):
 
         st.divider()
         st.subheader("Detailed Attribute Comparison")
-        if 'Assigned Roles' in comparison_df.columns:
-            comparison_df['Assigned Roles'] = comparison_df['Assigned Roles'].apply(lambda roles: ', '.join(roles) if isinstance(roles, list) else roles)
+
+        # 1. Get a master set of all attribute names for quick lookups.
+        all_attributes_set = set(GLOBAL_STAT_CATEGORIES.keys()) | set(GK_STAT_CATEGORIES.keys())
         
-        # Create a unique display name for the table index
-        comparison_df['Display Name'] = comparison_df['Unique ID'].map(player_map)
+        # 2. Prepare the DataFrame fully BEFORE styling.
+        df_display = comparison_df.copy()
+        df_display['Display Name'] = df_display['Unique ID'].map(player_map)
+        df_display['Assigned Roles'] = df_display['Assigned Roles'].apply(lambda roles: ', '.join(roles) if isinstance(roles, list) else roles)
         
-        # Set the unique 'Display Name' as the index before transposing
-        st.dataframe(comparison_df.set_index('Display Name').astype(str).T, use_container_width=True)
+        # Set index and transpose. Attributes are now the index.
+        df_display = df_display.set_index('Display Name').T
+
+        # 3. Convert attribute rows to numeric values for the styling logic.
+        for idx in df_display.index:
+            if idx in all_attributes_set:
+                df_display.loc[idx] = df_display.loc[idx].apply(lambda x: (int(x.split('-')[0]) + int(x.split('-')[1])) / 2 if isinstance(x, str) and '-' in x else x)
+                df_display.loc[idx] = pd.to_numeric(df_display.loc[idx], errors='coerce')
+        
+        # 4. Define the "smart" styling function.
+        def smart_styler(row):
+            if row.name in all_attributes_set:
+                return [color_attribute_by_value(val) for val in row]
+            else:
+                return ['' for val in row]
+
+        # 5. Apply styling and formatting.
+        styler = df_display.style.format(na_rep='-', precision=0).apply(
+            smart_styler,
+            axis=1
+        )
+        
+        # This bypasses Streamlit's Arrow serialization and eliminates the warnings.
+        html = styler.to_html()
+        st.markdown(html, unsafe_allow_html=True)
