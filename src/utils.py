@@ -5,7 +5,8 @@ import base64
 import streamlit as st
 import re
 from collections import defaultdict
-
+import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 
 from constants import get_player_roles, get_valid_roles, get_position_to_role_mapping, MASTER_POSITION_MAP
 from definitions_loader import PROJECT_ROOT
@@ -165,3 +166,70 @@ def get_natural_role_sorter():
         role_sorter[role] = best_score if best_score != (-1, -1) else (99, 99)
 
     return role_sorter
+
+def _get_smart_style(val, cmap, norm):
+    """
+    A helper function that calculates background color from a colormap
+    and dynamically sets text color to white or black for readability.
+    """
+    try:
+        val_float = float(str(val).replace('%',''))
+        # Get the color from the colormap as an RGBA tuple (0-1 range)
+        rgba = cmap(norm(val_float))
+        
+        # Convert to a hex color for the background
+        bg_color_hex = mcolors.to_hex(rgba)
+        
+        # Convert the RGB part to a 0-255 range for luminance calculation
+        rgb_0_255 = tuple(int(c * 255) for c in rgba[:3])
+        
+        # Calculate perceived brightness
+        luminance = get_luminance(rgb_0_255)
+        
+        # Set text color to black on light backgrounds, white on dark backgrounds
+        text_color = 'black' if luminance > 0.5 else 'white'
+        
+        return f'background-color: {bg_color_hex}; color: {text_color};'
+        
+    except (ValueError, TypeError, AttributeError):
+        return '' # Return empty string for non-numeric or None values
+
+# --- Styler for DWRS (0-100) ---
+_dwrs_cmap = cm.get_cmap('gist_rainbow')
+_dwrs_norm = mcolors.Normalize(vmin=30, vmax=95)
+
+def color_dwrs_by_value(val):
+    """Applies a smart gist_rainbow gradient to a DWRS value."""
+    return _get_smart_style(val, _dwrs_cmap, _dwrs_norm)
+
+# --- Styler for Attributes (1-20) using CUSTOM if/elif logic ---
+def color_attribute_by_value(val):
+    """Applies a custom, high-performance 5-step gradient to an attribute value."""
+    try:
+        val = int(val)
+        # Tiers: 1-7 (Red), 8-11 (Orange), 12-14 (Yellow), 15-17 (Light Green), 18-20 (Full Green)
+        if val >= 18:
+            # Full Green (dark background, white text)
+            bg_color = "#0da025"
+            text_color = 'white'
+        elif val >= 15:
+            # Light Green (light background, black text)
+            bg_color = "#a2d31a"
+            text_color = 'black'
+        elif val >= 12:
+            # Yellow (light background, black text)
+            bg_color = "#d8d21e"
+            text_color = 'black'
+        elif val >= 8:
+            # Orange (light background, black text)
+            bg_color = "#ca7b3a"
+            text_color = 'black'
+        else:
+            # Red (light background, black text)
+            bg_color = "#cf1e1e"
+            text_color = 'black'
+            
+        return f'background-color: {bg_color}; color: {text_color};'
+
+    except (ValueError, TypeError, AttributeError):
+        return ''

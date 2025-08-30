@@ -7,7 +7,7 @@ from io import StringIO
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
-from utils import get_last_name, get_natural_role_sorter
+from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value
 from ui_components import display_custom_header
 
 
@@ -71,7 +71,7 @@ def player_role_matrix_page():
     if second_team_club: exclude_clubs.append(second_team_club)
     scouted_matrix = full_matrix[~full_matrix['Club'].isin(exclude_clubs)].copy()
 
-    def prepare_and_display_df(df, title, key_suffix, display_cols):
+    def prepare_and_display_df(df, title, key_suffix, display_cols, use_full_style=False, top_n=20):
         st.subheader(title)
         
         # Sort the DataFrame by last name before displaying
@@ -90,26 +90,28 @@ def player_role_matrix_page():
         existing_cols = [col for col in display_cols if col in df.columns]
         df_display = df[existing_cols]
 
-        # --- NEW: Define column formatting ---
+
         # Get all role columns that exist in this dataframe
         role_cols_df = [role for role in get_valid_roles() if role in df_display.columns]
         
-        # Create a configuration dictionary to format role columns as percentages
-        column_config = {
-            role: st.column_config.NumberColumn(
-                label=role, # Use the full role name in the header
-                format="%d%%",                  # Display the number with a '%' sign
-            )
-            for role in role_cols_df
-        }
-        # --- END NEW ---
+        styler = df_display.style.format("{:.0f}", subset=role_cols_df, na_rep="-")
 
-        st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True,
-            column_config=column_config # Pass the new configuration here
-        )
+        if use_full_style:
+            # For small tables, we can afford to style everything.
+            styler = styler.apply(lambda x: x.map(color_dwrs_by_value), subset=role_cols_df)
+        else:
+            # For large tables, we intelligently style only the top N values in each column.
+            for role in role_cols_df:
+                # This is very fast as it uses optimized Pandas functions.
+                top_indices = df_display[role].nlargest(top_n).index
+                
+                # We apply the coloring function ONLY to the subset of top players for this specific role.
+                styler = styler.apply(
+                    lambda x: x.map(color_dwrs_by_value),
+                    subset=pd.IndexSlice[top_indices, [role]]
+                )
+
+        st.dataframe(styler, use_container_width=True, hide_index=True)
         
         csv_buffer = StringIO()
         df_display.to_csv(csv_buffer, index=False)
@@ -127,10 +129,17 @@ def player_role_matrix_page():
 
     if not show_second_team and second_team_club and not second_team_matrix.empty:
         combined_club_matrix = pd.concat([my_club_matrix, second_team_matrix]).sort_values(by='Name')
-        prepare_and_display_df(combined_club_matrix, f"Players from {user_club} & Second Team", "combined_club", my_club_display_cols)
+        prepare_and_display_df(combined_club_matrix, f"Players from {user_club} & Second Team", "combined_club", my_club_display_cols, use_full_style=True)
     else:
-        prepare_and_display_df(my_club_matrix, f"Players from {user_club}", "my_club", my_club_display_cols)
+        prepare_and_display_df(my_club_matrix, f"Players from {user_club}", "my_club", my_club_display_cols, use_full_style=True)
         if second_team_club and show_second_team:
-            prepare_and_display_df(second_team_matrix, f"Players from {second_team_club} (Second Team)", "second_team", my_club_display_cols)
+            prepare_and_display_df(second_team_matrix, f"Players from {second_team_club} (Second Team)", "second_team", my_club_display_cols, use_full_style=True)
 
-    prepare_and_display_df(scouted_matrix, "Scouted Players", "scouted", scouted_display_cols)
+    st.subheader("Scouted Players Styling")
+    top_n_to_style = st.slider(
+        "Highlight Top N Players per Role", 
+        min_value=5, max_value=50, value=20, step=5,
+        help="To maintain performance on large lists, only the top N players for each role will be color-graded."
+    )
+
+    prepare_and_display_df(scouted_matrix, "Scouted Players", "scouted", scouted_display_cols, use_full_style=False, top_n=top_n_to_style)
