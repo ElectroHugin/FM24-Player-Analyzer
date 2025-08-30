@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+import copy
 
 from config_handler import get_age_threshold, get_apt_weight, get_selection_bonus, get_squad_management_setting
 from constants import get_position_to_role_mapping, TACTICAL_SLOT_TO_GAME_POSITIONS
@@ -90,11 +91,87 @@ def get_master_role_ratings(user_club, second_team_club=None):
                 
     return master_ratings_numeric
 
+def _find_next_best_player(role, player_pool, master_role_ratings, excluded_ids):
+    """Finds the best available player for a given role from a pool."""
+    best_player = None
+    max_rating = -1
+    for player in player_pool:
+        if player['Unique ID'] in excluded_ids:
+            continue
+        rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
+        if rating > max_rating:
+            max_rating = rating
+            best_player = player
+    return best_player, max_rating
+
+def _handle_injury_promotions(ideal_xi, ideal_b_team, ideal_depth, remaining_pool, all_players, positions, master_role_ratings):
+    """
+    Takes ideal squads, adjusts for injuries, and adds a 'promoted_due_to_injury'
+    flag to players who have been moved up.
+    """
+    player_map = {p['Unique ID']: p for p in all_players}
+    
+    adjusted_xi = copy.deepcopy(ideal_xi)
+    adjusted_b_team = copy.deepcopy(ideal_b_team)
+    adjusted_depth = copy.deepcopy(ideal_depth)
+    
+    injury_log = []
+    
+    for pos, xi_player_data in ideal_xi.items():
+        player_id = xi_player_data.get('player_id')
+        if not player_id: continue
+            
+        player_obj = player_map.get(player_id)
+        if player_obj and 'inj' in player_obj.get('Information', '').lower():
+            
+            b_team_player_for_pos = ideal_b_team.get(pos)
+            log_entry = f"**{pos}:** {xi_player_data['name']} is injured."
+            
+            if b_team_player_for_pos and b_team_player_for_pos.get('player_id'):
+                # Promote the B-Team player and ADD THE FLAG
+                promoted_xi_player = copy.deepcopy(b_team_player_for_pos)
+                promoted_xi_player['promoted_due_to_injury'] = True # <-- THE NEW FLAG
+                adjusted_xi[pos] = promoted_xi_player
+                log_entry += f" {b_team_player_for_pos['name']} promoted from B-Team."
+                
+                role = positions.get(pos)
+                depth_player_for_role_list = ideal_depth.get(role)
+                
+                if depth_player_for_role_list:
+                    depth_player = depth_player_for_role_list[0]
+                    # Promote the Depth player and ADD THE FLAG
+                    b_team_replacement = {
+                        "player_id": next((p['Unique ID'] for p in all_players if p['Name'] == depth_player['name']), None),
+                        "name": depth_player['name'], "rating": depth_player['rating'], "apt": depth_player.get('apt', ''),
+                        "promoted_due_to_injury": True # <-- THE NEW FLAG
+                    }
+                    adjusted_b_team[pos] = b_team_replacement
+                    log_entry += f" {depth_player['name']} promoted from Depth."
+                    adjusted_depth[role] = []
+                else:
+                    adjusted_b_team[pos] = {"name": "-", "rating": "0%", "apt": ""}
+                    log_entry += " No depth player available."
+            else:
+                adjusted_xi[pos] = {"name": "-", "rating": "0%", "apt": ""}
+                log_entry += " No B-Team player available to promote."
+
+            injury_log.append(log_entry)
+
+    vacant_depth_roles = [role for role, players in adjusted_depth.items() if not players]
+    if vacant_depth_roles:
+        current_squad_ids = {p_data['player_id'] for squad in [adjusted_xi, adjusted_b_team] for p_data in squad.values() if 'player_id' in p_data}
+        for role in vacant_depth_roles:
+            new_depth_player, rating = _find_next_best_player(role, remaining_pool, master_role_ratings, current_squad_ids)
+            if new_depth_player:
+                adjusted_depth[role] = [{"name": new_depth_player['Name'], "rating": f"{int(rating)}%", "apt": new_depth_player.get("Agreed Playing Time", "") or "", "age": new_depth_player.get("Age", "N/A")}]
+                injury_log.append(f"**Depth:** New player {new_depth_player['Name']} called up to cover {format_role_display(role)}.")
+
+    return adjusted_xi, adjusted_b_team, adjusted_depth, injury_log
+
 @st.cache_data
 def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
     """
-    A single, cached function to perform all squad calculations.
-    Returns a dictionary with all necessary dataframes and lists.
+    A single, cached function to perform all squad calculations, including injury adjustments.
     """
     if not players or not tactic or not user_club:
         return {}
@@ -105,15 +182,35 @@ def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
     if not my_club_players:
         return {}
 
-    # --- This is the robust master rating calculation ---
     master_role_ratings = get_master_role_ratings(user_club, second_team_club)
-
     positions = get_tactic_roles().get(tactic, {})
     if not positions:
         return {}
 
-    first_team_squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
+    # Step 1: Calculate the IDEAL squads as before.
+    ideal_squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     
+    # Step 2: Apply the new injury adjustment layer.
+    adjusted_xi, adjusted_b_team, adjusted_depth, injury_log = _handle_injury_promotions(
+        ideal_squad_data["starting_xi"],
+        ideal_squad_data["b_team"],
+        ideal_squad_data["best_depth_options"],
+        ideal_squad_data["depth_pool"],
+        my_club_players,
+        positions,
+        master_role_ratings
+    )
+    
+    # Step 3: Package the ADJUSTED data for the UI.
+    first_team_squad_data = {
+        "starting_xi": adjusted_xi,
+        "b_team": adjusted_b_team,
+        "best_depth_options": adjusted_depth,
+        "depth_pool": ideal_squad_data["depth_pool"],
+        "core_squad_ids": ideal_squad_data["core_squad_ids"]
+    }
+
+    # The dev squad calculation remains the same.
     dev_squad_data = calculate_development_squads(
         second_team_players, 
         first_team_squad_data["depth_pool"], 
@@ -121,19 +218,17 @@ def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
         master_role_ratings  
     )
 
-    final_core_squad_ids = first_team_squad_data.get("core_squad_ids", set())
+    core_squad_df = pd.DataFrame([p for p in my_club_players if p['Unique ID'] in first_team_squad_data["core_squad_ids"]])
 
-    # Prepare and return a comprehensive dictionary of results
-    final_core_squad_ids = first_team_squad_data.get("core_squad_ids", set())
-    core_squad_df = pd.DataFrame([p for p in my_club_players if p['Unique ID'] in final_core_squad_ids])
-
+    # Return everything the UI needs.
     return {
         "master_role_ratings": master_role_ratings,
         "first_team_squad_data": first_team_squad_data,
         "dev_squad_data": dev_squad_data,
         "core_squad_df": core_squad_df,
         "my_club_players": my_club_players,
-        "second_team_players": second_team_players
+        "second_team_players": second_team_players,
+        "injury_log": injury_log # Pass the log to the UI
     }
 
 def create_detailed_surplus_df(player_list, master_role_ratings):

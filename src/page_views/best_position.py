@@ -8,7 +8,7 @@ from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from config_handler import get_theme_settings
 from ui_components import display_tactic_grid, display_custom_header
 from squad_logic import get_cached_squad_analysis, create_detailed_surplus_df
-from utils import get_natural_role_sorter
+from utils import get_natural_role_sorter, format_role_display
 
 def best_position_calculator_page(players):
     #st.title("Best Position Calculator")
@@ -46,6 +46,7 @@ def best_position_calculator_page(players):
     # Unpack ALL the results we need from the single cached dictionary
     first_team_squad_data = analysis_results["first_team_squad_data"]
     dev_squad_data = analysis_results["dev_squad_data"]
+    injury_log = analysis_results.get("injury_log", [])
     my_club_players = analysis_results["my_club_players"]
     master_role_ratings = analysis_results["master_role_ratings"]
 
@@ -60,9 +61,15 @@ def best_position_calculator_page(players):
         st.header("First Team Analysis")
         with st.expander("How does it work?"):
             st.info("This tool uses a 'weakest link first' algorithm. Instead of picking the best player for each position one by one, it evaluates all open positions simultaneously and fills the one where the best available player provides the smallest upgrade. This creates a more balanced and often stronger overall team.")
+        # Display the injury log in an expander if there are any injuries
+        if injury_log:
+            with st.expander("🚑 **Injury Report & Squad Adjustments:**"):
+                for log_entry in injury_log:
+                    st.markdown(f"- {log_entry}")
         xi_col, b_team_col = st.columns(2)
         with xi_col:
-            display_tactic_grid(first_team_squad_data["starting_xi"], "Starting XI", positions, layout, mode=current_mode)
+            xi_title = "Starting XI (Adjusted for Injuries)" if injury_log else "Starting XI"
+            display_tactic_grid(first_team_squad_data["starting_xi"], xi_title, positions, layout, mode=current_mode)
         with b_team_col:
             display_tactic_grid(first_team_squad_data["b_team"], "B Team", positions, layout, mode=current_mode)
 
@@ -71,22 +78,13 @@ def best_position_calculator_page(players):
         with st.expander("Additional Depth", expanded=True):
             best_depth_options = first_team_squad_data["best_depth_options"]
             if best_depth_options:
-
-                # The keys are now ROLES, not positions. We also need format_role_display.
-                from utils import format_role_display 
-                
                 role_sorter = get_natural_role_sorter()
                 sorted_roles = sorted(best_depth_options.keys(), key=lambda r: role_sorter.get(r, (99,99)))
-
                 for role in sorted_roles:
                     players_list = best_depth_options.get(role, [])
                     if players_list:
-                        player_strs = [
-                            f"{p['name']} ({p['age']}) - {p['rating']}{' - ' + p['apt'] if p['apt'] else ''}" 
-                            for p in players_list
-                        ]
+                        player_strs = [f"{p['name']} ({p['age']}) - {p['rating']}" for p in players_list]
                         display_str = ', '.join(player_strs)
-                        # Display the formatted ROLE name, not the position
                         st.markdown(f"**{format_role_display(role)}**: {display_str}")
             else:
                 st.info("No other players were suitable as depth options for this tactic.")
