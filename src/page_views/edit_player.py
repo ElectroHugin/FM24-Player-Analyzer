@@ -1,7 +1,7 @@
 # edit_player.py
 
 import streamlit as st
-from sqlite_db import get_user_club, update_player_club, update_player_apt, update_player_natural_positions, set_primary_role
+from sqlite_db import get_user_club, update_player_club, update_player_apt, update_player_natural_positions, set_primary_role, update_player_information_status
 from utils import get_last_name, format_role_display, parse_position_string
 from constants import GK_APT_OPTIONS, FIELD_PLAYER_APT_OPTIONS
 from ui_components import clear_all_caches, display_custom_header
@@ -95,6 +95,33 @@ def edit_player_data_page(players):
                     clear_all_caches()
                     st.success(f"Set Agreed Playing Time to '{new_apt}'.")
                     st.rerun()
+
+            st.divider()
+            st.subheader("Player Status")
+
+            current_info = player.get('Information', '')
+            is_injured = 'inj' in current_info.lower()
+
+            new_injury_status = st.toggle("Player is Injured", value=is_injured, key=f"inj_{player['Unique ID']}")
+            
+            if new_injury_status != is_injured:
+                # The user flipped the toggle, so we need to update the info string
+                info_parts = [part.strip() for part in current_info.split(',') if part.strip()]
+                
+                if new_injury_status:
+                    # Add 'Inj' if it's not already there
+                    if 'Inj' not in info_parts:
+                        info_parts.append('Inj')
+                else:
+                    # Remove 'Inj' if it exists
+                    info_parts = [p for p in info_parts if p.lower() != 'inj']
+
+                # Reconstruct the string and save
+                new_info_string = ', '.join(info_parts)
+                update_player_information_status(player['Unique ID'], new_info_string)
+                clear_all_caches()
+                st.success(f"Updated injury status for {player['Name']}.")
+                st.rerun()
 
         with col2:
             # --- This section only appears for the user's club players ---
