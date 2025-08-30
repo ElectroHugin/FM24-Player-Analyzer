@@ -102,7 +102,7 @@ def init_db():
                 conn.commit()
 
                 # Optional: Run an update to backfill the correct absolute values
-
+                from ..constants import get_valid_roles
                 df = pd.DataFrame(get_all_players())
                 if not df.empty:
                     update_dwrs_ratings(df, get_valid_roles())
@@ -479,13 +479,5 @@ def set_club_identity(full_name, stadium_name):
     else:
         cursor.execute('DELETE FROM settings WHERE key = "stadium_name"')
         
-    conn.commit()
-    conn.close()
-
-def update_player_information_status(unique_id, new_status):
-    """Updates the 'Information' column for a specific player."""
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute('UPDATE players SET "Information" = ? WHERE "Unique ID" = ?', (new_status, unique_id))
     conn.commit()
     conn.close()

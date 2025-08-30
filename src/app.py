@@ -207,14 +207,28 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     
     # Helper function to convert value strings like '€1.2M' to numbers
     def value_to_float(value_str):
-        if not isinstance(value_str, str): return 0.0
-        if ' - ' in value_str: value_str = value_str.split(' - ')[0]
+        # Use a huge, finite number as a sentinel for "Not for Sale"
+        UNBUYABLE_VALUE = 2_000_000_000 
+        
+        if not isinstance(value_str, str):
+            return 0.0
+        
+        if 'not for sale' in value_str.lower():
+            return UNBUYABLE_VALUE
+            
+        if ' - ' in value_str:
+            value_str = value_str.split(' - ')[0]
+        
         value_str = value_str.replace('€', '').strip()
+        
         try:
-            if 'M' in value_str: return float(value_str.replace('M', '')) * 1_000_000
-            elif 'K' in value_str: return float(value_str.replace('K', '')) * 1_000
+            if 'M' in value_str:
+                return float(value_str.replace('M', '')) * 1_000_000
+            elif 'K' in value_str:
+                return float(value_str.replace('K', '')) * 1_000
             return float(value_str) if value_str else 0.0
-        except ValueError: return 0.0
+        except ValueError:
+            return 0.0
 
     core_squad_df['Transfer Value Num'] = core_squad_df['Transfer Value'].apply(value_to_float)
     core_squad_df['Age'] = pd.to_numeric(core_squad_df['Age'], errors='coerce')
@@ -294,9 +308,20 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     with filter_c1:
         max_age = st.slider("Maximum Age", 15, 40, 28)
     with filter_c2:
-        # Determine a sensible max for the value slider
-        max_val_possible = scouted_matrix['ValueNum'].max() if not scouted_matrix.empty else 100000000
-        max_val_slider = st.slider("Maximum Transfer Value (€ Millions)", 0.0, max_val_possible / 1000000, (10.0), 0.5) * 1000000
+        # --- 2. Make the slider robust to the sentinel value ---
+        # Create a temporary dataframe of only buyable players to set the slider's max
+        buyable_players = scouted_matrix[scouted_matrix['ValueNum'] < 2_000_000_000]
+        max_val_possible = buyable_players['ValueNum'].max() if not buyable_players.empty else 100_000_000
+        
+        slider_max = min(max_val_possible, 200_000_000)
+
+        max_val_slider = st.slider(
+            "Maximum Transfer Value (€ Millions)", 
+            min_value=0.0, 
+            max_value=slider_max / 1_000_000, 
+            value=(10.0), 
+            step=0.5
+        ) * 1_000_000
 
     # --- 4. Core Logic: Find Upgrades ---
     filtered_scouts = scouted_matrix[
