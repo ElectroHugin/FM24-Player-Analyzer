@@ -40,18 +40,46 @@ def load_data():
     return pd.DataFrame(players) if players else None
 
 def parse_and_update_data(file):
-    # --- START OF CHANGE: Add the backup call ---
-
-    # The very first step is to create a safe backup
+    from .sqlite_db import bulk_upsert_players, create_database_backup, get_all_players
+    
     create_database_backup()
-    # --- END OF CHANGE ---
     
     html_df = parse_html_table(file)
-    if html_df is None:
-        return None
+    if html_df is None: return None
 
-    # --- (The rest of the function is the same as your high-performance version) ---
-    inverted_mapping = {v: k for k, v in attribute_mapping.items()}
+    # --- START OF FINAL, TWO-WAY RECONCILIATION LOGIC ---
+    
+    existing_players = get_all_players()
+    # Create two maps for fast lookups in both directions: {id: name}
+    existing_numeric_map = {p['Unique ID']: p['Name'] for p in existing_players if not p['Unique ID'].startswith('r-')}
+    existing_r_map = {p['Unique ID']: p['Name'] for p in existing_players if p['Unique ID'].startswith('r-')}
+
+    def normalize_id(row):
+        incoming_id = str(row['UID'])
+        incoming_name = row['Name']
+
+        # Case 1: Incoming ID is 'r-12345'
+        if incoming_id.startswith('r-'):
+            numeric_part = incoming_id[2:]
+            # If a numeric version exists with the same name, merge onto it.
+            if numeric_part in existing_numeric_map and existing_numeric_map[numeric_part] == incoming_name:
+                return numeric_part
+        
+        # Case 2: Incoming ID is '12345'
+        else:
+            r_version = f"r-{incoming_id}"
+            # If an 'r-' version exists with the same name, merge onto it.
+            if r_version in existing_r_map and existing_r_map[r_version] == incoming_name:
+                return r_version
+        
+        # If no match is found, keep the original ID.
+        return incoming_id
+
+    # We apply the function row-wise (axis=1) because it needs both ID and Name
+    html_df['UID'] = html_df.apply(normalize_id, axis=1)
+    # --- END OF FINAL, TWO-WAY RECONCILIATION LOGIC ---
+
+    # The rest of the function is correct and unchanged
     html_df.rename(columns=attribute_mapping, inplace=True)
 
     known_columns = set(attribute_mapping.values())
