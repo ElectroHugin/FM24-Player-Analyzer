@@ -20,151 +20,145 @@ def init_db():
     conn = connect_db()
     cursor = conn.cursor()
     
+    # --- MIGRATION BLOCK 1: Fix Players Table Structure & Deduplicate ---
+    # This must run first to ensure the table has a primary key before we add columns.
     cursor.execute("CREATE TABLE IF NOT EXISTS players ('Unique ID' TEXT, 'Assigned Roles' TEXT)")
     
     cursor.execute("PRAGMA table_info(players)")
     columns_info = cursor.fetchall()
-    # Check if "Unique ID" is the primary key. In PRAGMA, the 6th item (index 5) is the pk flag.
     pk_info = next((col for col in columns_info if col[1] == 'Unique ID'), None)
     
-    # If the pk flag is not 1, the table is old and needs migration.
-    if not pk_info or pk_info[5] != 1:
-        st.warning("Duplicate player data detected. Performing a safe, one-time cleanup...")
-        with st.spinner("Deduplicating players and rebuilding table..."):
+    if not pk_info or pk_info[5] != 1: # Checks if 'Unique ID' is the primary key
+        st.warning("Outdated player table detected. Performing a safe, one-time cleanup...")
+        with st.spinner("Deduplicating players and rebuilding table structure..."):
             try:
-                # Rename old table to preserve data
                 cursor.execute("ALTER TABLE players RENAME TO players_old")
+                cursor.execute("CREATE TABLE players (\"Unique ID\" TEXT PRIMARY KEY, \"Assigned Roles\" TEXT)")
                 
-                # Create the new table with the correct PRIMARY KEY
-                cursor.execute("""
-                    CREATE TABLE players (
-                        "Unique ID" TEXT PRIMARY KEY, 
-                        "Assigned Roles" TEXT
-                    )
-                """)
-                
-                # Get all columns from the old table to copy them dynamically
                 cursor.execute("PRAGMA table_info(players_old)")
                 old_columns = [col[1] for col in cursor.fetchall()]
-                
-                # Copy and deduplicate data from old to new table.
-                # For each Unique ID, we take the record with the longest 'Name' field,
-                # which is a good heuristic for the most complete record.
                 col_str = ", ".join([f'"{c}"' for c in old_columns])
+                
+                # This intelligent query keeps the most complete record for each duplicate player
                 cursor.execute(f"""
                     INSERT INTO players ({col_str})
                     SELECT {col_str} FROM players_old
                     WHERE ROWID IN (
-                        SELECT MAX(ROWID) FROM players_old GROUP BY "Unique ID"
+                        SELECT ROWID FROM (
+                            SELECT ROWID, "Unique ID",
+                            ROW_NUMBER() OVER(PARTITION BY "Unique ID" ORDER BY CASE WHEN "Assigned Roles" IS NOT NULL AND "Assigned Roles" != '[]' THEN 0 ELSE 1 END, ROWID DESC) as rn
+                            FROM players_old
+                        ) WHERE rn = 1
                     )
                 """)
-
-                # Drop the temporary old table
                 cursor.execute("DROP TABLE players_old")
                 conn.commit()
-                
-                # Rerun to apply all other migrations and load clean data
-                st.cache_data.clear()
-                st.success("Database cleanup successful! Duplicate players removed. The app will now reload.")
-                st.rerun()
-
+                st.toast("Player table rebuilt successfully.", icon="✅")
             except Exception as e:
-                # If anything fails, restore the old table
                 cursor.execute("DROP TABLE IF EXISTS players")
                 cursor.execute("ALTER TABLE players_old RENAME TO players")
                 st.error(f"Database cleanup failed: {e}. Your original data has been restored.")
                 st.stop()
-                
-    cursor.execute("PRAGMA table_info(players)")
-    existing_columns = [col[1] for col in cursor.fetchall()]
-    for col_name in attribute_mapping.values():
-        if col_name not in existing_columns:
-            cursor.execute(f'ALTER TABLE players ADD COLUMN "{col_name}" TEXT')
-    
-    if "primary_role" not in existing_columns:
-        cursor.execute('ALTER TABLE players ADD COLUMN "primary_role" TEXT')
-    if "natural_positions" not in existing_columns:
-        cursor.execute('ALTER TABLE players ADD COLUMN "natural_positions" TEXT')
-    if "transfer_status" not in existing_columns:
-        cursor.execute('ALTER TABLE players ADD COLUMN "transfer_status" INTEGER DEFAULT 0')
-    if "loan_status" not in existing_columns:
-        cursor.execute('ALTER TABLE players ADD COLUMN "loan_status" INTEGER DEFAULT 0')
-    
-    OLD_APT_COL, NEW_APT_COL = "agreed_playing_time", "Agreed Playing Time"
-    if OLD_APT_COL in existing_columns:
-        if NEW_APT_COL not in existing_columns:
-            cursor.execute(f'ALTER TABLE players RENAME COLUMN "{OLD_APT_COL}" TO "{NEW_APT_COL}"')
-        else:
-            cursor.execute(f'UPDATE players SET "{NEW_APT_COL}" = "{OLD_APT_COL}" WHERE "{NEW_APT_COL}" IS NULL OR "{NEW_APT_COL}" = ""')
-            cursor.execute(f'ALTER TABLE players DROP COLUMN "{OLD_APT_COL}"')
 
-    # --- 2. Settings Table (Complete and Unabridged) ---
+    # --- MIGRATION BLOCK 2: Add All Missing Columns to the (Now Clean) Players Table ---
+    cursor.execute("PRAGMA table_info(players)")
+    existing_columns = {col[1] for col in cursor.fetchall()}
+    
+    # Master list of all columns that should exist
+    all_player_columns = set(attribute_mapping.values()) | {"primary_role", "natural_positions", "transfer_status", "loan_status"}
+    
+    for col_name in all_player_columns:
+        if col_name not in existing_columns:
+            # Wrap in try-except in case an old migration already handled it partially
+            try:
+                cursor.execute(f'ALTER TABLE players ADD COLUMN "{col_name}" TEXT')
+            except sqlite3.OperationalError:
+                pass # Column likely already exists, ignore
+
+    # Legacy migration for old agreed_playing_time column name
+    if "agreed_playing_time" in existing_columns:
+        try:
+            cursor.execute(f'UPDATE players SET "Agreed Playing Time" = agreed_playing_time WHERE "Agreed Playing Time" IS NULL')
+            cursor.execute('ALTER TABLE players DROP COLUMN "agreed_playing_time"')
+        except sqlite3.OperationalError:
+            pass # Fails if column was already removed, which is fine
+
+    # --- MIGRATION BLOCK 3: Create Settings Table ---
     cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
 
-    # --- 3. DWRS RATINGS TABLE - FINAL, NON-DESTRUCTIVE MIGRATION (Complete and Unabridged) ---
-    correct_schema = """
+    # --- MIGRATION BLOCK 4: Merge Newgen Duplicates ('r-' vs numeric IDs) ---
+    cursor.execute("SELECT value FROM settings WHERE key = 'newgen_merge_v1_complete'")
+    if not cursor.fetchone():
+        st.info("Performing a one-time merge of duplicate newgen players...")
+        with st.spinner("Checking for and merging records..."):
+            cursor.execute("SELECT \"Unique ID\", Name, \"Assigned Roles\", \"Agreed Playing Time\", primary_role, natural_positions FROM players WHERE \"Unique ID\" NOT LIKE 'r-%'")
+            numeric_players = {row[0]: {'Name': row[1], 'Assigned Roles': row[2], 'APT': row[3], 'Primary Role': row[4], 'Natural Pos': row[5]} for row in cursor.fetchall()}
+            cursor.execute("SELECT \"Unique ID\", Name FROM players WHERE \"Unique ID\" LIKE 'r-%'")
+            r_players = {row[0]: row[1] for row in cursor.fetchall()}
+            
+            ids_to_delete, updates_to_make = [], []
+            for r_id, r_name in r_players.items():
+                numeric_part = r_id[2:]
+                if numeric_part in numeric_players and numeric_players[numeric_part]['Name'] == r_name:
+                    ids_to_delete.append(numeric_part)
+                    valuable_data = numeric_players[numeric_part]
+                    updates_to_make.append((valuable_data['Assigned Roles'], valuable_data['APT'], valuable_data['Primary Role'], valuable_data['Natural Pos'], r_id))
+            
+            if updates_to_make:
+                cursor.executemany('UPDATE players SET "Assigned Roles"=?, "Agreed Playing Time"=?, primary_role=?, natural_positions=? WHERE "Unique ID"=?', updates_to_make)
+            if ids_to_delete:
+                placeholders = ', '.join('?' for _ in ids_to_delete)
+                cursor.execute(f'DELETE FROM players WHERE "Unique ID" IN ({placeholders})', ids_to_delete)
+                cursor.execute(f'DELETE FROM dwrs_ratings WHERE unique_id IN ({placeholders})', ids_to_delete)
+                st.toast(f"Merged {len(ids_to_delete)} duplicate newgen records.", icon="✨")
+
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ('newgen_merge_v1_complete', 'true'))
+            conn.commit()
+
+    # --- MIGRATION BLOCK 5: DWRS Ratings Table Structure ---
+    correct_dwrs_schema = """
         CREATE TABLE dwrs_ratings (
             unique_id TEXT, role TEXT, dwrs_absolute REAL, dwrs_normalized TEXT, timestamp TEXT,
             PRIMARY KEY (unique_id, role, timestamp)
         )
     """
-    
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dwrs_ratings'")
     table_exists = cursor.fetchone()
     
-    needs_migration = not table_exists
+    needs_dwrs_migration = not table_exists
     if table_exists:
         cursor.execute("PRAGMA table_info(dwrs_ratings)")
         columns_info = cursor.fetchall()
         pk_count = sum(1 for col in columns_info if col[5] > 0)
-        column_names = [col[1] for col in columns_info]
+        column_names = {col[1] for col in columns_info}
         if pk_count != 3 or "dwrs_absolute" not in column_names:
-            needs_migration = True
+            needs_dwrs_migration = True
 
-    if needs_migration:
-        st.warning("Outdated database schema detected. Performing a safe, one-time upgrade...")
+    if needs_dwrs_migration:
+        st.warning("Outdated ratings table detected. Performing safe upgrade...")
         with st.spinner("Preserving historical data and rebuilding ratings table..."):
             try:
-                # Rename the old table to keep the data safe
                 cursor.execute("ALTER TABLE dwrs_ratings RENAME TO dwrs_ratings_old")
-                
-                # Create the new table with the perfect schema
-                cursor.execute(correct_schema)
-                
-                # Check the structure of the old table
+                cursor.execute(correct_dwrs_schema)
                 cursor.execute("PRAGMA table_info(dwrs_ratings_old)")
                 old_columns = [col[1] for col in cursor.fetchall()]
                 
-                # Copy the data from the old table to the new one
                 if "dwrs_absolute" in old_columns:
-                    # If the old table was only missing the PK, we can copy everything
-                    cursor.execute("""
-                        INSERT INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp)
-                        SELECT unique_id, role, dwrs_absolute, dwrs_normalized, timestamp FROM dwrs_ratings_old
-                    """)
+                    cursor.execute("INSERT INTO dwrs_ratings SELECT * FROM dwrs_ratings_old")
                 else:
-                    # If the absolute column was missing, add it with a default
-                    cursor.execute("""
-                        INSERT INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp)
-                        SELECT unique_id, role, 0.0, dwrs_normalized, timestamp FROM dwrs_ratings_old
-                    """)
-
-                # Drop the old table now that the data is safe
+                    cursor.execute("INSERT INTO dwrs_ratings (unique_id, role, dwrs_absolute, dwrs_normalized, timestamp) SELECT unique_id, role, 0.0, dwrs_normalized, timestamp FROM dwrs_ratings_old")
+                
                 cursor.execute("DROP TABLE dwrs_ratings_old")
                 conn.commit()
-
-                # Optional: Run an update to backfill the correct absolute values
-
+                
                 df = pd.DataFrame(get_all_players())
                 if not df.empty:
                     update_dwrs_ratings(df, get_valid_roles())
 
                 st.cache_data.clear()
-                st.success("Database upgrade successful! Your history is safe. The app will now reload.")
+                st.success("Database upgrade successful! The app will now reload.")
                 st.rerun()
-
             except Exception as e:
-                # If anything fails, try to restore the old table
                 cursor.execute("DROP TABLE IF EXISTS dwrs_ratings")
                 cursor.execute("ALTER TABLE dwrs_ratings_old RENAME TO dwrs_ratings")
                 st.error(f"Database upgrade failed: {e}. Your original data has been restored.")
