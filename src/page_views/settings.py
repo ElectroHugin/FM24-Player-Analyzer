@@ -13,7 +13,8 @@ from definitions_handler import PROJECT_ROOT
 from utils import calculate_contrast_ratio, get_available_databases
 from ui_components import clear_all_caches, display_custom_header
 from theme_handler import set_theme_toml
-from sqlite_db import update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics, get_club_identity, set_club_identity
+from sqlite_db import (update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics, get_club_identity, 
+                       set_club_identity, get_prunable_player_info, prune_scouted_players)
 from data_parser import load_data
 from constants import get_valid_roles
 
@@ -178,6 +179,42 @@ def settings_page():
             step=1,
             help="In the 'Best XI' calculator, this is the maximum number of different roles a single player can cover in the 'Additional Depth' section. A lower number encourages specialists, a higher number encourages versatile players."
         )
+
+    # --- START OF NEW DATABASE MAINTENANCE SECTION ---
+    with st.expander("💾 Database Maintenance"):
+        st.warning("⚠️ **Danger Zone:** Actions here permanently delete data.")
+        
+        st.subheader("Prune Low-Potential Scouted Players")
+        st.info("This tool will delete scouted players (not from your club or second team) whose single best DWRS rating is below the threshold you set. This is useful for cleaning up large databases of scouted players.")
+
+        prune_threshold = st.slider(
+            "DWRS Deletion Threshold",
+            min_value=30, max_value=70, value=50,
+            help="Any scouted player whose BEST role rating is BELOW this value will be deleted."
+        )
+
+        # Pre-calculate and show the impact of the deletion
+        count, max_rating = get_prunable_player_info(prune_threshold)
+        
+        if count > 0:
+            st.write(f"This action will permanently delete **{count}** scouted players.")
+            st.write(f"The best player to be deleted has a max rating of **{max_rating:.0f}%**.")
+        else:
+            st.write("No players match the current criteria for deletion.")
+
+        confirm = st.checkbox("I understand that this action is permanent and cannot be undone.")
+
+        if st.button("Prune Scouted Players", disabled=not confirm, type="primary"):
+            if confirm:
+                with st.spinner(f"Deleting {count} players from the database..."):
+                    deleted_count = prune_scouted_players(prune_threshold)
+                
+                if deleted_count >= 0:
+                    st.success(f"Successfully deleted {deleted_count} players.")
+                    clear_all_caches()
+                    st.rerun()
+                else:
+                    st.error("The pruning process failed. Your data has not been changed.")
 
     with st.expander("⚙️ Database Settings"):
         db_action = st.radio("Action", ["Select Existing Database", "Create New Database"], horizontal=True)

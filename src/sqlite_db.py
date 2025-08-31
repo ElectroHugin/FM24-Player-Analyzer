@@ -3,10 +3,14 @@
 import sqlite3
 from datetime import datetime
 import pandas as pd
-from constants import attribute_mapping, get_valid_roles
 import ast
-from config_handler import get_db_file
 import streamlit as st
+import shutil
+import os
+
+from definitions_handler import PROJECT_ROOT
+from constants import attribute_mapping, get_valid_roles
+from config_handler import get_db_file
 
 def connect_db():
     return sqlite3.connect(get_db_file())
@@ -16,13 +20,61 @@ def init_db():
     conn = connect_db()
     cursor = conn.cursor()
     
-    # --- 1. Player Table Migration (Complete and Unabridged) ---
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS players (
-            "Unique ID" TEXT PRIMARY KEY, 
-            "Assigned Roles" TEXT
-        )
-    """)
+    cursor.execute("CREATE TABLE IF NOT EXISTS players ('Unique ID' TEXT, 'Assigned Roles' TEXT)")
+    
+    cursor.execute("PRAGMA table_info(players)")
+    columns_info = cursor.fetchall()
+    # Check if "Unique ID" is the primary key. In PRAGMA, the 6th item (index 5) is the pk flag.
+    pk_info = next((col for col in columns_info if col[1] == 'Unique ID'), None)
+    
+    # If the pk flag is not 1, the table is old and needs migration.
+    if not pk_info or pk_info[5] != 1:
+        st.warning("Duplicate player data detected. Performing a safe, one-time cleanup...")
+        with st.spinner("Deduplicating players and rebuilding table..."):
+            try:
+                # Rename old table to preserve data
+                cursor.execute("ALTER TABLE players RENAME TO players_old")
+                
+                # Create the new table with the correct PRIMARY KEY
+                cursor.execute("""
+                    CREATE TABLE players (
+                        "Unique ID" TEXT PRIMARY KEY, 
+                        "Assigned Roles" TEXT
+                    )
+                """)
+                
+                # Get all columns from the old table to copy them dynamically
+                cursor.execute("PRAGMA table_info(players_old)")
+                old_columns = [col[1] for col in cursor.fetchall()]
+                
+                # Copy and deduplicate data from old to new table.
+                # For each Unique ID, we take the record with the longest 'Name' field,
+                # which is a good heuristic for the most complete record.
+                col_str = ", ".join([f'"{c}"' for c in old_columns])
+                cursor.execute(f"""
+                    INSERT INTO players ({col_str})
+                    SELECT {col_str} FROM players_old
+                    WHERE ROWID IN (
+                        SELECT MAX(ROWID) FROM players_old GROUP BY "Unique ID"
+                    )
+                """)
+
+                # Drop the temporary old table
+                cursor.execute("DROP TABLE players_old")
+                conn.commit()
+                
+                # Rerun to apply all other migrations and load clean data
+                st.cache_data.clear()
+                st.success("Database cleanup successful! Duplicate players removed. The app will now reload.")
+                st.rerun()
+
+            except Exception as e:
+                # If anything fails, restore the old table
+                cursor.execute("DROP TABLE IF EXISTS players")
+                cursor.execute("ALTER TABLE players_old RENAME TO players")
+                st.error(f"Database cleanup failed: {e}. Your original data has been restored.")
+                st.stop()
+                
     cursor.execute("PRAGMA table_info(players)")
     existing_columns = [col[1] for col in cursor.fetchall()]
     for col_name in attribute_mapping.values():
@@ -102,7 +154,7 @@ def init_db():
                 conn.commit()
 
                 # Optional: Run an update to backfill the correct absolute values
-                from ..constants import get_valid_roles
+
                 df = pd.DataFrame(get_all_players())
                 if not df.empty:
                     update_dwrs_ratings(df, get_valid_roles())
@@ -219,6 +271,69 @@ def update_player(mapped_player_data):
 
     # --- END OF NEW, ROBUST LOGIC ---
 
+    conn.commit()
+    conn.close()
+
+def bulk_upsert_players(players_data):
+    """
+    Performs a high-performance bulk "upsert" (update or insert) of player data.
+    This is dramatically faster than single-row operations.
+    """
+    if not players_data:
+        return
+
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    # 1. Get all existing player IDs from the DB in one query for fast checking
+    cursor.execute('SELECT "Unique ID" FROM players')
+    existing_ids = {row[0] for row in cursor.fetchall()}
+
+    # 2. Separate players into two lists: those to update and those to insert
+    players_to_update = []
+    players_to_insert = []
+
+    for player in players_data:
+        if player.get('Unique ID') in existing_ids:
+            players_to_update.append(player)
+        else:
+            players_to_insert.append(player)
+
+    # 3. Perform bulk UPDATE for existing players
+    if players_to_update:
+        # Get the columns to update from the first player dict (assumes they are all the same)
+        update_cols = [col for col in players_to_update[0].keys() if col != 'Unique ID']
+        set_clauses = ", ".join([f'"{col}" = ?' for col in update_cols])
+        
+        # Prepare data as a list of tuples for executemany
+        update_data = [
+            tuple(p[col] for col in update_cols) + (p['Unique ID'],)
+            for p in players_to_update
+        ]
+        
+        query = f'UPDATE players SET {set_clauses} WHERE "Unique ID" = ?'
+        cursor.executemany(query, update_data)
+
+    # 4. Perform bulk INSERT for new players
+    if players_to_insert:
+        # Get columns from the first player and ensure 'Assigned Roles' is included
+        insert_cols = list(players_to_insert[0].keys())
+        if 'Assigned Roles' not in insert_cols:
+            insert_cols.append('Assigned Roles')
+
+        col_names_str = ", ".join([f'"{col}"' for col in insert_cols])
+        placeholders_str = ", ".join(["?" for _ in insert_cols])
+        
+        # Prepare data, adding an empty list for 'Assigned Roles' for new players
+        insert_data = [
+            tuple(p.get(col, '[]') for col in insert_cols)
+            for p in players_to_insert
+        ]
+
+        query = f'INSERT INTO players ({col_names_str}) VALUES ({placeholders_str})'
+        cursor.executemany(query, insert_data)
+
+    # 5. Commit the entire transaction ONCE and close
     conn.commit()
     conn.close()
 
@@ -481,3 +596,144 @@ def set_club_identity(full_name, stadium_name):
         
     conn.commit()
     conn.close()
+
+def get_prunable_player_info(dwrs_threshold):
+    """
+    Safely calculates how many scouted players are eligible for deletion
+    without actually deleting them.
+    A player is prunable if their best role is below the threshold.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    user_club = get_user_club()
+    second_team_club = get_second_team_club()
+    
+    # This query finds the maximum rating for each player
+    query = """
+        SELECT
+            p."Unique ID",
+            p.Club,
+            MAX(CAST(REPLACE(dr.dwrs_normalized, '%', '') AS REAL)) as max_dwrs
+        FROM players p
+        LEFT JOIN dwrs_ratings dr ON p."Unique ID" = dr.unique_id
+        GROUP BY p."Unique ID"
+    """
+    
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    # Filter for scouted players
+    exclude_clubs = [user_club]
+    if second_team_club:
+        exclude_clubs.append(second_team_club)
+    scouted_df = df[~df['Club'].isin(exclude_clubs)]
+    
+    # Find players whose best role is below the threshold
+    # We use fillna(0) to include players with no ratings at all
+    prunable_df = scouted_df[scouted_df['max_dwrs'].fillna(0) < dwrs_threshold]
+    
+    count = len(prunable_df)
+    max_rating_prunable = prunable_df['max_dwrs'].max() if count > 0 else 0
+    
+    return count, max_rating_prunable
+
+def prune_scouted_players(dwrs_threshold):
+    """
+    Finds and permanently deletes scouted players whose best role is below the threshold.
+    Deletes from both 'players' and 'dwrs_ratings' tables in safe batches.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    user_club = get_user_club()
+    second_team_club = get_second_team_club()
+
+    # This part to find the IDs is safe and correct.
+    query = """
+        SELECT p."Unique ID"
+        FROM players p
+        LEFT JOIN (
+            SELECT unique_id, MAX(CAST(REPLACE(dwrs_normalized, '%', '') AS REAL)) as max_dwrs
+            FROM dwrs_ratings
+            GROUP BY unique_id
+        ) dr ON p."Unique ID" = dr.unique_id
+        WHERE p.Club NOT IN (?, ?) AND IFNULL(dr.max_dwrs, 0) < ?
+    """
+    params = [user_club, second_team_club or '', dwrs_threshold]
+    cursor.execute(query, params)
+    ids_to_delete = [row[0] for row in cursor.fetchall()]
+    
+    if not ids_to_delete:
+        conn.close()
+        return 0
+
+    # --- START OF BATCH DELETION LOGIC ---
+    BATCH_SIZE = 900 # A safe number well below the SQLite limit of 999
+    
+    try:
+        # Loop through the list of IDs in chunks of BATCH_SIZE
+        for i in range(0, len(ids_to_delete), BATCH_SIZE):
+            # Get the current batch of IDs
+            batch_ids = ids_to_delete[i:i + BATCH_SIZE]
+            
+            # Create placeholders specifically for this smaller batch
+            placeholders = ', '.join('?' for _ in batch_ids)
+            
+            # Execute the delete operations for the current batch
+            cursor.execute(f'DELETE FROM players WHERE "Unique ID" IN ({placeholders})', batch_ids)
+            cursor.execute(f'DELETE FROM dwrs_ratings WHERE unique_id IN ({placeholders})', batch_ids)
+            
+        # If all batches were successful, commit the entire transaction
+        conn.commit()
+    except Exception as e:
+        conn.rollback() # If any batch fails, undo everything
+        st.error(f"An error occurred during deletion: {e}")
+        return -1
+    finally:
+        conn.close()
+    # --- END OF BATCH DELETION LOGIC ---
+        
+    return len(ids_to_delete)
+
+def create_database_backup():
+    """
+    Creates a timestamped backup of the current database file.
+    Manages a rotation to keep only the 3 most recent backups.
+    """
+    db_file = get_db_file()
+    if not os.path.exists(db_file):
+        return # Nothing to back up
+
+    # 1. Define paths and create the backup folder
+    db_name_part = os.path.splitext(os.path.basename(db_file))[0]
+    backup_folder = os.path.join(PROJECT_ROOT, 'backups')
+    os.makedirs(backup_folder, exist_ok=True)
+
+    # 2. Create a timestamped backup filename
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    backup_filename = f"{db_name_part}_backup_{timestamp}.db"
+    backup_filepath = os.path.join(backup_folder, backup_filename)
+
+    # 3. Copy the current database to the backup location
+    try:
+        shutil.copy2(db_file, backup_filepath)
+        st.toast(f"Database backup created: {backup_filename}", icon="💾")
+    except Exception as e:
+        st.warning(f"Could not create database backup. Error: {e}")
+        return # Stop if backup fails
+
+    # 4. Clean up old backups (rotation)
+    try:
+        # Get all backup files for the current database, sorted oldest to newest
+        all_backups = sorted([
+            f for f in os.listdir(backup_folder) 
+            if f.startswith(f"{db_name_part}_backup_") and f.endswith(".db")
+        ])
+        
+        # If we have more than 3 backups, delete the oldest ones
+        while len(all_backups) > 3:
+            oldest_backup = all_backups.pop(0) # Get the first (oldest) file
+            os.remove(os.path.join(backup_folder, oldest_backup))
+    except Exception as e:
+        st.warning(f"Could not clean up old backups. Error: {e}")

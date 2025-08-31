@@ -4,7 +4,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from constants import (attribute_mapping, get_valid_roles, ROLE_ANALYSIS_COLUMNS, 
                      PLAYER_ROLE_MATRIX_COLUMNS, WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS)
-from sqlite_db import init_db, update_player, get_all_players, get_latest_dwrs_ratings
+from sqlite_db import (init_db, update_player, get_all_players, get_latest_dwrs_ratings, 
+                       bulk_upsert_players, create_database_backup)
 from analytics import calculate_dwrs
 from config_handler import get_weight
 import streamlit as st
@@ -39,33 +40,33 @@ def load_data():
     return pd.DataFrame(players) if players else None
 
 def parse_and_update_data(file):
+    # --- START OF CHANGE: Add the backup call ---
+
+    # The very first step is to create a safe backup
+    create_database_backup()
+    # --- END OF CHANGE ---
+    
     html_df = parse_html_table(file)
-    if html_df is None: return None
-    init_db()
-# --- NEW ROBUST LOGIC ---
-    # Create a set of all the column names our application officially recognizes from constants.py.
-    # This is our "master list" of which columns are safe to import.
+    if html_df is None:
+        return None
+
+    # --- (The rest of the function is the same as your high-performance version) ---
+    inverted_mapping = {v: k for k, v in attribute_mapping.items()}
+    html_df.rename(columns=attribute_mapping, inplace=True)
+
     known_columns = set(attribute_mapping.values())
+    cols_to_keep = [col for col in html_df.columns if col in known_columns or col == 'Unique ID']
+    df_filtered = html_df[cols_to_keep]
 
-    for _, row in html_df.iterrows():
-        player_data = row.to_dict()
+    APP_MANAGED_COLUMNS = ["Assigned Roles", "primary_role", "natural_positions", "transfer_status", "loan_status"]
+    cols_from_html = [col for col in df_filtered.columns if col not in APP_MANAGED_COLUMNS]
+    df_final = df_filtered[cols_from_html]
 
-        # Step 1: Map the columns from the HTML file using the abbreviations.
-        # This will produce keys like "Pace", "Acceleration", but also "Days Old", "Ability", etc.
-        mapped_player_data = {attribute_mapping.get(k, k): v for k, v in player_data.items()}
+    players_to_upsert = df_final.to_dict('records')
 
-        # Step 2: Filter the data. We create a new dictionary that ONLY includes
-        # the key-value pairs where the key is in our "master list" (known_columns).
-        # This safely discards "Days Old", "Potential", and any other unknown columns.
-        final_player_data = {k: v for k, v in mapped_player_data.items() if k in known_columns}
-
-        # Step 3: We only try to save the player to the database if a valid Unique ID exists.
-        # This prevents errors from corrupt rows in the file.
-        if 'Unique ID' in final_player_data and final_player_data['Unique ID']:
-            update_player(final_player_data)
-
-    # --- END NEW LOGIC ---
-
+    if players_to_upsert:
+        bulk_upsert_players(players_to_upsert)
+    
     return load_data()
 
 def get_filtered_players(filter_option="Unassigned Players", club_filter="All", position_filter="All", sort_column="Name", sort_ascending=True, user_club=None):
