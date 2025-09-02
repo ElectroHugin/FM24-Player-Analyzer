@@ -353,13 +353,24 @@ def set_primary_role(unique_id, role):
     conn.commit()
     conn.close()
 
-def update_dwrs_ratings(df, valid_roles):
+def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
     from analytics import calculate_dwrs
     from config_handler import get_weight
     from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS
     
     conn = connect_db()
     cursor = conn.cursor()
+
+    if player_ids_to_update:
+        # We only work with the subset of players who were in the last import
+        df_to_process = df[df['Unique ID'].isin(player_ids_to_update)]
+    else:
+        # If no IDs are provided, fall back to the old behavior (process everyone)
+        df_to_process = df
+    
+    if df_to_process.empty:
+        conn.close()
+        return
     
     weights = {cat: get_weight(cat.lower().replace(" ", "_"), default) for cat, default in WEIGHT_DEFAULTS.items()}
     gk_weights = {cat: get_weight("gk_" + cat.lower().replace(" ", "_"), default) for cat, default in GK_WEIGHT_DEFAULTS.items()}
@@ -376,7 +387,7 @@ def update_dwrs_ratings(df, valid_roles):
     latest_ratings_dict = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
     
     ratings_to_insert = []
-    for _, player in df.iterrows():
+    for _, player in df_to_process.iterrows():
         player_dict = player.to_dict()
         roles = player_dict.get('Assigned Roles', [])
         if not isinstance(roles, list): roles = []

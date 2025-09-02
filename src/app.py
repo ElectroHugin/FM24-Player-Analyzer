@@ -145,9 +145,9 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
             if submitted and uploaded_file is not None:
                 with st.spinner("Processing file..."):
                     # Step 1: Save player attributes to the database
-                    df_from_html = parse_and_update_data(uploaded_file)
+                    full_df, affected_ids = parse_and_update_data(uploaded_file)
                 
-                if df_from_html is None:
+                if full_df is None:
                     st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
                 else:
                     # Step 2 (Optional): Auto-assign roles if the box is checked
@@ -159,10 +159,13 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
 
                     # Step 3: Now, calculate DWRS for everyone.
                     # We reload the data to make sure we have the newly assigned roles.
-                    with st.spinner("Calculating DWRS for all players..."):
+                    with st.spinner(f"Calculating DWRS for {len(affected_ids)} updated players..."):
                         clear_all_caches()
-                        final_df = load_data() # Reload data to get newly assigned roles
-                        update_dwrs_ratings(final_df, get_valid_roles())
+                        # We need the most up-to-date data for the calculation
+                        final_df = load_data()
+                        if final_df is not None:
+                            # Pass the affected_ids to the function
+                            update_dwrs_ratings(final_df, get_valid_roles(), affected_ids)
 
                     st.success("Data updated and ratings calculated successfully!")
                     st.rerun()

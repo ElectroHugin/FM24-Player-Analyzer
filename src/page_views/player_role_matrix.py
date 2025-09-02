@@ -202,6 +202,10 @@ def player_role_matrix_page():
                 (filtered_df[sort_by] <= max_dwrs)
             ]
 
+        search_term = st.text_input("Search by Name in Scouted Players", key="search_scouted")
+        if search_term:
+            filtered_df = filtered_df[filtered_df['Name'].str.contains(search_term, case=False, na=False)]
+
         # Apply sorting
         is_ascending = (sort_direction == "Ascending")
         if sort_by == "Name":
