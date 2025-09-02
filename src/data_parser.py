@@ -76,7 +76,8 @@ def parse_and_update_data(file):
 
     # We apply the function row-wise (axis=1) because it needs both ID and Name
     html_df['UID'] = html_df.apply(normalize_id, axis=1)
-    # --- END OF FINAL, TWO-WAY RECONCILIATION LOGIC ---
+
+    affected_ids = html_df['UID'].astype(str).tolist()
 
     # The rest of the function is correct and unchanged
     html_df.rename(columns=attribute_mapping, inplace=True)
@@ -94,7 +95,7 @@ def parse_and_update_data(file):
     if players_to_upsert:
         bulk_upsert_players(players_to_upsert)
     
-    return load_data()
+    return load_data(), affected_ids
 
 def get_filtered_players(filter_option="Unassigned Players", club_filter="All", position_filter="All", sort_column="Name", sort_ascending=True, user_club=None):
     players = get_all_players()
