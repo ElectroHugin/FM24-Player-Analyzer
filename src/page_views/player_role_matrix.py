@@ -3,11 +3,12 @@
 import streamlit as st
 import pandas as pd
 from io import StringIO
+import math
 
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
-from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value
+from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float, format_role_display
 from ui_components import display_custom_header
 
 
@@ -157,11 +158,94 @@ def player_role_matrix_page():
         if second_team_club and show_second_team:
             prepare_and_display_df(second_team_matrix, f"Players from {second_team_club} (Second Team)", "second_team", my_club_display_cols, use_full_style=True)
 
-    st.subheader("Scouted Players Styling")
-    top_n_to_style = st.slider(
-        "Highlight Top N Players per Role", 
-        min_value=5, max_value=50, value=20, step=5,
-        help="To maintain performance on large lists, only the top N players for each role will be color-graded."
-    )
+    # --- START OF NEW, ADVANCED SCOUTING CENTER ---
+    st.subheader("Scouted Players")
+    
+    if scouted_matrix.empty:
+        st.info("No scouted players found.")
+    else:
+        with st.expander("🔍 Advanced Filtering & Sorting", expanded=True):
+            sort_c1, sort_c2 = st.columns([2, 1])
+            with sort_c1:
+                sort_options = ["Name"] + selected_roles
+                sort_by = st.selectbox(
+                    "Sort by", options=sort_options,
+                    format_func=lambda x: "Name" if x == "Name" else format_role_display(x)
+                )
+            with sort_c2:
+                sort_direction = st.radio("Direction", ["Descending", "Ascending"], horizontal=True, index=0)
 
-    prepare_and_display_df(scouted_matrix, "Scouted Players", "scouted", scouted_display_cols, use_full_style=False, top_n=top_n_to_style)
+            dwrs_c1, age_c2, val_c3 = st.columns(3)
+            with dwrs_c1:
+                min_dwrs, max_dwrs = st.slider("Filter by DWRS Rating (for selected sort role)", 0, 100, (20, 100))
+            with age_c2:
+                max_age = st.slider("Filter by Max Age", 15, 40, 30)
+            with val_c3:
+                scouted_matrix['ValueNum'] = scouted_matrix['Transfer Value'].apply(value_to_float)
+                buyable = scouted_matrix[scouted_matrix['ValueNum'] < 2_000_000_000]
+                max_val_possible = buyable['ValueNum'].max() if not buyable.empty else 100_000_000
+                slider_max = min(max_val_possible, 200_000_000)
+                max_value = st.slider("Filter by Max Value (€M)", 0.0, slider_max / 1_000_000, slider_max / 1_000_000, 0.5) * 1_000_000
+
+        # --- Apply Filtering and Sorting ---
+        scouted_matrix['AgeNum'] = pd.to_numeric(scouted_matrix['Age'], errors='coerce')
+        
+        # Apply filters
+        filtered_df = scouted_matrix[
+            (scouted_matrix['AgeNum'] <= max_age) &
+            (scouted_matrix['ValueNum'] <= max_value)
+        ].copy()
+        
+        if sort_by != "Name":
+            filtered_df = filtered_df[
+                (filtered_df[sort_by] >= min_dwrs) &
+                (filtered_df[sort_by] <= max_dwrs)
+            ]
+
+        # Apply sorting
+        is_ascending = (sort_direction == "Ascending")
+        if sort_by == "Name":
+            filtered_df['LastName'] = filtered_df['Name'].apply(get_last_name)
+            sorted_df = filtered_df.sort_values(by='LastName', ascending=is_ascending).drop(columns=['LastName'])
+        else:
+            sorted_df = filtered_df.sort_values(by=sort_by, ascending=is_ascending, na_position='last')
+        
+        # --- PAGINATION CONTROLS (TOP) ---
+        st.caption(f"Displaying {len(sorted_df)} matching players.")
+        
+        # Initialize session state for the page number
+        if 'matrix_page_num' not in st.session_state:
+            st.session_state.matrix_page_num = 1
+
+        rows_per_page = 30
+        total_pages = math.ceil(len(sorted_df) / rows_per_page) if rows_per_page > 0 else 1
+
+        # Ensure page number is within valid range
+        if st.session_state.matrix_page_num > total_pages:
+            st.session_state.matrix_page_num = 1
+        
+        page_c1_top, page_c2_top = st.columns([1, 3])
+        page_c1_top.number_input(
+            "Page:", min_value=1, max_value=max(1, total_pages),
+            key='matrix_page_num' # Link directly to session state
+        )
+        
+        # Slice the dataframe for the current page
+        start_idx = (st.session_state.matrix_page_num - 1) * rows_per_page
+        end_idx = start_idx + rows_per_page
+        df_paginated = sorted_df.iloc[start_idx:end_idx]
+
+        # --- Display and Full Styling ---
+        df_display = df_paginated[scouted_display_cols]
+        role_cols_df = [role for role in get_valid_roles() if role in df_display.columns]
+        
+        styler = df_display.style.format("{:.0f}", subset=role_cols_df, na_rep="-")
+        def smart_full_styler(column):
+            styles = [''] * len(column)
+            valid_indices = column.dropna().index
+            for index in valid_indices:
+                styles[column.index.get_loc(index)] = color_dwrs_by_value(column[index])
+            return styles
+        styler = styler.apply(smart_full_styler, subset=role_cols_df)
+        
+        st.dataframe(styler, use_container_width=True, hide_index=True)

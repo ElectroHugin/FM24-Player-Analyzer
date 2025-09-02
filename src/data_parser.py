@@ -40,7 +40,6 @@ def load_data():
     return pd.DataFrame(players) if players else None
 
 def parse_and_update_data(file):
-    from .sqlite_db import bulk_upsert_players, create_database_backup, get_all_players
     
     create_database_backup()
     
