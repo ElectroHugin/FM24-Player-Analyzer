@@ -34,6 +34,7 @@ MANIFEST
 # Database files
 # IMPORTANT: Prevents your personal player data from being committed.
 databases/*.db
+backups/*.db
 
 # Config file
 /config/config*

@@ -11,6 +11,32 @@ import matplotlib.cm as cm
 from constants import get_player_roles, get_valid_roles, get_position_to_role_mapping, MASTER_POSITION_MAP
 from definitions_loader import PROJECT_ROOT
 
+def value_to_float(value_str):
+    """
+    Converts a transfer value string (e.g., '€1.2M', 'Not for Sale') into a number.
+    'Not for Sale' is treated as a very large number.
+    """
+    UNBUYABLE_VALUE = 2_000_000_000 # Use a huge, finite number
+    
+    if not isinstance(value_str, str):
+        return 0.0
+    
+    if 'not for sale' in value_str.lower():
+        return UNBUYABLE_VALUE
+        
+    if ' - ' in value_str:
+        value_str = value_str.split(' - ')[0]
+    
+    value_str = value_str.replace('€', '').strip()
+    
+    try:
+        if 'M' in value_str:
+            return float(value_str.replace('M', '')) * 1_000_000
+        elif 'K' in value_str:
+            return float(value_str.replace('K', '')) * 1_000
+        return float(value_str) if value_str else 0.0
+    except ValueError:
+        return 0.0
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""

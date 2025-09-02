@@ -26,7 +26,7 @@ from ui_components import clear_all_caches, display_strength_grid, display_custo
 from data_parser import get_player_role_matrix
 from definitions_handler import PROJECT_ROOT
 from squad_logic import get_cached_squad_analysis
-from utils import  hex_to_rgb, format_role_display
+from utils import  hex_to_rgb, format_role_display, value_to_float
 from theme_handler import set_theme_toml
 from role_logic import auto_assign_roles_to_unassigned
 
@@ -204,31 +204,6 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     # --- 4. DISPLAY KPIS (Key Performance Indicators) ---
     st.markdown("---")
     st.subheader(f"Core Squad Overview (Starting XI + B-Team for '{selected_tactic}')")
-    
-    # Helper function to convert value strings like '€1.2M' to numbers
-    def value_to_float(value_str):
-        # Use a huge, finite number as a sentinel for "Not for Sale"
-        UNBUYABLE_VALUE = 2_000_000_000 
-        
-        if not isinstance(value_str, str):
-            return 0.0
-        
-        if 'not for sale' in value_str.lower():
-            return UNBUYABLE_VALUE
-            
-        if ' - ' in value_str:
-            value_str = value_str.split(' - ')[0]
-        
-        value_str = value_str.replace('€', '').strip()
-        
-        try:
-            if 'M' in value_str:
-                return float(value_str.replace('M', '')) * 1_000_000
-            elif 'K' in value_str:
-                return float(value_str.replace('K', '')) * 1_000
-            return float(value_str) if value_str else 0.0
-        except ValueError:
-            return 0.0
 
     core_squad_df['Transfer Value Num'] = core_squad_df['Transfer Value'].apply(value_to_float)
     core_squad_df['Age'] = pd.to_numeric(core_squad_df['Age'], errors='coerce')

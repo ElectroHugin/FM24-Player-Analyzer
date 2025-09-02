@@ -133,7 +133,8 @@ PLAYER_ROLE_MATRIX_COLUMNS = [
     "Right Foot",
     "Height",
     "Club",
-    "Transfer Value"
+    "Transfer Value",
+     "Wage"
 ]
 
 # Global stat categories for DWRS rating
