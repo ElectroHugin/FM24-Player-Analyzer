@@ -42,59 +42,58 @@ def load_data():
 def parse_and_update_data(file):
     
     create_database_backup()
-    
-    html_df = parse_html_table(file)
-    if html_df is None: return None
 
-    # --- START OF FINAL, TWO-WAY RECONCILIATION LOGIC ---
-    
+    html_df = parse_html_table(file)
+    if html_df is None:
+        return None, []
+
+    # --- START OF NEW, MORE ROBUST LOGIC ---
+
+    # 1. Check for and warn about duplicate columns from a bad FM View
+    if not html_df.columns.is_unique:
+        # Find the duplicate column names
+        duplicated_cols = html_df.columns[html_df.columns.duplicated()].unique().tolist()
+        st.warning(f"⚠️ **Warning:** Your uploaded HTML file contains duplicate columns: `{', '.join(duplicated_cols)}`. This is usually caused by a misconfigured view in Football Manager. Some player data may be missing. Please check your FM view file.")
+        # De-duplicate the columns, keeping the first instance
+        html_df = html_df.loc[:, ~html_df.columns.duplicated()]
+
+    # 2. Capture the original UIDs (Now safe from errors)
+    try:
+        affected_ids = [str(uid) for uid in html_df['UID']]
+    except KeyError:
+        st.error("The uploaded HTML file is missing the required 'UID' column. Please check your FM view file.")
+        return None, []
+
+    # 3. Perform the newgen ID reconciliation (this logic is correct)
     existing_players = get_all_players()
-    # Create two maps for fast lookups in both directions: {id: name}
     existing_numeric_map = {p['Unique ID']: p['Name'] for p in existing_players if not p['Unique ID'].startswith('r-')}
     existing_r_map = {p['Unique ID']: p['Name'] for p in existing_players if p['Unique ID'].startswith('r-')}
-
     def normalize_id(row):
-        incoming_id = str(row['UID'])
-        incoming_name = row['Name']
-
-        # Case 1: Incoming ID is 'r-12345'
+        incoming_id, incoming_name = str(row['UID']), row['Name']
         if incoming_id.startswith('r-'):
             numeric_part = incoming_id[2:]
-            # If a numeric version exists with the same name, merge onto it.
             if numeric_part in existing_numeric_map and existing_numeric_map[numeric_part] == incoming_name:
                 return numeric_part
-        
-        # Case 2: Incoming ID is '12345'
         else:
             r_version = f"r-{incoming_id}"
-            # If an 'r-' version exists with the same name, merge onto it.
             if r_version in existing_r_map and existing_r_map[r_version] == incoming_name:
                 return r_version
-        
-        # If no match is found, keep the original ID.
         return incoming_id
-
-    # We apply the function row-wise (axis=1) because it needs both ID and Name
     html_df['UID'] = html_df.apply(normalize_id, axis=1)
 
-    affected_ids = html_df['UID'].astype(str).tolist()
-
-    # The rest of the function is correct and unchanged
+    # 4. Rename, filter, and prepare for bulk upsert (this logic is correct)
     html_df.rename(columns=attribute_mapping, inplace=True)
-
     known_columns = set(attribute_mapping.values())
     cols_to_keep = [col for col in html_df.columns if col in known_columns or col == 'Unique ID']
     df_filtered = html_df[cols_to_keep]
-
     APP_MANAGED_COLUMNS = ["Assigned Roles", "primary_role", "natural_positions", "transfer_status", "loan_status"]
     cols_from_html = [col for col in df_filtered.columns if col not in APP_MANAGED_COLUMNS]
     df_final = df_filtered[cols_from_html]
-
     players_to_upsert = df_final.to_dict('records')
 
     if players_to_upsert:
         bulk_upsert_players(players_to_upsert)
-    
+
     return load_data(), affected_ids
 
 def get_filtered_players(filter_option="Unassigned Players", club_filter="All", position_filter="All", sort_column="Name", sort_ascending=True, user_club=None):

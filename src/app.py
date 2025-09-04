@@ -211,8 +211,14 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     core_squad_df['Transfer Value Num'] = core_squad_df['Transfer Value'].apply(value_to_float)
     core_squad_df['Age'] = pd.to_numeric(core_squad_df['Age'], errors='coerce')
     
-    total_value = core_squad_df['Transfer Value Num'].sum()
-    avg_value = core_squad_df['Transfer Value Num'].mean()
+    # Create a clean version of the value column specifically for summing,
+    # where "Not for Sale" (the huge number) is replaced with 0.
+    UNBUYABLE_VALUE = 2_000_000_000
+    core_squad_df['Value For Sum'] = core_squad_df['Transfer Value Num'].replace(UNBUYABLE_VALUE, 0.0)
+    
+    # Now, use this new, clean column for all calculations.
+    total_value = core_squad_df['Value For Sum'].sum()
+    avg_value = core_squad_df['Value For Sum'].mean()
     avg_age = core_squad_df['Age'].mean()
 
     col1, col2, col3, col4 = st.columns(4)
