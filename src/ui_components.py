@@ -3,7 +3,7 @@
 import streamlit as st
 
 from constants import MASTER_POSITION_MAP, APT_ABBREVIATIONS, get_tactic_layouts
-from sqlite_db import get_club_identity, get_user_club
+from sqlite_db import get_club_identity, get_user_club, get_national_team_settings
 from config_handler import get_db_name, get_theme_settings
 
 def clear_all_caches():
@@ -308,36 +308,51 @@ def display_strength_grid(positional_strengths, tactic, mode='night'):
 
 def display_custom_header(page_title=""):
     """
-    Displays a dynamic, personalized header using a three-column layout and theme colors.
+    Displays a dynamic, personalized header that adapts to the current
+    management mode (Club or National).
     """
-    # --- 1. Get all the necessary data and theme settings ---
-    full_name, stadium_name = get_club_identity()
-    user_club = get_user_club()
-    db_name = get_db_name()
-    display_name = full_name or user_club or "FM Dashboard"
+    # Check the session state to determine the current context.
+    # We use .get() for safety, defaulting to 'Club Management' if the state isn't set yet.
+    management_mode = st.session_state.get('management_mode', 'Club Management')
 
+    # --- 1. Get context-specific data based on the mode ---
+    if management_mode == 'National Management':
+        # Fetch national team data
+        full_name, nat_code, _ = get_national_team_settings()
+        display_name = full_name or "National Team"
+        # We can use the country code as a caption, or leave it blank
+        caption_text = f"({nat_code})" if nat_code else None
+    else: # Default to Club Management
+        # Fetch club data (original logic)
+        full_name, stadium_name = get_club_identity()
+        user_club = get_user_club()
+        display_name = full_name or user_club or "FM Dashboard"
+        caption_text = f"🏟️ {stadium_name}" if stadium_name else None
+
+    # --- Get theme and db info (common to both modes) ---
+    db_name = get_db_name()
     theme_settings = get_theme_settings()
     current_mode = theme_settings.get('current_mode', 'night')
     primary_color = theme_settings.get(f"{current_mode}_primary_color")
     text_color = theme_settings.get(f"{current_mode}_text_color")
 
-    # --- 2. Create the three-column layout ---
+    # --- 2. Create the three-column layout (structure is unchanged) ---
     with st.container():
         left, center, right = st.columns([2, 3, 1.5])
         
-        # --- Left Column: Club Identity ---
+        # --- Left Column: Dynamic Identity ---
         with left:
             st.markdown(f"<h2 style='color: {primary_color}; margin-bottom: -10px;'>{display_name}</h2>", unsafe_allow_html=True)
-            if stadium_name:
-                st.caption(f"🏟️ {stadium_name}")
+            # Display the caption only if it exists
+            if caption_text:
+                st.caption(caption_text)
         
-        # --- Center Column: Page Title ---
+        # --- Center Column: Page Title (unchanged) ---
         with center:
             if page_title:
-                # Add a top margin to help with vertical alignment
                 st.markdown(f"<h3 style='text-align: center; color: {text_color}; margin-top: 10px;'>{page_title}</h3>", unsafe_allow_html=True)
 
-        # --- Right Column: Save File Context ---
+        # --- Right Column: Save File Context (unchanged) ---
         with right:
             st.markdown("<p style='text-align: right; margin-bottom: -5px;'><small>Active Save File</small></p>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align: right;'><strong>{db_name}.db</strong></p>", unsafe_allow_html=True)

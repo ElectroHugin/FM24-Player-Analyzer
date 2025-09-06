@@ -49,7 +49,7 @@
             "VOL-A": "Segundo Volante (Attack)",
             "WL-S": "Winger Left (Support)",
             "WR-S": "Winger Right (Support)",
-            "BBM-S": "Box Box Midfielder (Support)"
+            "B2B-S": "Box-to-Box Midfielder (Support)"
         },
         "Attack": {
             "AF-A": "Advanced Forward (Attack)",
@@ -1274,7 +1274,7 @@
                 "Stamina"
             ]
         },
-        "BBM-S": {
+        "B2B-S": {
             "key": [
                 "Passing",
                 "Tackling",
@@ -1340,16 +1340,12 @@
             "IFBL-D"
         ],
         "WB (R)": [
-            "FBR-S",
-            "FBR-A",
             "IWBR-D",
             "IWBR-S",
             "IWBR-A",
             "IWBR-Au"
         ],
         "WB (L)": [
-            "FBL-S",
-            "FBL-A",
             "IWBL-D",
             "IWBL-S",
             "IWBL-A",
@@ -1361,7 +1357,7 @@
             "VOL-A"
         ],
         "M (C)": [
-            "BBM-S",
+            "B2B-S",
             "CM-S",
             "RPM-S"
         ],
@@ -1535,7 +1531,7 @@
             "STL": "AF-A",
             "DL": "IWBL-A",
             "DCR": "BPD-D",
-            "MCL": "BBM-S",
+            "MCL": "B2B-S",
             "AMR": "IFR-S",
             "DMCR": "DM-S",
             "DR": "FBR-A",

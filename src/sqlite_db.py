@@ -56,7 +56,7 @@ def init_db():
     # This block is now safe because the players table is guaranteed to exist correctly.
     cursor.execute("PRAGMA table_info(players)")
     existing_columns = {col[1] for col in cursor.fetchall()}
-    all_player_columns = set(attribute_mapping.values()) | {"primary_role", "natural_positions", "transfer_status", "loan_status"}
+    all_player_columns = set(attribute_mapping.values()) | {"primary_role", "natural_positions", "transfer_status", "loan_status", "Nationality", "Second Nationality"}
     for col_name in all_player_columns:
         if col_name not in existing_columns:
             try:
@@ -70,6 +70,13 @@ def init_db():
 
     # --- MIGRATION BLOCK 3: Create Settings Table ---
     cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+
+    # Create the table to store the IDs of players called up to the national squad.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS national_squad (
+            player_unique_id TEXT PRIMARY KEY
+        )
+    """)
 
     # --- MIGRATION BLOCK 4: Merge Newgen Duplicates ---
     # This logic is safe and unchanged.
@@ -719,3 +726,118 @@ def create_database_backup():
             os.remove(os.path.join(backup_folder, oldest_backup))
     except Exception as e:
         st.warning(f"Could not clean up old backups. Error: {e}")
+
+def get_national_team_settings():
+    """Fetches the national team's details from the settings table."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    settings = {}
+    keys = ['national_team_name', 'national_team_country_code', 'national_team_age_limit']
+    for key in keys:
+        cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+        result = cursor.fetchone()
+        settings[key] = result[0] if result else None
+    conn.close()
+    return settings['national_team_name'], settings['national_team_country_code'], settings['national_team_age_limit']
+
+def set_national_team_settings(name, country_code, age_limit):
+    """Saves the national team's details to the settings table."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    settings = {
+        "national_team_name": name,
+        "national_team_country_code": country_code,
+        "national_team_age_limit": age_limit
+    }
+    for key, value in settings.items():
+        if value:
+            cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
+        else:
+            cursor.execute('DELETE FROM settings WHERE key = ?', (key,))
+    conn.commit()
+    conn.close()
+
+def get_national_squad_ids():
+    """Fetches a set of all player IDs currently in the national squad."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT player_unique_id FROM national_squad')
+    # Return as a set for very fast 'in' checks
+    ids = {row[0] for row in cursor.fetchall()}
+    conn.close()
+    return ids
+
+def set_national_squad_ids(player_ids):
+    """
+    Clears the national squad and saves a new list of player IDs.
+    'player_ids' should be a list or set of strings.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    # Perform in a transaction for safety
+    try:
+        cursor.execute("DELETE FROM national_squad")
+        if player_ids:
+            # executemany expects a list of tuples
+            data_to_insert = [(pid,) for pid in player_ids]
+            cursor.executemany("INSERT INTO national_squad (player_unique_id) VALUES (?)", data_to_insert)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        st.error(f"Failed to update national squad: {e}")
+    finally:
+        conn.close()
+
+def get_national_mode_enabled():
+    """Checks if the national team management mode is enabled."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM settings WHERE key = 'national_mode_enabled'")
+    result = cursor.fetchone()
+    conn.close()
+    # Default to False if the setting doesn't exist
+    return result[0] == 'true' if result else False
+
+def set_national_mode_enabled(is_enabled):
+    """Saves the state of the national team management mode."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    # Store the boolean as a string 'true' or 'false'
+    value_to_save = 'true' if is_enabled else 'false'
+    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('national_mode_enabled', value_to_save))
+    conn.commit()
+    conn.close()
+
+def get_national_favorite_tactics():
+    """Fetches the user's primary and secondary favorite NATIONAL tactics."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = "national_fav_tactic_1"')
+    tactic1_result = cursor.fetchone()
+    cursor.execute('SELECT value FROM settings WHERE key = "national_fav_tactic_2"')
+    tactic2_result = cursor.fetchone()
+    conn.close()
+    
+    tactic1 = tactic1_result[0] if tactic1_result else None
+    tactic2 = tactic2_result[0] if tactic2_result else None
+    return tactic1, tactic2
+
+def set_national_favorite_tactics(tactic1, tactic2):
+    """Saves the user's favorite NATIONAL tactics to the database."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    # Handle Tactic 1
+    if tactic1 and tactic1 != "None":
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ("national_fav_tactic_1", tactic1))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "national_fav_tactic_1"')
+        
+    # Handle Tactic 2
+    if tactic2 and tactic2 != "None":
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ("national_fav_tactic_2", tactic2))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "national_fav_tactic_2"')
+        
+    conn.commit()
+    conn.close()

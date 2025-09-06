@@ -16,10 +16,13 @@ from page_views.best_position import best_position_calculator_page
 from page_views.player_role_matrix import player_role_matrix_page
 from page_views.role_analysis import role_analysis_page
 from page_views.assign_roles import assign_roles_page
+from page_views.national_squad_selection import national_squad_selection_page
+from page_views.national_squad_matrix import national_squad_matrix_page
+from page_views.national_best_xi import national_best_xi_page
 
 from data_parser import load_data, parse_and_update_data
 from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club, set_user_club, get_all_players, update_dwrs_ratings,
-                        get_favorite_tactics)
+                        get_favorite_tactics, get_national_mode_enabled)
 from constants import get_valid_roles, get_tactic_roles
 from config_handler import save_theme_settings, get_theme_settings
 from ui_components import clear_all_caches, display_strength_grid, display_custom_header
@@ -34,40 +37,92 @@ st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
 
 def sidebar(df, players):
     with st.sidebar:
-        # --- NEW: Theme Switch Logic ---
+        # --- Check if National Mode is enabled ---
+        is_national_mode_enabled = get_national_mode_enabled()
+        
+        if 'management_mode' not in st.session_state:
+            st.session_state.management_mode = "Club Management"
+
+        # --- STEP 1: GET THEME COLORS FIRST ---
+        # We move this block to the top so the tab buttons can use the colors.
         theme_settings = get_theme_settings()
         current_mode = theme_settings.get('current_mode', 'night')
-
-        # --- NEW: Centered Logo & Fallback Text ---
-        # We use columns to center the logo and header.
-        col1, col2, col3 = st.columns([1, 2, 1]) # [Spacer, Content, Spacer]
-        with col2:
-            logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'logo.png')
-            if os.path.exists(logo_path):
-                st.image(logo_path) # st.image in a column is auto-centered
-            else:
-                # The header is also placed in the central column
-                st.header("Please upload club logo...")
-                default_logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'default.png')
-                st.image(default_logo_path)
-
-        # --- Get colors for the nav bar ---
-        # --- UPDATED: Uses the new theme_handler function ---
         primary_color = theme_settings.get(f"{current_mode}_primary_color")
         secondary_color = theme_settings.get(f"{current_mode}_text_color")
         rgb = hex_to_rgb(primary_color)
         hover_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
+        # --- END OF STEP 1 ---
 
-        # Convert hex primary color to an RGBA with low opacity for the hover effect
-        rgb = hex_to_rgb(primary_color)
-        hover_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
+        if is_national_mode_enabled:
+            selected_mode = option_menu(
+                menu_title=None,
+                options=["Club Management", "National Management"],
+                icons=["shield-shaded", "flag"],
+                menu_icon="cast", 
+                default_index=0 if st.session_state.management_mode == "Club Management" else 1,
+                orientation="horizontal",
+                 # --- STEP 2: USE DYNAMIC COLORS IN THE STYLES ---
+                 styles={
+                    "container": {"padding": "0!important", "background-color": "transparent"},
+                    # Use the dynamic secondary_color for the icon and text
+                    "icon": {"color": secondary_color, "font-size": "16px"},
+                    "nav-link": {
+                        "font-size": "14px", 
+                        "text-align": "center", 
+                        "margin":"0px", 
+                        # Use the dynamic hover_color
+                        "--hover-color": hover_color,
+                        "color": secondary_color # Explicitly set text color
+                    },
+                    # Use the dynamic primary_color for the selected tab's background
+                    "nav-link-selected": {"background-color": primary_color},
+                }
+                 # --- END OF STEP 2 ---
+            )
+            if selected_mode != st.session_state.management_mode:
+                st.session_state.management_mode = selected_mode
+                st.rerun()
+            st.divider()
+
+        # --- Dynamic Logo Display (no changes here) ---
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.session_state.management_mode == "National Management":
+                logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'flag.png')
+                header_text = "Please upload flag..."
+            else: 
+                logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'logo.png')
+                header_text = "Please upload logo..."
+
+            if os.path.exists(logo_path):
+                st.image(logo_path)
+            else:
+                st.header(header_text)
+                default_logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'default.png')
+                st.image(default_logo_path)
         
-        # This is the improved option_menu navigation
+        # --- REVISED DYNAMIC NAVIGATION MENU ---
+        if st.session_state.management_mode == "National Management":
+            page_options = ["National Squad", "Squad Matrix", "Best XI", "Role Analysis", "Development"]
+            page_icons = ["people-fill", "table", "trophy", "search", "graph-up"]
+            page_title = "National Team"
+            page_mapping = { "National Squad": "National Squad Selection", "Squad Matrix": "National Squad Matrix", "Best XI": "National Best XI", "Role Analysis": "National Role Analysis", "Development": "National Development" }
+        else: # Club Management
+            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player", "New Role", "New Tactic"]
+            page_icons = ["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square", "person-badge", "clipboard-plus"]
+            page_title = "Club Navigation"
+            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data", "New Role": "Create New Role", "New Tactic": "Create New Tactic"}
+
+        # --- THIS IS THE CHANGE: Add Settings to BOTH modes ---
+        page_options.append("Settings")
+        page_icons.append("gear")
+        page_mapping["Settings"] = "Settings"
+
         page = option_menu(
-            menu_title="Navigation",
-            options=["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player", "New Role", "New Tactic", "Settings"],
-            icons=["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square", "person-badge", "clipboard-plus", "gear"],
-            menu_icon="cast",
+            menu_title=page_title,
+            options=page_options,
+            icons=page_icons,
+            menu_icon="list-ul",
             default_index=0,
             styles={
                 "container": {"padding": "5px !important", "background-color": "transparent"},
@@ -76,53 +131,41 @@ def sidebar(df, players):
                 "nav-link-selected": {"background-color": primary_color},
             }
         )
-        page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data", "New Role": "Create New Role", "New Tactic": "Create New Tactic", "Settings": "Settings" }
-        actual_page = page_mapping.get(page, "All Players")
+        
+        actual_page = page_mapping.get(page)
 
+        # --- Club Selectors (no changes here) ---
+        if st.session_state.management_mode == "Club Management":
+            st.divider()
+            club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
+            current_club = get_user_club() or "Select a club"
+            club_index = club_options.index(current_club) if current_club in club_options else 0
+            selected_club = st.selectbox("Your Club", options=club_options, index=club_index)
+
+            if selected_club != current_club and selected_club != "Select a club":
+                set_user_club(selected_club)
+                st.rerun()
+            
+            current_second = get_second_team_club() or "Select a club"
+            selected_second = st.selectbox("Your Second Team", options=club_options, index=club_options.index(current_second) if current_second in club_options else 0)
+
+            if selected_second != current_second and selected_second != "Select a club":
+                set_second_team_club(selected_second)
+                st.rerun()
+
+        # --- Theme Toggle (no changes here) ---
         st.divider()
-        #uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
-        club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
-        current_club = get_user_club() or "Select a club"
-        club_index = 0
-        if current_club in club_options:
-            club_index = club_options.index(current_club)
-        selected_club = st.selectbox("Your Club", options=club_options, index=club_index)
-
-        if selected_club != current_club and selected_club != "Select a club":
-            set_user_club(selected_club)
-            st.rerun()
-        
-        current_second = get_second_team_club() or "Select a club"
-        selected_second = st.selectbox("Your Second Team", options=club_options, index=club_options.index(current_second) if current_second in club_options else 0)
-
-        if selected_second != current_second and selected_second != "Select a club":
-            set_second_team_club(selected_second)
-            st.rerun()
-
-        # The toggle's state reflects the current mode
         is_day_mode = st.toggle("☀️ Day Mode", value=(current_mode == 'day'))
-        
-        # Check if the toggle was flipped by the user
         new_mode = 'day' if is_day_mode else 'night'
         if new_mode != current_mode:
             theme_settings['current_mode'] = new_mode
             save_theme_settings(theme_settings)
-            
-            # Apply the new theme immediately
-            if new_mode == 'day':
-                set_theme_toml(
-                    theme_settings['day_primary_color'],
-                    theme_settings['day_text_color'],
-                    theme_settings['day_background_color'],
-                    theme_settings['day_secondary_background_color']
-                )
-            else: # night mode
-                set_theme_toml(
-                    theme_settings['night_primary_color'],
-                    theme_settings['night_text_color'],
-                    theme_settings['night_background_color'],
-                    theme_settings['night_secondary_background_color']
-                )
+            set_theme_toml(
+                theme_settings[f"{new_mode}_primary_color"],
+                theme_settings[f"{new_mode}_text_color"],
+                theme_settings[f"{new_mode}_background_color"],
+                theme_settings[f"{new_mode}_secondary_background_color"]
+            )
             st.rerun()
             
         return actual_page
@@ -363,15 +406,15 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
 
 
 def main():
-    df = load_data() # This hits the @st.cache_data function once
+    df = load_data() 
     players = get_all_players()
     page = sidebar(df, players) 
     
-    # Use st.query_params to allow linking to specific pages
     query_params = st.query_params
     if "page" in query_params:
         page = query_params["page"][0]
     
+    # --- UPDATED ROUTER TO HANDLE ALL PAGES ---
     if page == "All Players":
         main_page(None, df, players)
     elif page == "Assign Roles":
@@ -396,7 +439,15 @@ def main():
         create_new_tactic_page()
     elif page == "Settings":
         settings_page()
+    # --- NEW: National Page Routing ---
+    elif page == "National Squad Selection":
+        national_squad_selection_page(players)
+    elif page == "National Squad Matrix": 
+        national_squad_matrix_page(players)
+    elif page == "National Best XI":
+        national_best_xi_page(players)
     else:
+        # Fallback to the main page if something goes wrong
         main_page(None, df, players)
 
 if __name__ == "__main__":

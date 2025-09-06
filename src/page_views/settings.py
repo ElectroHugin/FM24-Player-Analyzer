@@ -14,12 +14,15 @@ from utils import calculate_contrast_ratio, get_available_databases
 from ui_components import clear_all_caches, display_custom_header
 from theme_handler import set_theme_toml
 from sqlite_db import (update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics, get_club_identity, 
-                       set_club_identity, get_prunable_player_info, prune_scouted_players)
+                       set_club_identity, get_prunable_player_info, prune_scouted_players, get_national_mode_enabled, 
+                       set_national_mode_enabled, get_national_team_settings, set_national_team_settings,
+                       get_national_favorite_tactics, set_national_favorite_tactics)
 from data_parser import load_data
 from constants import get_valid_roles
 
 def settings_page():
     display_custom_header("Settings")
+    is_national_mode_on = get_national_mode_enabled()
     # --- Fetch current theme settings once at the top ---
     theme_settings = get_theme_settings()
     current_mode = theme_settings.get('current_mode', 'night')
@@ -42,6 +45,19 @@ def settings_page():
             new_fav_tactic1 = st.selectbox("Primary Favorite Tactic", options=all_tactics, index=index1)
         with c2:
             new_fav_tactic2 = st.selectbox("Secondary Favorite Tactic", options=all_tactics, index=index2)
+
+        if is_national_mode_on:
+            with st.expander("🌍 National Favorite Tactic Selection"):
+                st.info("Select the default tactics for the National Management pages.")
+                nat_fav_1, nat_fav_2 = get_national_favorite_tactics()
+                nat_index1 = all_tactics.index(nat_fav_1) if nat_fav_1 in all_tactics else 0
+                nat_index2 = all_tactics.index(nat_fav_2) if nat_fav_2 in all_tactics else 0
+
+                nc1, nc2 = st.columns(2)
+                with nc1:
+                    new_nat_fav_1 = st.selectbox("Primary National Tactic", options=all_tactics, index=nat_index1, key="nat_fav_1")
+                with nc2:
+                    new_nat_fav_2 = st.selectbox("Secondary National Tactic", options=all_tactics, index=nat_index2, key="nat_fav_2")
 
     with st.expander("🎨 Club Identity & Theme"):
         st.info(f"You are currently customizing the **{current_mode.capitalize()} Mode** theme. Use the toggle in the sidebar to switch modes.")
@@ -98,6 +114,41 @@ def settings_page():
                 
                 Text may be difficult to read with this combination.
             """)
+
+    with st.expander("🌍 National Team Identity"):
+        st.info("Define the national team you are managing. This will enable the 'National Management' mode in the sidebar.")
+
+        is_enabled = st.checkbox(
+            "Enable National Team Management", 
+            value=get_national_mode_enabled(),
+            help="Show the Club/National mode selector and national team pages in the sidebar."
+        )
+        st.divider()
+        
+        flag_file = st.file_uploader("Upload National Flag", type=['png', 'jpg', 'jpeg'], help="Recommended size: 200x200 pixels.")
+        if flag_file is not None:
+            try:
+                assets_dir = os.path.join(PROJECT_ROOT, 'config', 'assets')
+                os.makedirs(assets_dir, exist_ok=True)
+                with open(os.path.join(assets_dir, "flag.png"), "wb") as f:
+                    f.write(flag_file.getbuffer())
+                st.success("Flag uploaded successfully!")
+            except Exception as e:
+                st.error(f"Error saving flag: {e}")
+
+        current_nat_name, current_nat_code, current_nat_age = get_national_team_settings()
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            new_nat_name = st.text_input("National Team Full Name", value=current_nat_name or "", placeholder="e.g., Finland U21")
+        with c2:
+            new_nat_code = st.text_input("Country Code (3 letters)", value=current_nat_code or "", placeholder="e.g., FIN", max_chars=3)
+        with c3:
+            # Handle potential None or non-integer value from DB
+            age_val = 21
+            if current_nat_age and current_nat_age.isdigit():
+                age_val = int(current_nat_age)
+            new_nat_age = st.number_input("Max Age Limit", min_value=15, max_value=99, value=age_val, help="Use 99 for a senior national team.")
 
     with st.expander("📄 Agreed Playing Time (APT) Weights"):
         st.info("Adjust the multiplier for a player's selection score based on their promised playing time. A higher value makes them more likely to be selected.")
@@ -253,6 +304,11 @@ def settings_page():
     # This button remains outside the expanders
     if st.button("Save All Settings", type="primary"):
         set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
+        if is_national_mode_on:
+            set_national_favorite_tactics(new_nat_fav_1, new_nat_fav_2)
+            st.toast("National favorite tactics saved!", icon="🌍")
+        set_national_mode_enabled(is_enabled)
+        set_national_team_settings(new_nat_name, new_nat_code, new_nat_age)
 
         # --- Update the theme settings dictionary with new values ---
         theme_settings[f"{current_mode}_primary_color"] = new_primary

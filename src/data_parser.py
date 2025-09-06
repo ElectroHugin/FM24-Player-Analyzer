@@ -178,7 +178,7 @@ def get_players_by_role(role, user_club, second_team_club=None):
     return final_dfs
 
 @st.cache_data
-def get_player_role_matrix(user_club, second_team_club=None):
+def get_player_role_matrix(user_club=None, second_team_club=None):
     # This now uses the same fast, reliable data source as get_players_by_role.
     
     players = get_all_players()
