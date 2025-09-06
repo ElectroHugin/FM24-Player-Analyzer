@@ -126,9 +126,12 @@ ROLE_ANALYSIS_COLUMNS = [
 
 # Columns for Player-Role Matrix page (base columns + roles)
 PLAYER_ROLE_MATRIX_COLUMNS = [
+    "Unique ID",
     "Name",
     "Age",
     "Position",
+    "Nationality", 
+    "Second Nationality", 
     "Left Foot",
     "Right Foot",
     "Height",
