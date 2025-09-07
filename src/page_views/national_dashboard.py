@@ -5,7 +5,7 @@ import pandas as pd
 
 from ui_components import display_custom_header, display_strength_grid, clear_all_caches
 from sqlite_db import (get_national_team_settings, get_national_squad_ids, get_national_favorite_tactics, 
-                       update_dwrs_ratings)
+                       update_dwrs_ratings, set_national_squad_ids)
 from data_parser import parse_and_update_data, get_player_role_matrix, load_data
 from role_logic import auto_assign_roles_to_unassigned
 from squad_logic import calculate_squad_and_surplus, get_master_role_ratings
@@ -26,30 +26,52 @@ def national_dashboard_page(df, players):
     squad_players = [p for p in players if p['Unique ID'] in squad_ids]
     squad_df = pd.DataFrame(squad_players)
 
-    # --- 2. DEDICATED UPLOAD SECTION (Same as main_page) ---
+    # --- 2. DEDICATED UPLOAD SECTION (MODIFIED) ---
     with st.expander("⬆️ Upload New Player Data"):
         with st.form("upload_form_nat", clear_on_submit=True):
             uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
+            
+            # --- THIS IS YOUR NEW CHECKBOX ---
+            replace_squad = st.checkbox(
+                "Replace national squad with players from this file", 
+                value=False, # Default to unticked, as requested
+                help="If checked, the current national squad will be cleared and replaced with every player found in this HTML file. Use this for quick squad updates."
+            )
+            # --- END OF NEW WIDGET ---
+            
             auto_assign = st.checkbox("Automatically assign roles to new/unassigned players", value=True)
             submitted = st.form_submit_button("Process File")
 
             if submitted and uploaded_file is not None:
+                # --- THIS IS THE MODIFIED LOGIC ---
                 with st.spinner("Processing file..."):
                     full_df, affected_ids = parse_and_update_data(uploaded_file)
+                
                 if full_df is None:
                     st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
                 else:
+                    # Step 1 (Optional): Replace the national squad if the box was checked
+                    if replace_squad:
+                        with st.spinner("Replacing national squad..."):
+                            set_national_squad_ids(affected_ids)
+                        st.toast(f"National squad replaced with {len(affected_ids)} players from the file.", icon="🔁")
+
+                    # Step 2 (Optional): Auto-assign roles
                     if auto_assign:
-                        with st.spinner("Auto-assigning roles to new players..."):
+                        with st.spinner("Auto-assigning roles..."):
                             num_assigned = auto_assign_roles_to_unassigned()
                         st.toast(f"Assigned roles to {num_assigned} players.", icon="✨")
+
+                    # Step 3: Calculate DWRS for the newly updated players
                     with st.spinner(f"Calculating DWRS for {len(affected_ids)} updated players..."):
                         clear_all_caches()
                         final_df = load_data()
                         if final_df is not None:
                             update_dwrs_ratings(final_df, get_valid_roles(), affected_ids)
+
                     st.success("Data updated and ratings calculated successfully!")
                     st.rerun()
+                # --- END OF MODIFIED LOGIC ---
 
     if squad_df.empty:
         st.info("No players have been selected for the national squad yet. Go to 'National Squad Selection' to begin.")
