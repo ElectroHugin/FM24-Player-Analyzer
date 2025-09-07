@@ -19,6 +19,7 @@ from page_views.assign_roles import assign_roles_page
 from page_views.national_squad_selection import national_squad_selection_page
 from page_views.national_squad_matrix import national_squad_matrix_page
 from page_views.national_best_xi import national_best_xi_page
+from page_views.national_dashboard import national_dashboard_page
 
 from data_parser import load_data, parse_and_update_data
 from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club, set_user_club, get_all_players, update_dwrs_ratings,
@@ -37,57 +38,24 @@ st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
 
 def sidebar(df, players):
     with st.sidebar:
-        # --- Check if National Mode is enabled ---
-        is_national_mode_enabled = get_national_mode_enabled()
-        
-        if 'management_mode' not in st.session_state:
-            st.session_state.management_mode = "Club Management"
-
-        # --- STEP 1: GET THEME COLORS FIRST ---
-        # We move this block to the top so the tab buttons can use the colors.
+        # --- Get theme colors first, as they are used everywhere ---
         theme_settings = get_theme_settings()
         current_mode = theme_settings.get('current_mode', 'night')
         primary_color = theme_settings.get(f"{current_mode}_primary_color")
         secondary_color = theme_settings.get(f"{current_mode}_text_color")
+        secondary_bg_color = theme_settings.get(f"{current_mode}_secondary_background_color")
         rgb = hex_to_rgb(primary_color)
         hover_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
-        # --- END OF STEP 1 ---
 
-        if is_national_mode_enabled:
-            selected_mode = option_menu(
-                menu_title=None,
-                options=["Club Management", "National Management"],
-                icons=["shield-shaded", "flag"],
-                menu_icon="cast", 
-                default_index=0 if st.session_state.management_mode == "Club Management" else 1,
-                orientation="horizontal",
-                 # --- STEP 2: USE DYNAMIC COLORS IN THE STYLES ---
-                 styles={
-                    "container": {"padding": "0!important", "background-color": "transparent"},
-                    # Use the dynamic secondary_color for the icon and text
-                    "icon": {"color": secondary_color, "font-size": "16px"},
-                    "nav-link": {
-                        "font-size": "14px", 
-                        "text-align": "center", 
-                        "margin":"0px", 
-                        # Use the dynamic hover_color
-                        "--hover-color": hover_color,
-                        "color": secondary_color # Explicitly set text color
-                    },
-                    # Use the dynamic primary_color for the selected tab's background
-                    "nav-link-selected": {"background-color": primary_color},
-                }
-                 # --- END OF STEP 2 ---
-            )
-            if selected_mode != st.session_state.management_mode:
-                st.session_state.management_mode = selected_mode
-                st.rerun()
-            st.divider()
+        # --- Initialize session state for the management mode ---
+        is_national_mode_enabled = get_national_mode_enabled()
+        if 'management_mode' not in st.session_state:
+            st.session_state.management_mode = "Club"
 
-        # --- Dynamic Logo Display (no changes here) ---
+        # --- Dynamic Logo Display (Now at the top) ---
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.session_state.management_mode == "National Management":
+            if st.session_state.management_mode == "National" and is_national_mode_enabled:
                 logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'flag.png')
                 header_text = "Please upload flag..."
             else: 
@@ -101,22 +69,32 @@ def sidebar(df, players):
                 default_logo_path = os.path.join(PROJECT_ROOT, 'config', 'assets', 'default.png')
                 st.image(default_logo_path)
         
-        # --- REVISED DYNAMIC NAVIGATION MENU ---
-        if st.session_state.management_mode == "National Management":
-            page_options = ["National Squad", "Squad Matrix", "Best XI", "Role Analysis", "Development"]
-            page_icons = ["people-fill", "table", "trophy", "search", "graph-up"]
+        # --- DYNAMIC NAVIGATION MENU ---
+        if st.session_state.management_mode == "National" and is_national_mode_enabled:
+            page_options = ["National Dashboard", "National Squad", "Squad Matrix", "Best XI"]
+            page_icons = ["house", "people-fill", "table", "trophy"]
             page_title = "National Team"
-            page_mapping = { "National Squad": "National Squad Selection", "Squad Matrix": "National Squad Matrix", "Best XI": "National Best XI", "Role Analysis": "National Role Analysis", "Development": "National Development" }
+            page_mapping = { 
+                "National Dashboard": "National Dashboard",
+                "National Squad": "National Squad Selection", 
+                "Squad Matrix": "National Squad Matrix",
+                "Best XI": "National Best XI",
+            }
         else: # Club Management
-            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player", "New Role", "New Tactic"]
-            page_icons = ["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square", "person-badge", "clipboard-plus"]
+            # --- THIS IS THE CHANGE: "New Role" & "New Tactic" are removed from here ---
+            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player"]
+            page_icons = ["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square"]
             page_title = "Club Navigation"
-            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data", "New Role": "Create New Role", "New Tactic": "Create New Tactic"}
+            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data"}
+            # --- END OF CHANGE ---
 
-        # --- THIS IS THE CHANGE: Add Settings to BOTH modes ---
-        page_options.append("Settings")
-        page_icons.append("gear")
+        # --- THIS IS THE CHANGE: Add global pages available in BOTH modes ---
+        page_options.extend(["New Role", "New Tactic", "Settings"])
+        page_icons.extend(["person-badge", "clipboard-plus", "gear"])
+        page_mapping["New Role"] = "Create New Role"
+        page_mapping["New Tactic"] = "Create New Tactic"
         page_mapping["Settings"] = "Settings"
+        # --- END OF CHANGE ---
 
         page = option_menu(
             menu_title=page_title,
@@ -131,11 +109,10 @@ def sidebar(df, players):
                 "nav-link-selected": {"background-color": primary_color},
             }
         )
-        
         actual_page = page_mapping.get(page)
 
-        # --- Club Selectors (no changes here) ---
-        if st.session_state.management_mode == "Club Management":
+        # --- Club Selectors (only show in club mode) ---
+        if st.session_state.management_mode == "Club":
             st.divider()
             club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
             current_club = get_user_club() or "Select a club"
@@ -153,8 +130,66 @@ def sidebar(df, players):
                 set_second_team_club(selected_second)
                 st.rerun()
 
-        # --- Theme Toggle (no changes here) ---
+        # --- NEW: MODE SWITCHER AND THEME TOGGLE AT THE BOTTOM ---
         st.divider()
+
+        # Only show the mode switcher if the feature is enabled in settings
+        if is_national_mode_enabled:
+            # Inject CSS to style the st.radio to look like a segmented control
+            st.markdown(f"""
+                <style>
+                    /* Main container for the radio buttons */
+                    div[data-testid="stRadio"] > div {{
+                        border: 1px solid {primary_color};
+                        border-radius: 5px;
+                        padding: 2px;
+                        display: flex;
+                        justify-content: space-around;
+                    }}
+                    /* Hide the default radio button circle */
+                    div[data-testid="stRadio"] input[type="radio"] {{
+                        display: none;
+                    }}
+                    /* Style for each option's label */
+                    div[data-testid="stRadio"] label {{
+                        border-radius: 3px;
+                        padding: 4px 8px;
+                        color: {secondary_color};
+                        user-select: none;
+                        cursor: pointer;
+                        flex-grow: 1;
+                        text-align: center;
+                        transition: all 0.2s ease-in-out;
+                    }}
+                    /* Style for the SELECTED option's label */
+                    div[data-testid="stRadio"] div[role="radiogroup"] > div:has(input:checked) > label {{
+                        background-color: {primary_color};
+                        color: white; /* Text color on the active button */
+                        font-weight: 600;
+                    }}
+                    /* Hover effect for UNSELECTED options */
+                    div[data-testid="stRadio"] div[role="radiogroup"] > div:not(:has(input:checked)):hover > label {{
+                        background-color: {hover_color};
+                    }}
+                </style>
+            """, unsafe_allow_html=True)
+
+            # Determine the index for the radio button based on session state
+            current_mode_index = 1 if st.session_state.management_mode == "National" else 0
+            
+            selected_mode = st.radio(
+                "Management Mode", 
+                options=["Club", "National"], 
+                index=current_mode_index,
+                horizontal=True,
+            )
+            
+            # If the user clicks a different mode, update the state and rerun
+            if selected_mode != st.session_state.management_mode:
+                st.session_state.management_mode = selected_mode
+                st.rerun()
+
+        # The theme toggle remains at the very bottom
         is_day_mode = st.toggle("☀️ Day Mode", value=(current_mode == 'day'))
         new_mode = 'day' if is_day_mode else 'night'
         if new_mode != current_mode:
@@ -440,6 +475,8 @@ def main():
     elif page == "Settings":
         settings_page()
     # --- NEW: National Page Routing ---
+    elif page == "National Dashboard": 
+        national_dashboard_page(df, players)
     elif page == "National Squad Selection":
         national_squad_selection_page(players)
     elif page == "National Squad Matrix": 
