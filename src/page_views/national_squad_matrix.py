@@ -78,13 +78,22 @@ def national_squad_matrix_page(players):
     if squad_df.empty:
         st.info("No players have been selected for the squad yet. Go to 'National Squad Selection' to add players.")
     else:
-        # Sort by name for consistent display
         squad_df['LastName'] = squad_df['Name'].apply(get_last_name)
         squad_df = squad_df.sort_values(by=['LastName', 'Name']).drop(columns=['LastName'])
         
-        # Style and display the dataframe
+        # --- THIS IS THE FIX: Use the smart styler logic ---
         styler = squad_df[display_cols].style.format("{:.0f}", subset=selected_roles, na_rep="-")
-        styler = styler.apply(lambda col: col.map(color_dwrs_by_value), subset=selected_roles)
+        
+        def smart_full_styler(column):
+            styles = [''] * len(column)
+            valid_indices = column.dropna().index
+            for index in valid_indices:
+                styles[column.index.get_loc(index)] = color_dwrs_by_value(column[index])
+            return styles
+
+        styler = styler.apply(smart_full_styler, subset=selected_roles)
+        # --- END OF FIX ---
+        
         st.dataframe(styler, use_container_width=True, hide_index=True)
 
     st.divider()
