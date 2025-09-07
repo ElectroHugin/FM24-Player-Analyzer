@@ -306,21 +306,26 @@ def display_strength_grid(positional_strengths, tactic, mode='night'):
     st.markdown(html_out, unsafe_allow_html=True)
 
 
-def display_custom_header(page_title=""):
+def display_custom_header(page_title="", is_national_override=False):
     """
     Displays a dynamic, personalized header that adapts to the current
-    management mode (Club or National).
+    management mode, with an optional override for national pages.
     """
-    # Check the session state to determine the current context.
-    # We use .get() for safety, defaulting to 'Club Management' if the state isn't set yet.
-    management_mode = st.session_state.get('management_mode', 'Club Management')
+    # Get the base mode from the session state
+    management_mode = st.session_state.get('management_mode', 'Club')
 
-    # --- 1. Get context-specific data based on the mode ---
-    if management_mode == 'National Management':
+    # --- THIS IS THE NEW, ROBUST LOGIC ---
+    # If the override is used, force the mode to National. Otherwise, use the session state.
+    # This guarantees national pages ALWAYS show the national header.
+    mode_to_use = 'National' if is_national_override else management_mode
+    # --- END OF NEW LOGIC ---
+
+    # --- 1. Get context-specific data based on the determined mode ---
+    # THIS IS THE BUG FIX: We now check for 'National' instead of 'National Management'
+    if mode_to_use == 'National':
         # Fetch national team data
         full_name, nat_code, _ = get_national_team_settings()
         display_name = full_name or "National Team"
-        # We can use the country code as a caption, or leave it blank
         caption_text = f"({nat_code})" if nat_code else None
     else: # Default to Club Management
         # Fetch club data (original logic)
@@ -340,19 +345,15 @@ def display_custom_header(page_title=""):
     with st.container():
         left, center, right = st.columns([2, 3, 1.5])
         
-        # --- Left Column: Dynamic Identity ---
         with left:
             st.markdown(f"<h2 style='color: {primary_color}; margin-bottom: -10px;'>{display_name}</h2>", unsafe_allow_html=True)
-            # Display the caption only if it exists
             if caption_text:
                 st.caption(caption_text)
         
-        # --- Center Column: Page Title (unchanged) ---
         with center:
             if page_title:
                 st.markdown(f"<h3 style='text-align: center; color: {text_color}; margin-top: 10px;'>{page_title}</h3>", unsafe_allow_html=True)
 
-        # --- Right Column: Save File Context (unchanged) ---
         with right:
             st.markdown("<p style='text-align: right; margin-bottom: -5px;'><small>Active Save File</small></p>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align: right;'><strong>{db_name}.db</strong></p>", unsafe_allow_html=True)
