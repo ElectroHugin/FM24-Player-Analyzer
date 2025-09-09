@@ -39,7 +39,9 @@
             "NNCB-St": "No-Nonsense Centre-Back (Stopper)",
             "WCB-A": "Wide Centre-Back (Attack)",
             "WCB-D": "Wide Centre-Back (Defend)",
-            "WCB-S": "Wide Centre-Back (Support)"
+            "WCB-S": "Wide Centre-Back (Support)",
+            "WBL-A": "Wing Back Left (Attack)",
+            "WBR-A": "Wing Back Right (Attack)"
         },
         "Midfield": {
             "CM-S": "Central Midfielder (Support)",
@@ -49,7 +51,9 @@
             "VOL-A": "Segundo Volante (Attack)",
             "WL-S": "Winger Left (Support)",
             "WR-S": "Winger Right (Support)",
-            "B2B-S": "Box-to-Box Midfielder (Support)"
+            "B2B-S": "Box-to-Box Midfielder (Support)",
+            "DLP-S": "Deep Lying Playmaker (Support)",
+            "BWM-D": "Ball Winning Midfielder (Defend)"
         },
         "Attack": {
             "AF-A": "Advanced Forward (Attack)",
@@ -63,7 +67,8 @@
             "P-A": "Poacher (Attack)",
             "FN-S": "False Nine (Support)",
             "RL-A": "Raumdeuter Left (Attack)",
-            "RR-A": "Raumdeuter Right (Attack)"
+            "RR-A": "Raumdeuter Right (Attack)",
+            "AP-S": "Advanced Playmaker (Support)"
         }
     },
     "role_specific_weights": {
@@ -1299,6 +1304,112 @@
                 "Pace",
                 "Strength"
             ]
+        },
+        "AP-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Anticipation",
+                "Flair",
+                "Agility"
+            ]
+        },
+        "DLP-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Teamwork",
+                "Vision"
+            ],
+            "preferable": [
+                "Anticipation",
+                "Off the Ball",
+                "Positioning",
+                "Balance"
+            ]
+        },
+        "BWM-D": {
+            "key": [
+                "Tackling",
+                "Aggression",
+                "Anticipation",
+                "Teamwork",
+                "Work Rate",
+                "Stamina"
+            ],
+            "preferable": [
+                "Marking",
+                "Bravery",
+                "Concentration",
+                "Positioning",
+                "Agility",
+                "Pace",
+                "Strength"
+            ]
+        },
+        "WBL-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Tackling",
+                "Technique",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Flair",
+                "Positioning",
+                "Agility",
+                "Balance"
+            ]
+        },
+        "WBR-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Tackling",
+                "Technique",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Flair",
+                "Positioning",
+                "Agility",
+                "Balance"
+            ]
         }
     },
     "position_to_role_mapping": {
@@ -1340,25 +1451,32 @@
             "IFBL-D"
         ],
         "WB (R)": [
+            "IWBR-A",
+            "IWBR-Au",
             "IWBR-D",
             "IWBR-S",
-            "IWBR-A",
-            "IWBR-Au"
+            "WBR-A"
         ],
         "WB (L)": [
+            "IWBL-A",
+            "IWBL-Au",
             "IWBL-D",
             "IWBL-S",
-            "IWBL-A",
-            "IWBL-Au"
+            "WBL-A"
         ],
         "DM": [
+            "BWM-D",
+            "DLP-S",
             "DM-S",
             "RPM-S",
             "VOL-A"
         ],
         "M (C)": [
+            "AP-S",
             "B2B-S",
+            "BWM-D",
             "CM-S",
+            "DLP-S",
             "RPM-S"
         ],
         "M (R)": [
@@ -1369,6 +1487,7 @@
             "WL-S"
         ],
         "AM (R)": [
+            "AP-S",
             "IFR-A",
             "IFR-S",
             "IWR-S",
@@ -1376,6 +1495,7 @@
             "WR-S"
         ],
         "AM (L)": [
+            "AP-S",
             "IFL-A",
             "IFL-S",
             "RL-A",
@@ -1383,6 +1503,7 @@
         ],
         "AM (C)": [
             "AM-A",
+            "AP-S",
             "RPM-S"
         ],
         "ST (C)": [
@@ -1536,6 +1657,19 @@
             "DMCR": "DM-S",
             "DR": "FBR-A",
             "ML": "WL-S"
+        },
+        "3-4-2-1 Amorim Speciale": {
+            "GK": "SK-S",
+            "DCR": "BPD-D",
+            "MCL": "BWM-D",
+            "DMR": "WBR-A",
+            "AMCL": "AP-S",
+            "DML": "WBL-A",
+            "STC": "AF-A",
+            "DCL": "BPD-D",
+            "AMR": "IFR-A",
+            "MCR": "DLP-S",
+            "DC": "BPD-D"
         }
     },
     "tactic_layouts": {
@@ -1765,6 +1899,28 @@
             ],
             "Defensive Midfield": [
                 "DMCR"
+            ]
+        },
+        "3-4-2-1 Amorim Speciale": {
+            "Defense": [
+                "DCR",
+                "DCL",
+                "DC"
+            ],
+            "Midfield": [
+                "MCL",
+                "MCR"
+            ],
+            "Defensive Midfield": [
+                "DMR",
+                "DML"
+            ],
+            "Attacking Midfield": [
+                "AMCL",
+                "AMR"
+            ],
+            "Strikers": [
+                "STC"
             ]
         }
     }

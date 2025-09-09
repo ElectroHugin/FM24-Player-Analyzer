@@ -3,11 +3,10 @@
 import pandas as pd
 from bs4 import BeautifulSoup
 from constants import (attribute_mapping, get_valid_roles, ROLE_ANALYSIS_COLUMNS, 
-                     PLAYER_ROLE_MATRIX_COLUMNS, WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS)
-from sqlite_db import (init_db, update_player, get_all_players, get_latest_dwrs_ratings, 
-                       bulk_upsert_players, create_database_backup)
-from analytics import calculate_dwrs
-from config_handler import get_weight
+                     PLAYER_ROLE_MATRIX_COLUMNS, )
+from sqlite_db import (init_db, get_all_players, get_latest_dwrs_ratings, 
+                       bulk_upsert_players, create_database_backup, merge_player_records)
+
 import streamlit as st
 
 REQUIRED_COLUMN = "UID"
@@ -39,6 +38,7 @@ def load_data():
     players = get_all_players()
     return pd.DataFrame(players) if players else None
 
+
 def parse_and_update_data(file):
     
     create_database_backup()
@@ -47,41 +47,57 @@ def parse_and_update_data(file):
     if html_df is None:
         return None, []
 
-    # --- START OF NEW, MORE ROBUST LOGIC ---
-
-    # 1. Check for and warn about duplicate columns from a bad FM View
+    # 1. Basic cleaning and validation (no changes here)
     if not html_df.columns.is_unique:
-        # Find the duplicate column names
         duplicated_cols = html_df.columns[html_df.columns.duplicated()].unique().tolist()
-        st.warning(f"⚠️ **Warning:** Your uploaded HTML file contains duplicate columns: `{', '.join(duplicated_cols)}`. This is usually caused by a misconfigured view in Football Manager. Some player data may be missing. Please check your FM view file.")
-        # De-duplicate the columns, keeping the first instance
+        st.warning(f"⚠️ **Warning:** Your uploaded HTML file contains duplicate columns: `{', '.join(duplicated_cols)}`.")
         html_df = html_df.loc[:, ~html_df.columns.duplicated()]
 
-    # 2. Capture the original UIDs (Now safe from errors)
     try:
-        affected_ids = [str(uid) for uid in html_df['UID']]
+        html_df['UID'] = html_df['UID'].astype(str).str.strip()
+        html_df['Name'] = html_df['Name'].astype(str).str.strip()
     except KeyError:
-        st.error("The uploaded HTML file is missing the required 'UID' column. Please check your FM view file.")
+        st.error("The uploaded HTML file is missing a required 'UID' or 'Name' column.")
         return None, []
 
-    # 3. Perform the newgen ID reconciliation (this logic is correct)
+    # --- START OF THE DEFINITIVE UNIFICATION ENGINE ---
+    
+    # 2. Fetch existing player data to build lookup maps
     existing_players = get_all_players()
-    existing_numeric_map = {p['Unique ID']: p['Name'] for p in existing_players if not p['Unique ID'].startswith('r-')}
-    existing_r_map = {p['Unique ID']: p['Name'] for p in existing_players if p['Unique ID'].startswith('r-')}
-    def normalize_id(row):
-        incoming_id, incoming_name = str(row['UID']), row['Name']
+    # Map for quick lookup: { 'NumericID': 'PlayerName' }
+    numeric_id_to_name = {p['Unique ID']: p['Name'] for p in existing_players if not p['Unique ID'].startswith('r-')}
+    # Map for quick lookup: { 'PlayerName': 'r-ID' } -> The canonical mapping
+    name_to_r_id = {p['Name']: p['Unique ID'] for p in existing_players if p['Unique ID'].startswith('r-')}
+    
+    # 3. Iterate through incoming data to find and fix inconsistencies BEFORE saving
+    for index, row in html_df.iterrows():
+        incoming_id = row['UID']
+        incoming_name = row['Name']
+        
+        # SCENARIO 1: "Mistaken Identity"
+        # The game exported a numeric ID for a player who we know is a newgen.
+        if not incoming_id.startswith('r-') and incoming_name in name_to_r_id:
+            correct_id = name_to_r_id[incoming_name]
+            # Silently correct the ID in the DataFrame before it ever touches the database.
+            html_df.loc[index, 'UID'] = correct_id
+            
+        # SCENARIO 2: "Data Corruption"
+        # The game exported the correct r-ID, but our database has a corrupted numeric entry.
         if incoming_id.startswith('r-'):
             numeric_part = incoming_id[2:]
-            if numeric_part in existing_numeric_map and existing_numeric_map[numeric_part] == incoming_name:
-                return numeric_part
-        else:
-            r_version = f"r-{incoming_id}"
-            if r_version in existing_r_map and existing_r_map[r_version] == incoming_name:
-                return r_version
-        return incoming_id
-    html_df['UID'] = html_df.apply(normalize_id, axis=1)
+            # Check if a player exists with the numeric part of the ID AND the same name.
+            if numeric_part in numeric_id_to_name and numeric_id_to_name[numeric_part] == incoming_name:
+                # We found a corrupted record. Use our migration tool to fix it permanently.
+                merge_player_records(bad_id=numeric_part, good_id=incoming_id)
+                # After merging, the bad numeric ID is gone from our lookup, preventing future errors.
+                del numeric_id_to_name[numeric_part]
 
-    # 4. Rename, filter, and prepare for bulk upsert (this logic is correct)
+    # 4. Get the final list of UIDs after all corrections and unifications.
+    affected_ids = list(html_df['UID'].unique())
+    
+    # --- END OF THE UNIFICATION ENGINE ---
+
+    # 5. Prepare and save the now-clean data (no changes from here on)
     html_df.rename(columns=attribute_mapping, inplace=True)
     known_columns = set(attribute_mapping.values())
     cols_to_keep = [col for col in html_df.columns if col in known_columns or col == 'Unique ID']

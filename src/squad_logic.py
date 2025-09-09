@@ -173,53 +173,94 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     Calculates squads using a smart depth-filling algorithm that prioritizes
     full coverage while respecting a soft cap on a player's *unique* roles.
     """
-    # --- 1. Get Manager's Preferences from Config ---
     MAX_DEPTH_ROLES = get_squad_management_setting('max_roles_per_depth_player')
 
-    # --- 2. Select Starting XI and B-Team (Your 'weakest link' algorithm is preserved here) ---
+    # --- THIS IS THE NEW, MORE INTELLIGENT "IRREPLACEABILITY" ALGORITHM ---
     def select_team(team_positions, available_players):
-        # This is your original, unchanged 'weakest link' function
         team_with_ids = {}
         players_team = set()
         natural_pos_multiplier = get_selection_bonus('natural_position')
+        
+        # Pre-calculate role mappings once
         pos_to_role_map = get_position_to_role_mapping()
         role_to_game_positions = {r: [gp for gp, roles in pos_to_role_map.items() if r in roles] for r in get_valid_roles()}
 
+        # The main loop to fill the 11 positions
         while len(team_with_ids) < len(team_positions):
-            best_candidate_for_each_pos = {}
+            position_analysis = {}
             empty_positions = [p for p in team_positions if p not in team_with_ids]
+
+            # Step 1: For each empty position, find ALL valid candidates and sort them by score
             for pos in empty_positions:
                 role = team_positions[pos]
-                best_candidate = None
-                max_score = -1
+                candidates = []
                 for player in available_players:
+                    # Skip players already tentatively assigned in this loop
                     if player['Unique ID'] in players_team: continue
+
+                    # Check if player is eligible for this tactical position
                     allowed_game_positions = TACTICAL_SLOT_TO_GAME_POSITIONS.get(pos, [])
                     player_game_positions = parse_position_string(player.get('Position', ''))
                     if not any(p_pos in allowed_game_positions for p_pos in player_game_positions): continue
+                    
+                    # Skip players if their primary role is set and doesn't match
                     primary_role = player.get('primary_role')
                     if primary_role and primary_role != role: continue
+                    
                     rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
                     if rating > 0:
                         apt = player.get("Agreed Playing Time", "None") or "None"
                         apt_weight = get_apt_weight(apt)
                         natural_pos_bonus = 1.0
-                        valid_game_positions_for_role = role_to_game_positions.get(role, [])
                         player_natural_positions = player.get('natural_positions', [])
-                        if any(pnp in valid_game_positions_for_role for pnp in player_natural_positions):
+                        if any(pnp in role_to_game_positions.get(role, []) for pnp in player_natural_positions):
                             natural_pos_bonus = natural_pos_multiplier
+                        
                         selection_score = rating * apt_weight * natural_pos_bonus
-                        if selection_score > max_score:
-                            max_score = selection_score
-                            best_candidate = {"player_id": player['Unique ID'], "player_name": player['Name'], "player_apt": apt, "rating": rating, "selection_score": selection_score, "position": pos}
-                if best_candidate: best_candidate_for_each_pos[pos] = best_candidate
-            if not best_candidate_for_each_pos: break
-            weakest_link_pos = min(best_candidate_for_each_pos, key=lambda p: best_candidate_for_each_pos[p]['selection_score'])
-            winner = best_candidate_for_each_pos[weakest_link_pos]
-            team_with_ids[weakest_link_pos] = {"player_id": winner['player_id'], "name": winner['player_name'], "rating": f"{int(winner['rating'])}%", "apt": winner['player_apt']}
+                        candidates.append({
+                            "player_id": player['Unique ID'], 
+                            "name": player['Name'], 
+                            "rating": rating, 
+                            "apt": apt,
+                            "score": selection_score
+                        })
+                
+                # If any candidates were found, sort them descending by score
+                if candidates:
+                    position_analysis[pos] = sorted(candidates, key=lambda x: x['score'], reverse=True)
+
+            if not position_analysis:
+                break # No more valid players for any remaining position
+
+            # Step 2: Calculate the "irreplaceability" (drop-off score) for each position
+            for pos, candidates in position_analysis.items():
+                best_score = candidates[0]['score']
+                # If there's a second-best player, calculate the drop-off. Otherwise, it's infinite.
+                second_best_score = candidates[1]['score'] if len(candidates) > 1 else 0.0
+                drop_off = best_score - second_best_score
+                position_analysis[pos][0]['drop_off'] = drop_off
+
+            # Step 3: Find the position with the BIGGEST drop-off. This is our new "weakest link".
+            # This is the position we MUST fill now to avoid leaving it empty or with a terrible player.
+            most_irreplaceable_pos = max(
+                position_analysis, 
+                key=lambda p: position_analysis[p][0]['drop_off']
+            )
+
+            # Step 4: Lock in the winner for that position
+            winner = position_analysis[most_irreplaceable_pos][0]
+            team_with_ids[most_irreplaceable_pos] = {
+                "player_id": winner['player_id'], 
+                "name": winner['name'], 
+                "rating": f"{int(winner['rating'])}%", 
+                "apt": winner['apt']
+            }
             players_team.add(winner['player_id'])
+            # The player is now permanently removed from the available pool for the next iteration
             available_players = [p for p in available_players if p['Unique ID'] != winner['player_id']]
+        
         return team_with_ids, available_players
+    # --- END OF NEW ALGORITHM ---
 
     xi_with_ids, remaining_for_b_team = select_team(positions, my_club_players)
     b_team_with_ids, depth_pool = select_team(positions, remaining_for_b_team)
@@ -232,22 +273,19 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
         if pos not in starting_xi: starting_xi[pos] = default_player.copy()
         if pos not in b_team: b_team[pos] = default_player.copy()
 
-    # --- 3. Final Smart Depth Calculation (Role-Based) ---
+    # --- 3. Final Smart Depth Calculation (Unchanged) ---
     xi_ids = {p['player_id'] for p in starting_xi.values() if 'player_id' in p}
     b_team_ids = {p['player_id'] for p in b_team.values() if 'player_id' in p}
     players_xi_or_b_team = xi_ids.union(b_team_ids)
     
     available_depth_players = [p for p in my_club_players if p['Unique ID'] not in players_xi_or_b_team]
     
-    best_depth_options = {} # This will now be keyed by ROLE, not POSITION
+    best_depth_options = {}
     depth_player_ids = set()
     player_unique_roles_covered = {}
 
     if available_depth_players:
-        # Get the unique set of roles needed for this tactic
         unique_roles_needed = sorted(list(set(positions.values())))
-
-        # Iterate through the UNIQUE ROLES, not every single position
         for role in unique_roles_needed:
             sorted_candidates = sorted(
                 available_depth_players,
@@ -269,7 +307,6 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
             if best_pick:
                 rating = master_role_ratings.get(role, {}).get(best_pick['Unique ID'], 0)
                 if rating > 0:
-                    # The KEY is now the ROLE
                     best_depth_options[role] = [{
                         "name": best_pick['Name'],
                         "rating": f"{int(rating)}%",
@@ -277,12 +314,10 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
                         "age": best_pick.get("Age", "N/A")
                     }]
                     depth_player_ids.add(best_pick['Unique ID'])
-                    
                     if best_pick['Unique ID'] not in player_unique_roles_covered:
                         player_unique_roles_covered[best_pick['Unique ID']] = set()
                     player_unique_roles_covered[best_pick['Unique ID']].add(role)
     
-    # --- 4. Finalize and Return ---
     core_squad_ids = players_xi_or_b_team.union(depth_player_ids)
     
     return {
