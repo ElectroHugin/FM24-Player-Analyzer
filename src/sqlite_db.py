@@ -841,3 +841,31 @@ def set_national_favorite_tactics(tactic1, tactic2):
         
     conn.commit()
     conn.close()
+
+def merge_player_records(bad_id, good_id):
+    """
+    Safely merges a player record with a bad (numeric) ID into a good (r-) ID.
+    This involves migrating historical ratings and then deleting the bad record.
+    """
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        # Step 1: Update all historical DWRS records to point to the new, good ID.
+        cursor.execute(
+            "UPDATE dwrs_ratings SET unique_id = ? WHERE unique_id = ?",
+            (good_id, bad_id)
+        )
+        
+        # Step 2: Delete the old, now-redundant player record.
+        cursor.execute(
+            'DELETE FROM players WHERE "Unique ID" = ?',
+            (bad_id,)
+        )
+        
+        conn.commit()
+        st.toast(f"Unified records for ID {good_id}", icon="🔗")
+    except sqlite3.Error as e:
+        conn.rollback()
+        st.error(f"Database error during player merge: {e}")
+    finally:
+        conn.close()
