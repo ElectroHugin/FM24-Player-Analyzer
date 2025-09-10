@@ -56,7 +56,7 @@ def init_db():
     # This block is now safe because the players table is guaranteed to exist correctly.
     cursor.execute("PRAGMA table_info(players)")
     existing_columns = {col[1] for col in cursor.fetchall()}
-    all_player_columns = set(attribute_mapping.values()) | {"primary_role", "natural_positions", "transfer_status", "loan_status", "Nationality", "Second Nationality"}
+    all_player_columns = set(attribute_mapping.values()) | {"primary_role", "natural_positions", "transfer_status", "loan_status", "Nationality", "Second Nationality", "preferred_side"}
     for col_name in all_player_columns:
         if col_name not in existing_columns:
             try:
@@ -901,3 +901,11 @@ def set_shortlist_ids(player_ids):
         st.error(f"Failed to update shortlist: {e}")
     finally:
         conn.close()
+
+def update_player_preferred_side(unique_id, side):
+    """Saves the preferred side ('Left', 'Right', or None) for a player."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE players SET preferred_side = ? WHERE "Unique ID" = ?', (side, unique_id))
+    conn.commit()
+    conn.close()

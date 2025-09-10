@@ -18,11 +18,10 @@ def get_last_name(full_name):
 
 def _apply_footedness_swaps(team, all_players, positions):
     """
-    A helper function to swap players in symmetrical positions based on their preferred foot.
-    This is applied AFTER the team has been selected.
-    A swap only occurs if the roles for the two positions are identical.
+    A helper function to swap players in symmetrical positions.
+    It now prioritizes a player's manually set 'preferred_side'.
+    If not set, it falls back to their 'Preferred Foot'.
     """
-    # Define the symmetrical pairs of tactical positions
     symmetrical_pairs = [
         ('DCL', 'DCR'), ('DMCL', 'DMCR'),
         ('MCL', 'MCR'), ('AMCL', 'AMCR'),
@@ -32,16 +31,11 @@ def _apply_footedness_swaps(team, all_players, positions):
     player_map = {p['Unique ID']: p for p in all_players}
 
     for pos_L, pos_R in symmetrical_pairs:
-        # Check if both symmetrical positions are in the team
         if pos_L in team and pos_R in team:
-            
-            # --- NEW: Check if the roles for these positions are the same ---
             role_L = positions.get(pos_L)
             role_R = positions.get(pos_R)
-            
             if role_L != role_R:
-                continue # If roles are different, do not swap.
-            # --- END NEW ---
+                continue
 
             player_L_data = team[pos_L]
             player_R_data = team[pos_R]
@@ -52,9 +46,16 @@ def _apply_footedness_swaps(team, all_players, positions):
             if not player_L or not player_R:
                 continue
 
-            # The ideal swap condition: a right-footer is on the left and a left-footer is on the right
-            if player_L.get('Preferred Foot') == 'Right' and player_R.get('Preferred Foot') == 'Left':
+            # --- THIS IS THE NEW, UPGRADED LOGIC ---
+            # Determine the effective side for each player. Prioritize the manual setting.
+            side_L = player_L.get('preferred_side') or player_L.get('Preferred Foot')
+            side_R = player_R.get('preferred_side') or player_R.get('Preferred Foot')
+
+            # The ideal swap condition: a "Right"-sided player is on the left (pos_L)
+            # and a "Left"-sided player is on the right (pos_R).
+            if side_L == 'Right' and side_R == 'Left':
                 team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
+            # --- END OF NEW LOGIC ---
                 
     return team
 

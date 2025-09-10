@@ -1,7 +1,8 @@
 # edit_player.py
 
 import streamlit as st
-from sqlite_db import get_user_club, update_player_club, update_player_apt, update_player_natural_positions, set_primary_role
+from sqlite_db import (get_user_club, update_player_club, update_player_apt, 
+                       update_player_natural_positions, set_primary_role, update_player_preferred_side)
 from utils import get_last_name, format_role_display, parse_position_string
 from constants import GK_APT_OPTIONS, FIELD_PLAYER_APT_OPTIONS
 from ui_components import clear_all_caches, display_custom_header
@@ -131,4 +132,25 @@ def edit_player_data_page(players):
                     set_primary_role(player['Unique ID'], new_role if new_role != "None" else None)
                     clear_all_caches()
                     st.success(f"Set primary role to {new_role}.")
+                    st.rerun()
+                
+                # --- Set Preferred Side ---
+                side_options = ["None", "Left", "Right"]
+                current_side = player.get('preferred_side')
+                side_index = side_options.index(current_side) if current_side in side_options else 0
+                
+                new_side = st.selectbox(
+                    "Preferred Side", 
+                    options=side_options, 
+                    index=side_index, 
+                    key=f"side_{player['Unique ID']}",
+                    help="Set a specific side preference for this player. This will override their preferred foot in the Best XI calculator for symmetrical roles."
+                )
+                
+                if st.button("Save Preferred Side"):
+                    # Save None if "None" is selected, otherwise save the value
+                    value_to_save = None if new_side == "None" else new_side
+                    update_player_preferred_side(player['Unique ID'], value_to_save)
+                    clear_all_caches()
+                    st.success(f"Set preferred side to '{new_side}'.")
                     st.rerun()
