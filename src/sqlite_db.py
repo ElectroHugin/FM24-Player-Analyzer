@@ -78,6 +78,13 @@ def init_db():
         )
     """)
 
+    # Create the table to store the user's shortlist of players.
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS shortlist (
+        player_unique_id TEXT PRIMARY KEY
+    )
+""")
+
     # --- MIGRATION BLOCK 4: Merge Newgen Duplicates ---
     # This logic is safe and unchanged.
     cursor.execute("SELECT value FROM settings WHERE key = 'newgen_merge_v1_complete'")
@@ -867,5 +874,30 @@ def merge_player_records(bad_id, good_id):
     except sqlite3.Error as e:
         conn.rollback()
         st.error(f"Database error during player merge: {e}")
+    finally:
+        conn.close()
+
+def get_shortlist_ids():
+    """Fetches a set of all player IDs currently on the shortlist."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT player_unique_id FROM shortlist')
+    ids = {row[0] for row in cursor.fetchall()}
+    conn.close()
+    return ids
+
+def set_shortlist_ids(player_ids):
+    """Clears the shortlist and saves a new list of player IDs."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM shortlist")
+        if player_ids:
+            data_to_insert = [(pid,) for pid in player_ids]
+            cursor.executemany("INSERT INTO shortlist (player_unique_id) VALUES (?)", data_to_insert)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        st.error(f"Failed to update shortlist: {e}")
     finally:
         conn.close()

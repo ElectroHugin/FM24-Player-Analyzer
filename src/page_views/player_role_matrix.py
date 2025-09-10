@@ -5,11 +5,11 @@ import pandas as pd
 from io import StringIO
 import math
 
-from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics
+from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics, get_shortlist_ids, set_shortlist_ids
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
 from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float, format_role_display
-from ui_components import display_custom_header
+from ui_components import display_custom_header, clear_all_caches
 
 
 def player_role_matrix_page():
@@ -164,16 +164,20 @@ def player_role_matrix_page():
     if scouted_matrix.empty:
         st.info("No scouted players found.")
     else:
+        shortlist_ids = get_shortlist_ids()
+
         with st.expander("🔍 Advanced Filtering & Sorting", expanded=True):
             sort_c1, sort_c2 = st.columns([2, 1])
             with sort_c1:
-                sort_options = ["Name"] + selected_roles
+                sort_options = ["Name", "Shortlist"] + selected_roles
                 sort_by = st.selectbox(
-                    "Sort by", options=sort_options,
-                    format_func=lambda x: "Name" if x == "Name" else format_role_display(x)
+                    "Filter & Sort by", options=sort_options,
+                    format_func=lambda x: "Name" if x == "Name" else "Shortlist" if x == "Shortlist" else format_role_display(x)
                 )
             with sort_c2:
-                sort_direction = st.radio("Direction", ["Descending", "Ascending"], horizontal=True, index=0)
+                # Disable direction for shortlist filter as it doesn't apply
+                sort_direction = st.radio("Direction", ["Descending", "Ascending"], horizontal=True, index=0, 
+                                          disabled=(sort_by == "Shortlist"))
 
             dwrs_c1, age_c2, val_c3 = st.columns(3)
             with dwrs_c1:
@@ -191,16 +195,20 @@ def player_role_matrix_page():
         scouted_matrix['AgeNum'] = pd.to_numeric(scouted_matrix['Age'], errors='coerce')
         
         # Apply filters
-        filtered_df = scouted_matrix[
-            (scouted_matrix['AgeNum'] <= max_age) &
-            (scouted_matrix['ValueNum'] <= max_value)
-        ].copy()
-        
-        if sort_by != "Name":
-            filtered_df = filtered_df[
-                (filtered_df[sort_by] >= min_dwrs) &
-                (filtered_df[sort_by] <= max_dwrs)
-            ]
+        if sort_by == "Shortlist":
+            filtered_df = scouted_matrix[scouted_matrix['Unique ID'].isin(shortlist_ids)].copy()
+        else:
+            # Original filtering logic
+            filtered_df = scouted_matrix[
+                (scouted_matrix['AgeNum'] <= max_age) &
+                (scouted_matrix['ValueNum'] <= max_value)
+            ].copy()
+            
+            if sort_by != "Name":
+                filtered_df = filtered_df[
+                    (filtered_df[sort_by] >= min_dwrs) &
+                    (filtered_df[sort_by] <= max_dwrs)
+                ]
 
         search_term = st.text_input("Search by Name in Scouted Players", key="search_scouted")
         if search_term:
@@ -208,10 +216,10 @@ def player_role_matrix_page():
 
         # Apply sorting
         is_ascending = (sort_direction == "Ascending")
-        if sort_by == "Name":
+        if sort_by == "Name" or sort_by == "Shortlist":
             filtered_df['LastName'] = filtered_df['Name'].apply(get_last_name)
             sorted_df = filtered_df.sort_values(by='LastName', ascending=is_ascending).drop(columns=['LastName'])
-        else:
+        else: # This block now only runs for sorting by a role
             sorted_df = filtered_df.sort_values(by=sort_by, ascending=is_ascending, na_position='last')
         
         # --- PAGINATION CONTROLS (TOP) ---
@@ -253,3 +261,32 @@ def player_role_matrix_page():
         styler = styler.apply(smart_full_styler, subset=role_cols_df)
         
         st.dataframe(styler, use_container_width=True, hide_index=True)
+
+        # --- CHANGE 3: Add the "Add to Shortlist" widget ---
+        st.markdown("---")
+        st.subheader("Add Players to Shortlist")
+        
+        # Create a map of {UID: Name} for the players currently visible on the page
+        visible_players_map = dict(zip(df_paginated['Unique ID'], df_paginated['Name']))
+        
+        if not visible_players_map:
+            st.info("No players are currently visible to add.")
+        else:
+            players_to_add = st.multiselect(
+                "Select from currently visible players:",
+                options=list(visible_players_map.keys()),
+                format_func=lambda uid: visible_players_map[uid],
+                placeholder="Choose players to add..."
+            )
+            
+            if st.button("Add Selected Players to Shortlist", type="primary"):
+                if not players_to_add:
+                    st.warning("Please select at least one player to add.")
+                else:
+                    # Combine the existing shortlist with the new selections
+                    new_shortlist = shortlist_ids.union(set(players_to_add))
+                    set_shortlist_ids(new_shortlist)
+                    st.success(f"Successfully added {len(players_to_add)} player(s) to the shortlist!")
+                    # Clear caches to ensure the shortlist filter is up-to-date on rerun
+                    clear_all_caches() 
+                    st.rerun()

@@ -20,6 +20,7 @@ from page_views.national_squad_selection import national_squad_selection_page
 from page_views.national_squad_matrix import national_squad_matrix_page
 from page_views.national_best_xi import national_best_xi_page
 from page_views.national_dashboard import national_dashboard_page
+#from page_views.shortlist import shortlist_page
 
 from data_parser import load_data, parse_and_update_data
 from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club, set_user_club, get_all_players, update_dwrs_ratings,
@@ -462,6 +463,8 @@ def main():
         best_position_calculator_page(players)
     elif page == "Transfer & Loan Management":
         transfer_loan_management_page(players)
+    #elif page == "Shortlist": 
+    #    shortlist_page(players)
     elif page == "Player Comparison":
         player_comparison_page(players)
     elif page == "DWRS Progress":
