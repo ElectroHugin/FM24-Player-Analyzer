@@ -27,6 +27,18 @@ def settings_page():
     theme_settings = get_theme_settings()
     current_mode = theme_settings.get('current_mode', 'night')
 
+    # --- STEP 1: Store the CURRENT state of all DWRS-related settings ---
+    # We do this before the widgets are drawn.
+    old_dwrs_weights = {
+        **{cat: get_weight(cat.lower().replace(" ", "_"), val) for cat, val in { "Extremely Important": 8.0, "Important": 4.0, "Good": 2.0, "Decent": 1.0, "Almost Irrelevant": 0.2 }.items()},
+        **{"gk_" + cat: get_weight("gk_" + cat.lower().replace(" ", "_"), val) for cat, val in { "Top Importance": 10.0, "High Importance": 8.0, "Medium Importance": 6.0, "Key": 4.0, "Preferable": 2.0, "Other": 0.5 }.items()}
+    }
+    old_role_multipliers = {
+        'key': get_role_multiplier('key'),
+        'preferable': get_role_multiplier('preferable')
+    }
+    # --- END OF STEP 1 ---
+
     with st.expander("⭐ Favorite Tactic Selection", expanded=True):
         st.info("The selected tactics will appear at the top of the list on the analysis pages.")
         
@@ -303,10 +315,37 @@ def settings_page():
 
     # This button remains outside the expanders
     if st.button("Save All Settings", type="primary"):
+        dwrs_recalculation_needed = False # Initialize our flag
+
+        # --- STEP 2: Compare OLD values with NEW values ---
+        # Check if any global or GK weights have changed
+        for cat, val in new_weights.items():
+            if val != old_dwrs_weights[cat]:
+                dwrs_recalculation_needed = True
+                break
+            set_weight(cat.lower().replace(" ", "_"), val)
+
+        if not dwrs_recalculation_needed:
+            for cat, val in new_gk_weights.items():
+                if val != old_dwrs_weights["gk_" + cat]:
+                    dwrs_recalculation_needed = True
+                    break
+                set_weight("gk_" + cat.lower().replace(" ", "_"), val)
+        
+        # Check if role multipliers have changed
+        if key_mult != old_role_multipliers['key']:
+            dwrs_recalculation_needed = True
+        set_role_multiplier('key', key_mult)
+
+        if pref_mult != old_role_multipliers['preferable']:
+            dwrs_recalculation_needed = True
+        set_role_multiplier('preferable', pref_mult)
+        # --- END OF STEP 2 ---
+
         set_favorite_tactics(new_fav_tactic1, new_fav_tactic2)
         if is_national_mode_on:
             set_national_favorite_tactics(new_nat_fav_1, new_nat_fav_2)
-            st.toast("National favorite tactics saved!", icon="🌍")
+            #st.toast("National favorite tactics saved!", icon="🌍")
         set_national_mode_enabled(is_enabled)
         set_national_team_settings(new_nat_name, new_nat_code, new_nat_age)
 
@@ -342,8 +381,15 @@ def settings_page():
             st.toast(f"Switched active database to '{db_to_set}.db'", icon="💾")
 
         clear_all_caches()
-        df = load_data()
-        if df is not None: update_dwrs_ratings(df, get_valid_roles())
-        st.success("Settings saved successfully!")
+        if dwrs_recalculation_needed:
+            st.toast("DWRS weights changed. Recalculating all player ratings...", icon="⏳")
+            with st.spinner("Recalculating all DWRS ratings... This may take a moment."):
+                df = load_data()
+                if df is not None:
+                    update_dwrs_ratings(df, get_valid_roles())
+            st.success("Settings saved successfully! All DWRS ratings have been recalculated.", icon="✅")
+        else:
+            st.toast("Settings saved! No DWRS recalculation was needed.", icon="✅")
+        
         st.info("Theme changes may require a full app restart (Ctrl+C in terminal and `streamlit run app.py`) to apply correctly.")
         st.rerun()
