@@ -263,30 +263,62 @@ def player_role_matrix_page():
         st.dataframe(styler, use_container_width=True, hide_index=True)
 
         # --- CHANGE 3: Add the "Add to Shortlist" widget ---
+        # --- CONTEXT-AWARE SHORTLIST MANAGEMENT ---
         st.markdown("---")
-        st.subheader("Add Players to Shortlist")
+
+        # If the user is currently filtering by "Shortlist", show the removal tool.
+        if sort_by == "Shortlist":
+            st.subheader("Remove Players from Shortlist")
+
+            # In this mode, sorted_df contains all the shortlisted players.
+            # We create a map for the multiselect widget.
+            shortlisted_players_map = dict(zip(sorted_df['Unique ID'], sorted_df['Name']))
+
+            if not shortlisted_players_map:
+                st.info("Your shortlist is currently empty.")
+            else:
+                players_to_remove = st.multiselect(
+                    "Select players to remove from your shortlist:",
+                    options=list(shortlisted_players_map.keys()),
+                    format_func=lambda uid: shortlisted_players_map[uid],
+                    placeholder="Choose players to remove..."
+                )
+
+                if st.button("Remove Selected Players from Shortlist", type="primary"):
+                    if not players_to_remove:
+                        st.warning("Please select at least one player to remove.")
+                    else:
+                        # Use set difference to calculate the new shortlist
+                        new_shortlist = shortlist_ids.difference(set(players_to_remove))
+                        set_shortlist_ids(new_shortlist)
+                        st.success(f"Successfully removed {len(players_to_remove)} player(s) from the shortlist!")
+                        clear_all_caches()
+                        st.rerun()
         
-        # Create a map of {UID: Name} for the players currently visible on the page
-        visible_players_map = dict(zip(df_paginated['Unique ID'], df_paginated['Name']))
-        
-        if not visible_players_map:
-            st.info("No players are currently visible to add.")
+        # Otherwise, in any other view, show the "Add to Shortlist" tool.
         else:
-            players_to_add = st.multiselect(
-                "Select from currently visible players:",
-                options=list(visible_players_map.keys()),
-                format_func=lambda uid: visible_players_map[uid],
-                placeholder="Choose players to add..."
-            )
+            st.subheader("Add Players to Shortlist")
             
-            if st.button("Add Selected Players to Shortlist", type="primary"):
-                if not players_to_add:
-                    st.warning("Please select at least one player to add.")
-                else:
-                    # Combine the existing shortlist with the new selections
-                    new_shortlist = shortlist_ids.union(set(players_to_add))
-                    set_shortlist_ids(new_shortlist)
-                    st.success(f"Successfully added {len(players_to_add)} player(s) to the shortlist!")
-                    # Clear caches to ensure the shortlist filter is up-to-date on rerun
-                    clear_all_caches() 
-                    st.rerun()
+            # Create a map of players currently visible on the page
+            visible_players_map = dict(zip(df_paginated['Unique ID'], df_paginated['Name']))
+            
+            if not visible_players_map:
+                st.info("No players are currently visible to add.")
+            else:
+                players_to_add = st.multiselect(
+                    "Select from currently visible players:",
+                    options=list(visible_players_map.keys()),
+                    format_func=lambda uid: visible_players_map[uid],
+                    placeholder="Choose players to add..."
+                )
+                
+                if st.button("Add Selected Players to Shortlist", type="primary"):
+                    if not players_to_add:
+                        st.warning("Please select at least one player to add.")
+                    else:
+                        # Use set union to add new players
+                        new_shortlist = shortlist_ids.union(set(players_to_add))
+                        set_shortlist_ids(new_shortlist)
+                        st.success(f"Successfully added {len(players_to_add)} player(s) to the shortlist!")
+                        clear_all_caches() 
+                        st.rerun()

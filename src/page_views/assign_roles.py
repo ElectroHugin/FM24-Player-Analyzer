@@ -12,7 +12,7 @@ def assign_roles_page(df):
     display_custom_header("Assign Roles to Players")
     # --- START: Initialize session state for filters ---
     if 'ar_filter_option' not in st.session_state:
-        st.session_state.ar_filter_option = "All Players"
+        st.session_state.ar_filter_option = "Unassigned Players"
     if 'ar_club_filter' not in st.session_state:
         st.session_state.ar_club_filter = "All"
     if 'ar_pos_filter' not in st.session_state:

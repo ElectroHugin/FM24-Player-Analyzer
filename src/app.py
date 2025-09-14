@@ -72,6 +72,7 @@ def sidebar(df, players):
         
         # --- DYNAMIC NAVIGATION MENU ---
         if st.session_state.management_mode == "National" and is_national_mode_enabled:
+            # Define the core pages for National mode
             page_options = ["National Dashboard", "National Squad", "Squad Matrix", "Best XI"]
             page_icons = ["house", "people-fill", "table", "trophy"]
             page_title = "National Team"
@@ -81,15 +82,20 @@ def sidebar(df, players):
                 "Squad Matrix": "National Squad Matrix",
                 "Best XI": "National Best XI",
             }
+            # --- THIS IS THE CHANGE: Use insert() to add "Assign Roles" in the second position ---
+            page_options.insert(1, "Assign Roles")
+            page_icons.insert(1, "person-plus")
+            page_mapping["Assign Roles"] = "Assign Roles" # The mapping is the same as the club version
+            # --- END OF CHANGE ---
+            
         else: # Club Management
-            # --- THIS IS THE CHANGE: "New Role" & "New Tactic" are removed from here ---
+            # This section remains unchanged
             page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player"]
             page_icons = ["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square"]
             page_title = "Club Navigation"
             page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data"}
-            # --- END OF CHANGE ---
-
-        # --- THIS IS THE CHANGE: Add global pages available in BOTH modes ---
+            
+        # This section for global pages also remains unchanged
         page_options.extend(["New Role", "New Tactic", "Settings"])
         page_icons.extend(["person-badge", "clipboard-plus", "gear"])
         page_mapping["New Role"] = "Create New Role"

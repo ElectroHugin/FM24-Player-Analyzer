@@ -248,7 +248,20 @@ def settings_page():
         st.warning("⚠️ **Danger Zone:** Actions here permanently delete data.")
         
         st.subheader("Prune Low-Potential Scouted Players")
-        st.info("This tool will delete scouted players (not from your club or second team) whose single best DWRS rating is below the threshold you set. This is useful for cleaning up large databases of scouted players.")
+
+        # --- THIS IS THE NEW, DYNAMIC INFO TEXT ---
+        # Check if national mode is on and get the country code
+        is_national_mode_on = get_national_mode_enabled()
+        nat_code_to_protect = None
+        if is_national_mode_on:
+            _, nat_code_to_protect, _ = get_national_team_settings()
+
+        info_text = "This tool will delete scouted players (not from your club or second team) whose single best DWRS rating is below the threshold."
+        if nat_code_to_protect:
+            info_text += f" **Players with the nationality '{nat_code_to_protect}' will be protected and will NOT be deleted.**"
+        
+        st.info(info_text)
+        # --- END OF NEW TEXT ---
 
         prune_threshold = st.slider(
             "DWRS Deletion Threshold",
@@ -256,8 +269,8 @@ def settings_page():
             help="Any scouted player whose BEST role rating is BELOW this value will be deleted."
         )
 
-        # Pre-calculate and show the impact of the deletion
-        count, max_rating = get_prunable_player_info(prune_threshold)
+        # Pre-calculate and show the impact, passing the national code for protection
+        count, max_rating = get_prunable_player_info(prune_threshold, national_code_to_protect=nat_code_to_protect)
         
         if count > 0:
             st.write(f"This action will permanently delete **{count}** scouted players.")
@@ -270,7 +283,8 @@ def settings_page():
         if st.button("Prune Scouted Players", disabled=not confirm, type="primary"):
             if confirm:
                 with st.spinner(f"Deleting {count} players from the database..."):
-                    deleted_count = prune_scouted_players(prune_threshold)
+                    # Pass the national code to the deletion function as well
+                    deleted_count = prune_scouted_players(prune_threshold, national_code_to_protect=nat_code_to_protect)
                 
                 if deleted_count >= 0:
                     st.success(f"Successfully deleted {deleted_count} players.")

@@ -593,40 +593,47 @@ def set_club_identity(full_name, stadium_name):
     conn.commit()
     conn.close()
 
-def get_prunable_player_info(dwrs_threshold):
+
+def get_prunable_player_info(dwrs_threshold, national_code_to_protect=None):
     """
-    Safely calculates how many scouted players are eligible for deletion
-    without actually deleting them.
-    A player is prunable if their best role is below the threshold.
+    Safely calculates how many scouted players are eligible for deletion.
+    Now optionally protects players of a specific nationality.
     """
     conn = connect_db()
-    cursor = conn.cursor()
     
-    user_club = get_user_club()
-    second_team_club = get_second_team_club()
-    
-    # This query finds the maximum rating for each player
+    # We must now also fetch Nationality and Second Nationality for filtering
     query = """
         SELECT
             p."Unique ID",
             p.Club,
+            p.Nationality,
+            p."Second Nationality",
             MAX(CAST(REPLACE(dr.dwrs_normalized, '%', '') AS REAL)) as max_dwrs
         FROM players p
         LEFT JOIN dwrs_ratings dr ON p."Unique ID" = dr.unique_id
         GROUP BY p."Unique ID"
     """
-    
     df = pd.read_sql_query(query, conn)
     conn.close()
     
-    # Filter for scouted players
+    # Filter for scouted players (not in user's clubs)
+    user_club = get_user_club()
+    second_team_club = get_second_team_club()
     exclude_clubs = [user_club]
     if second_team_club:
         exclude_clubs.append(second_team_club)
     scouted_df = df[~df['Club'].isin(exclude_clubs)]
     
+    # --- THIS IS THE NEW LOGIC ---
+    # If a national code is provided, further filter out players of that nationality
+    if national_code_to_protect:
+        scouted_df = scouted_df[
+            (scouted_df['Nationality'] != national_code_to_protect) &
+            (scouted_df['Second Nationality'] != national_code_to_protect)
+        ]
+    # --- END OF NEW LOGIC ---
+
     # Find players whose best role is below the threshold
-    # We use fillna(0) to include players with no ratings at all
     prunable_df = scouted_df[scouted_df['max_dwrs'].fillna(0) < dwrs_threshold]
     
     count = len(prunable_df)
@@ -634,10 +641,10 @@ def get_prunable_player_info(dwrs_threshold):
     
     return count, max_rating_prunable
 
-def prune_scouted_players(dwrs_threshold):
+def prune_scouted_players(dwrs_threshold, national_code_to_protect=None):
     """
     Finds and permanently deletes scouted players whose best role is below the threshold.
-    Deletes from both 'players' and 'dwrs_ratings' tables in safe batches.
+    Now optionally protects players of a specific nationality.
     """
     conn = connect_db()
     cursor = conn.cursor()
@@ -645,8 +652,9 @@ def prune_scouted_players(dwrs_threshold):
     user_club = get_user_club()
     second_team_club = get_second_team_club()
 
-    # This part to find the IDs is safe and correct.
-    query = """
+    # --- THIS IS THE NEW, DYNAMIC QUERY ---
+    # We build the query and parameters list dynamically to handle the optional filter
+    base_query = """
         SELECT p."Unique ID"
         FROM players p
         LEFT JOIN (
@@ -654,41 +662,42 @@ def prune_scouted_players(dwrs_threshold):
             FROM dwrs_ratings
             GROUP BY unique_id
         ) dr ON p."Unique ID" = dr.unique_id
-        WHERE p.Club NOT IN (?, ?) AND IFNULL(dr.max_dwrs, 0) < ?
+        WHERE p.Club NOT IN (?, ?)
     """
-    params = [user_club, second_team_club or '', dwrs_threshold]
-    cursor.execute(query, params)
+    params = [user_club, second_team_club or '']
+
+    # If a national code is provided, add the nationality exclusion to the query
+    if national_code_to_protect:
+        base_query += ' AND p.Nationality != ? AND p."Second Nationality" != ?'
+        params.extend([national_code_to_protect, national_code_to_protect])
+
+    # Add the final DWRS threshold condition
+    base_query += " AND IFNULL(dr.max_dwrs, 0) < ?"
+    params.append(dwrs_threshold)
+    # --- END OF NEW, DYNAMIC QUERY ---
+
+    cursor.execute(base_query, params)
     ids_to_delete = [row[0] for row in cursor.fetchall()]
     
     if not ids_to_delete:
         conn.close()
         return 0
 
-    # --- START OF BATCH DELETION LOGIC ---
-    BATCH_SIZE = 900 # A safe number well below the SQLite limit of 999
-    
+    # Batch deletion logic remains the same
+    BATCH_SIZE = 900
     try:
-        # Loop through the list of IDs in chunks of BATCH_SIZE
         for i in range(0, len(ids_to_delete), BATCH_SIZE):
-            # Get the current batch of IDs
             batch_ids = ids_to_delete[i:i + BATCH_SIZE]
-            
-            # Create placeholders specifically for this smaller batch
             placeholders = ', '.join('?' for _ in batch_ids)
-            
-            # Execute the delete operations for the current batch
             cursor.execute(f'DELETE FROM players WHERE "Unique ID" IN ({placeholders})', batch_ids)
             cursor.execute(f'DELETE FROM dwrs_ratings WHERE unique_id IN ({placeholders})', batch_ids)
-            
-        # If all batches were successful, commit the entire transaction
         conn.commit()
     except Exception as e:
-        conn.rollback() # If any batch fails, undo everything
+        conn.rollback()
         st.error(f"An error occurred during deletion: {e}")
         return -1
     finally:
         conn.close()
-    # --- END OF BATCH DELETION LOGIC ---
         
     return len(ids_to_delete)
 
