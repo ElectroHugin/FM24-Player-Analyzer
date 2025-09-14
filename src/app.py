@@ -24,7 +24,7 @@ from page_views.national_dashboard import national_dashboard_page
 
 from data_parser import load_data, parse_and_update_data
 from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club, set_user_club, get_all_players, update_dwrs_ratings,
-                        get_favorite_tactics, get_national_mode_enabled)
+                        get_favorite_tactics, get_national_mode_enabled, update_player_club)
 from constants import get_valid_roles, get_tactic_roles
 from config_handler import save_theme_settings, get_theme_settings
 from ui_components import clear_all_caches, display_strength_grid, display_custom_header
@@ -217,43 +217,117 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     display_custom_header("Dashboard")
     user_club = get_user_club()
 
-    # --- 1. DEDICATED UPLOAD SECTION (IMPROVED) ---
+    # --- 1. DEDICATED UPLOAD SECTION (HEAVILY MODIFIED) ---
     with st.expander("⬆️ Upload New Player Data"):
         with st.form("upload_form", clear_on_submit=True):
             uploaded_file = st.file_uploader("Upload HTML File", type=["html"])
             
-            # --- NEW: Add the auto-assign checkbox ---
-            auto_assign = st.checkbox("Automatically assign roles to new/unassigned players", value=True, help="After uploading, the app will automatically assign default roles to any player who doesn't have them, based on their positions.")
+            # --- THIS IS YOUR NEW CHECKBOX ---
+            is_squad_update = st.checkbox(
+                "This file is a full squad update for my club(s)", 
+                value=False,
+                help="Check this if the file contains ONLY players from your main and second team. The app will identify players who have left and ask you to confirm their departure."
+            )
             
+            auto_assign = st.checkbox("Automatically assign roles to new/unassigned players", value=True)
             submitted = st.form_submit_button("Process File")
 
             if submitted and uploaded_file is not None:
+                # --- THIS IS THE NEW TWO-STEP LOGIC ---
                 with st.spinner("Processing file..."):
-                    # Step 1: Save player attributes to the database
                     full_df, affected_ids = parse_and_update_data(uploaded_file)
                 
                 if full_df is None:
                     st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
                 else:
-                    # Step 2 (Optional): Auto-assign roles if the box is checked
+                    # After processing, run other optional steps
                     if auto_assign:
-
-                        with st.spinner("Auto-assigning roles to new players..."):
+                        with st.spinner("Auto-assigning roles..."):
                             num_assigned = auto_assign_roles_to_unassigned()
                         st.toast(f"Assigned roles to {num_assigned} players.", icon="✨")
 
-                    # Step 3: Now, calculate DWRS for everyone.
-                    # We reload the data to make sure we have the newly assigned roles.
-                    with st.spinner(f"Calculating DWRS for {len(affected_ids)} updated players..."):
+                    with st.spinner("Calculating DWRS for updated players..."):
                         clear_all_caches()
-                        # We need the most up-to-date data for the calculation
                         final_df = load_data()
                         if final_df is not None:
-                            # Pass the affected_ids to the function
                             update_dwrs_ratings(final_df, get_valid_roles(), affected_ids)
+                    
+                    # --- NEW DEPARTURE DETECTION LOGIC ---
+                    if is_squad_update and user_club:
+                        st.session_state.missing_players_to_resolve = []
+                        second_club = get_second_team_club()
+                        
+                        # Get all players currently listed at the user's clubs in the DB
+                        db_players = get_all_players()
+                        club_players_db = {
+                            p['Unique ID']: p for p in db_players 
+                            if p.get('Club') == user_club or (second_club and p.get('Club') == second_club)
+                        }
+                        
+                        # Find which of them were NOT in the uploaded file
+                        uploaded_ids = set(affected_ids)
+                        missing_ids = set(club_players_db.keys()) - uploaded_ids
 
-                    st.success("Data updated and ratings calculated successfully!")
-                    st.rerun()
+                        if missing_ids:
+                            st.session_state.missing_players_to_resolve = [
+                                club_players_db[uid] for uid in missing_ids
+                            ]
+                            st.toast(f"Detected {len(missing_ids)} players who may have left the club. Please resolve below.", icon="👋")
+                        else:
+                            st.success("Squad update complete! All club players accounted for.")
+                            st.rerun()
+                    else:
+                        st.success("Data updated and ratings calculated successfully!")
+                        st.rerun()
+
+    # --- 2. NEW UI FOR RESOLVING DEPARTURES ---
+    # This entire section will only appear when there are players to resolve.
+    if 'missing_players_to_resolve' in st.session_state and st.session_state.missing_players_to_resolve:
+        st.warning("Action Required: Player Departures")
+        st.info("The following players are in the database at your club(s) but were not in the squad file you just uploaded. Please confirm their status.")
+
+        with st.form("resolve_departures_form"):
+            for player in st.session_state.missing_players_to_resolve:
+                uid = player['Unique ID']
+                st.markdown(f"**{player['Name']}** ({player['Club']})")
+                
+                # Use columns for a neat layout
+                c1, c2 = st.columns([1, 2])
+                
+                # The radio button provides the "Keep" or "Left" choice
+                action = c1.radio(
+                    "Action", 
+                    options=["Keep at Club", "Player has left"], 
+                    key=f"action_{uid}", 
+                    horizontal=True, 
+                    label_visibility="collapsed"
+                )
+                
+                # The text input for the new club
+                c2.text_input("New Club (if left)", key=f"new_club_{uid}", placeholder="Enter new club or 'Retired'")
+            
+            save_departures = st.form_submit_button("Confirm All Departures", type="primary")
+
+            if save_departures:
+                with st.spinner("Updating player records..."):
+                    players_updated = 0
+                    for player in st.session_state.missing_players_to_resolve:
+                        uid = player['Unique ID']
+                        action = st.session_state[f"action_{uid}"]
+                        
+                        # If user selected that the player left...
+                        if action == "Player has left":
+                            new_club = st.session_state[f"new_club_{uid}"].strip()
+                            # ...and they provided a new club name...
+                            if new_club:
+                                # ...update the player's club in the database.
+                                update_player_club(uid, new_club)
+                                players_updated += 1
+                
+                st.success(f"Successfully updated {players_updated} player record(s).")
+                # Clean up the session state to hide this UI and finish the process
+                del st.session_state.missing_players_to_resolve
+                st.rerun()
 
     if df is None or not user_club:
         st.info("Please upload a player data file and select 'Your Club' in the sidebar to view the dashboard.")
