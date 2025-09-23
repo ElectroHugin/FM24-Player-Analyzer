@@ -55,6 +55,10 @@ def _apply_footedness_swaps(team, all_players, positions):
             # and a "Left"-sided player is on the right (pos_R).
             if side_L == 'Right' and side_R == 'Left':
                 team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
+            elif side_L == 'Right' and side_R == None:
+                team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
+            elif side_L == None and side_R == 'Left':
+                team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
             # --- END OF NEW LOGIC ---
                 
     return team
