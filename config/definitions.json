@@ -1440,7 +1440,12 @@
             "FBR-A",
             "FBR-Au",
             "NNFBR-D",
-            "IFBR-D"
+            "IFBR-D",
+            "IWBR-A",
+            "IWBR-Au",
+            "IWBR-D",
+            "IWBR-S",
+            "WBR-A"
         ],
         "D (L)": [
             "FBL-D",
@@ -1448,7 +1453,12 @@
             "FBL-A",
             "FBL-Au",
             "NNFBL-D",
-            "IFBL-D"
+            "IFBL-D",
+            "IWBL-A",
+            "IWBL-Au",
+            "IWBL-D",
+            "IWBL-S",
+            "WBL-A"
         ],
         "WB (R)": [
             "IWBR-A",

@@ -41,6 +41,7 @@ backups/*.db
 
 # Pictures
 /config/assets/logo.png
+/config/assets/flag.png
 
 # Virtual environment
 # Replace 'venv' with the name of your virtual environment folder if different.
@@ -55,3 +56,4 @@ venv.bak/
 # IDE settings folders
 .idea/
 .vscode/
+config/assets/flag.png
