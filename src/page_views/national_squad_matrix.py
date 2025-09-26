@@ -99,6 +99,7 @@ def national_squad_matrix_page(players):
     st.divider()
 
     # --- Display the Available Player Pool with Advanced Filtering ---
+    # --- THIS IS THE NEW, UPGRADED "ELIGIBLE PLAYER POOL" SECTION ---
     st.subheader(f"Eligible Player Pool ({len(available_pool_df)} Players)")
     if available_pool_df.empty:
         st.info("No other eligible players found in the database.")
@@ -120,7 +121,7 @@ def national_squad_matrix_page(players):
             with age_c2:
                 max_age_filter = st.slider("Filter by Max Age", 15, nat_age, nat_age)
 
-        # Apply filtering and sorting to the available pool
+        # Apply filtering
         filtered_df = available_pool_df[available_pool_df['AgeNum'] <= max_age_filter].copy()
         
         if sort_by != "Name":
@@ -128,6 +129,10 @@ def national_squad_matrix_page(players):
                 (filtered_df[sort_by] >= min_dwrs) &
                 (filtered_df[sort_by] <= max_dwrs)
             ]
+        
+        search_term = st.text_input("Search by Name in Eligible Player Pool", key="search_eligible_nat")
+        if search_term:
+            filtered_df = filtered_df[filtered_df['Name'].str.contains(search_term, case=False, na=False)]
 
         # Apply sorting
         is_ascending = (sort_direction == "Ascending")
@@ -137,9 +142,38 @@ def national_squad_matrix_page(players):
         else:
             sorted_df = filtered_df.sort_values(by=sort_by, ascending=is_ascending, na_position='last')
         
-        st.caption(f"Displaying {len(sorted_df)} matching players from the pool.")
+        st.caption(f"Displaying {len(sorted_df)} matching players.")
+
+        # --- PAGINATION LOGIC (Copied from club matrix) ---
+        if 'nat_matrix_page_num' not in st.session_state:
+            st.session_state.nat_matrix_page_num = 1
         
-        # Style and display the filtered & sorted dataframe
-        styler_pool = sorted_df[display_cols].style.format("{:.0f}", subset=selected_roles, na_rep="-")
-        styler_pool = styler_pool.apply(lambda col: col.map(color_dwrs_by_value), subset=selected_roles)
+        rows_per_page = 30
+        total_pages = math.ceil(len(sorted_df) / rows_per_page) if rows_per_page > 0 else 1
+
+        if st.session_state.nat_matrix_page_num > total_pages:
+            st.session_state.nat_matrix_page_num = 1
+        
+        page_c1_top, _ = st.columns([1, 3])
+        page_c1_top.number_input(
+            "Page:", min_value=1, max_value=max(1, total_pages),
+            key='nat_matrix_page_num'
+        )
+        
+        start_idx = (st.session_state.nat_matrix_page_num - 1) * rows_per_page
+        end_idx = start_idx + rows_per_page
+        df_paginated = sorted_df.iloc[start_idx:end_idx]
+        # --- END OF PAGINATION LOGIC ---
+
+        # Style and display the paginated dataframe
+        styler_pool = df_paginated[display_cols].style.format("{:.0f}", subset=selected_roles, na_rep="-")
+        
+        def smart_full_styler(column):
+            styles = [''] * len(column)
+            valid_indices = column.dropna().index
+            for index in valid_indices:
+                styles[column.index.get_loc(index)] = color_dwrs_by_value(column[index])
+            return styles
+            
+        styler_pool = styler_pool.apply(smart_full_styler, subset=selected_roles)
         st.dataframe(styler_pool, use_container_width=True, hide_index=True)

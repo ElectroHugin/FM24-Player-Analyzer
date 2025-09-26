@@ -265,7 +265,7 @@ def settings_page():
 
         prune_threshold = st.slider(
             "DWRS Deletion Threshold",
-            min_value=30, max_value=70, value=50,
+            min_value=30, max_value=100, value=50,
             help="Any scouted player whose BEST role rating is BELOW this value will be deleted."
         )
 
