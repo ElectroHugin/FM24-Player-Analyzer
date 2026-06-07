@@ -1,0 +1,222 @@
+# player_profile.py
+
+import streamlit as st
+import pandas as pd
+
+from sqlite_db import (get_user_club, get_second_team_club, get_all_players,
+                       get_latest_dwrs_ratings, get_dwrs_history)
+from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES
+from utils import format_role_display, get_last_name, color_attribute_by_value
+from ui_components import display_custom_header, display_pros_and_cons
+from role_analysis_logic import (analyze_player_for_role, get_top_roles_for_player,
+                                 parse_attribute_value, ALL_GK_ROLES)
+
+
+@st.cache_data
+def get_profile_pool(scope, user_club, second_club):
+    """
+    Return all players filtered by scope ('my_club'|'second_team'|'scouted'),
+    sorted by last name. Cached per (scope, clubs); cleared by clear_all_caches().
+    """
+    players = get_all_players()
+
+    if scope == 'my_club':
+        players = [p for p in players if p.get('Club') == user_club]
+    elif scope == 'second_team':
+        players = [p for p in players if p.get('Club') == second_club]
+    elif scope == 'scouted':
+        exclude = {user_club, second_club} if second_club else {user_club}
+        players = [p for p in players if p.get('Club') not in exclude]
+
+    players.sort(key=lambda p: get_last_name(p.get('Name', '')))
+    return players
+
+
+def _status_tag(label, value, color):
+    """Render a small colored pill for a qualitative status."""
+    if not value:
+        return ""
+    return (
+        f"<span style='background-color:{color}; color:white; padding:3px 10px; "
+        f"border-radius:12px; font-size:0.8rem; margin-right:6px; white-space:nowrap;'>"
+        f"{label}: {value}</span>"
+    )
+
+
+def _display_key_attributes(player, role):
+    """Show the role's key/preferable attributes as compact colored tags."""
+    from constants import get_role_specific_weights
+
+    role_weights = get_role_specific_weights().get(role, {"key": [], "preferable": []})
+    key_attrs = role_weights.get("key", [])
+    pref_attrs = role_weights.get("preferable", [])
+
+    if not key_attrs and not pref_attrs:
+        st.caption("No attribute definitions for this role.")
+        return
+
+    def render_attr_row(attrs, heading):
+        if not attrs:
+            return
+        st.markdown(f"**{heading}**")
+        # Build one HTML block of colored attribute chips
+        chips = []
+        for attr in attrs:
+            val = parse_attribute_value(player.get(attr, 0))
+            if val <= 0:
+                continue
+            style = color_attribute_by_value(int(round(val)))
+            chips.append(
+                f"<span style='{style} padding:2px 8px; border-radius:6px; "
+                f"margin:2px; display:inline-block; font-size:0.85rem;'>"
+                f"{attr}: {int(round(val))}</span>"
+            )
+        if chips:
+            st.markdown(" ".join(chips), unsafe_allow_html=True)
+        else:
+            st.caption("No data for these attributes.")
+
+    render_attr_row(key_attrs, "Key Attributes")
+    render_attr_row(pref_attrs, "Preferable Attributes")
+
+
+def _display_development_chart(player, roles):
+    """Line chart of normalized DWRS over time for the player's top roles."""
+    uid = player.get('Unique ID')
+    history_series = []
+
+    for role in roles:
+        hist = get_dwrs_history([uid], role)
+        if hist.empty:
+            continue
+        hist = hist.copy()
+        hist['dwrs_normalized'] = pd.to_numeric(
+            hist['dwrs_normalized'].astype(str).str.rstrip('%'), errors='coerce'
+        )
+        series = hist.set_index('snapshot')['dwrs_normalized'].rename(format_role_display(role))
+        history_series.append(series)
+
+    if history_series:
+        chart_data = pd.concat(history_series, axis=1).interpolate(
+            method='linear', limit_direction='forward', axis=0
+        )
+        st.line_chart(chart_data)
+    else:
+        st.info("No historical DWRS data yet. Upload more snapshots over time to see development.")
+
+
+def player_profile_page(players):
+    display_custom_header("Player Profile")
+
+    user_club = get_user_club()
+    second_club = get_second_team_club()
+
+    if not players:
+        st.info("No players loaded. Please upload player data first.")
+        return
+
+    # --- Player selection, scoped like the Role Analysis page ---
+    scope_labels = {"my_club": f"🏠 {user_club or 'My Club'}"}
+    if second_club:
+        scope_labels["second_team"] = f"🔄 {second_club}"
+    scope_labels["scouted"] = "🔍 Scouted Players"
+    scope_labels["all"] = "🌍 All Players"
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        scope = st.radio(
+            "Player pool",
+            options=list(scope_labels.keys()),
+            format_func=lambda s: scope_labels[s],
+            key="profile_scope",
+        )
+
+    pool = get_all_players() if scope == "all" else get_profile_pool(scope, user_club, second_club)
+    if scope == "all":
+        pool = sorted(pool, key=lambda p: get_last_name(p.get('Name', '')))
+
+    if not pool:
+        st.info(f"No players found in '{scope_labels[scope]}'.")
+        return
+
+    player_map = {
+        p['Unique ID']: f"{p.get('Name', 'Unknown')} ({p.get('Club', '-')})"
+        for p in pool
+    }
+
+    with c2:
+        selected_uid = st.selectbox(
+            "Select a player",
+            options=list(player_map.keys()),
+            format_func=lambda uid: player_map[uid],
+        )
+
+    player = next((p for p in pool if p['Unique ID'] == selected_uid), None)
+    if not player:
+        return
+
+    st.divider()
+
+    # --- Header block: name, vitals, status tags ---
+    st.markdown(f"## {player.get('Name', 'Unknown')}")
+
+    vitals = []
+    if player.get('Age'):
+        vitals.append(f"**Age:** {player['Age']}")
+    if player.get('Club'):
+        vitals.append(f"**Club:** {player['Club']}")
+    if player.get('Position'):
+        vitals.append(f"**Position:** {player['Position']}")
+    if vitals:
+        st.markdown(" &nbsp;|&nbsp; ".join(vitals))
+
+    tags = []
+    apt = player.get('Agreed Playing Time')
+    if apt:
+        tags.append(_status_tag("APT", apt, "#0069b3"))
+    primary = player.get('primary_role')
+    if primary:
+        tags.append(_status_tag("Primary", format_role_display(primary), "#0da025"))
+    foot = player.get('Preferred Foot')
+    if foot:
+        tags.append(_status_tag("Foot", foot, "#6c5ce7"))
+    if tags:
+        st.markdown("".join(tags), unsafe_allow_html=True)
+
+    # --- Top roles by DWRS ---
+    latest_ratings = get_latest_dwrs_ratings()
+    top_roles = get_top_roles_for_player(player, latest_ratings, limit=5)
+
+    st.markdown("### Top Roles")
+    if not top_roles:
+        st.info("This player has no rated roles yet. Assign roles on the 'Assign Roles' page.")
+        return
+
+    role_cols = st.columns(len(top_roles))
+    for i, tr in enumerate(top_roles):
+        medal = "🥇 " if i == 0 else ""
+        role_cols[i].metric(
+            label=f"{medal}{tr['role_name']}",
+            value=f"{tr['normalized']}%",
+        )
+
+    best_role = top_roles[0]['role']
+
+    st.divider()
+
+    # --- Pros & Cons for the best role + key attributes side by side ---
+    left, right = st.columns(2)
+    with left:
+        st.markdown(f"### Analysis as {format_role_display(best_role)}")
+        analysis = analyze_player_for_role(player, best_role)
+        display_pros_and_cons(analysis)
+    with right:
+        st.markdown("### Attribute Snapshot")
+        _display_key_attributes(player, best_role)
+
+    st.divider()
+
+    # --- Development chart for the top roles ---
+    st.markdown("### DWRS Development")
+    chart_roles = [tr['role'] for tr in top_roles[:3]]
+    _display_development_chart(player, chart_roles)

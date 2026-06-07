@@ -8,7 +8,7 @@ import streamlit as st
 import shutil
 import os
 
-from definitions_handler import PROJECT_ROOT
+from definitions_loader import PROJECT_ROOT
 from constants import attribute_mapping, get_valid_roles
 from config_handler import get_db_file
 

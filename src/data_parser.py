@@ -13,24 +13,67 @@ REQUIRED_COLUMN = "UID"
 
 def parse_html_table(file):
     try:
-        content = file.read().decode('utf-8')
+        # Support both file-like objects (Streamlit uploads) and raw bytes/strings
+        raw = file.read()
+        if isinstance(raw, bytes):
+            content = raw.decode('utf-8', errors='replace')
+        else:
+            content = raw
+
         soup = BeautifulSoup(content, 'html.parser')
         table = soup.find('table')
-        if not table: return None
-        # Find the first row of the table specifically, and get headers from it.
-        # This is more robust than searching the whole table for <th> tags.
+        if not table:
+            print("parse_html_table: No <table> element found in file.")
+            return None
+
         header_row = table.find('tr')
-        if not header_row: return None
+        if not header_row:
+            print("parse_html_table: No header row found in table.")
+            return None
+
         headers = [th.text.strip() for th in header_row.find_all('th')]
-        if not headers or REQUIRED_COLUMN not in headers or len(headers) < 10: return None
-        
+        if not headers:
+            print("parse_html_table: No <th> elements found in header row.")
+            return None
+        if len(headers) < 10:
+            print(f"parse_html_table: Too few columns ({len(headers)}), expected at least 10.")
+            return None
+        if REQUIRED_COLUMN not in headers:
+            print(f"parse_html_table: Required column '{REQUIRED_COLUMN}' not found. Found: {headers[:10]}")
+            return None
+
+        # --- Deduplicate column headers here, before building the DataFrame ---
+        # This prevents issues downstream when pandas silently picks the wrong
+        # column when two columns share the same name (e.g. FM exports with a
+        # duplicate 'Name' column from certain custom views).
+        seen = {}
+        deduped_headers = []
+        for h in headers:
+            if h in seen:
+                seen[h] += 1
+                deduped_headers.append(f"{h}_dup{seen[h]}")
+            else:
+                seen[h] = 0
+                deduped_headers.append(h)
+
         rows = [[td.text.strip() for td in tr.find_all('td')] for tr in table.find_all('tr')[1:]]
         valid_rows = [row for row in rows if len(row) == len(headers)]
-        if not valid_rows: return None
-        
-        return pd.DataFrame(valid_rows, columns=headers)
+        if not valid_rows:
+            print(f"parse_html_table: No valid rows found. Total rows: {len(rows)}, expected row length: {len(headers)}.")
+            return None
+
+        df = pd.DataFrame(valid_rows, columns=deduped_headers)
+
+        # Drop any columns that were renamed as duplicates (e.g. Name_dup1)
+        dup_cols = [c for c in df.columns if '_dup' in c]
+        if dup_cols:
+            print(f"parse_html_table: Dropping duplicate columns: {dup_cols}")
+            df = df.drop(columns=dup_cols)
+
+        return df
+
     except Exception as e:
-        print(f"Error reading HTML file: {e}")
+        print(f"parse_html_table: Unexpected error: {e}")
         return None
 
 def load_data():
@@ -45,19 +88,34 @@ def parse_and_update_data(file):
 
     html_df = parse_html_table(file)
     if html_df is None:
+        st.error(
+            "❌ **Could not parse the HTML file.** Possible causes:\n"
+            "- The file has no `<table>` or the table has no `UID` column.\n"
+            "- The file is corrupt or not a valid Football Manager HTML export.\n"
+            "- Check the terminal/logs for a detailed error message from `parse_html_table`."
+        )
         return None, []
 
-    # 1. Basic cleaning and validation (no changes here)
-    if not html_df.columns.is_unique:
-        duplicated_cols = html_df.columns[html_df.columns.duplicated()].unique().tolist()
-        st.warning(f"⚠️ **Warning:** Your uploaded HTML file contains duplicate columns: `{', '.join(duplicated_cols)}`.")
-        html_df = html_df.loc[:, ~html_df.columns.duplicated()]
+    # Warn the user if the FM view exported unexpected extra columns.
+    # (Deduplication already happened inside parse_html_table.)
+    known_fm_columns = set(attribute_mapping.keys()) | {'UID'}
+    extra_cols = [c for c in html_df.columns if c not in known_fm_columns and '_dup' not in c]
+    if extra_cols:
+        st.warning(
+            f"⚠️ **Unknown columns in export** (will be ignored): `{', '.join(extra_cols)}`\n\n"
+            "These columns are not part of the expected FM view. "
+            "Consider removing them from your FM view to keep exports clean."
+        )
 
     try:
         html_df['UID'] = html_df['UID'].astype(str).str.strip()
         html_df['Name'] = html_df['Name'].astype(str).str.strip()
-    except KeyError:
-        st.error("The uploaded HTML file is missing a required 'UID' or 'Name' column.")
+    except KeyError as e:
+        st.error(
+            f"❌ **Missing required column: `{e}`**\n\n"
+            "The HTML file must contain both a `UID` and a `Name` column. "
+            "Please check your Football Manager export view."
+        )
         return None, []
 
     # --- START OF THE DEFINITIVE UNIFICATION ENGINE ---

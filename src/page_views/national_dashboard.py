@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 
-from ui_components import display_custom_header, display_strength_grid, clear_all_caches
+from ui_components import display_custom_header, display_strength_grid, clear_all_caches, display_player_table
 from sqlite_db import (get_national_team_settings, get_national_squad_ids, get_national_favorite_tactics, 
                        update_dwrs_ratings, set_national_squad_ids)
 from data_parser import parse_and_update_data, get_player_role_matrix, load_data
@@ -142,7 +142,10 @@ def national_dashboard_page(df, players):
 
     with table_col:
         st.subheader("Current National Squad")
-        st.dataframe(squad_df[["Name", "Age", "Club", "Position"]], use_container_width=True, hide_index=True)
+        nat_cols = ["Name", "Age", "Club", "Position"]
+        if 'Average Rating' in squad_df.columns:
+            nat_cols.insert(2, "Average Rating")
+        display_player_table(squad_df, columns=nat_cols)
 
     # --- 7. POTENTIAL CALL-UPS (Player Suggestions) ---
     st.markdown("---")

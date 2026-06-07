@@ -79,7 +79,13 @@ def assign_roles_page(df):
         handle_role_update({k: v for k, v in changes.items() if v})
     if c2.button("⚠️ Auto-Assign to ALL Players"):
         changes = {p['Unique ID']: sorted(list(set(r for pos in parse_position_string(p['Position']) for r in get_position_to_role_mapping().get(pos, [])))) for _, p in df.iterrows()}
-        handle_role_update({k: v for k, v in changes.items() if set(v) != set(df[df['Unique ID'] == k]['Assigned Roles'].iloc[0])})
+        def _roles_unchanged(uid, new_roles):
+            existing = df[df['Unique ID'] == uid]['Assigned Roles'].iloc[0]
+            try:
+                return set(new_roles) == set(existing) if isinstance(existing, list) else False
+            except TypeError:
+                return False
+        handle_role_update({k: v for k, v in changes.items() if v and not _roles_unchanged(k, v)})
     
     st.subheader("Assign/Edit Roles Individually")
     st.dataframe(filtered_df[['Name', 'Position', 'Club', 'Assigned Roles']], use_container_width=True, hide_index=True)

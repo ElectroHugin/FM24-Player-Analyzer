@@ -359,3 +359,93 @@ def display_custom_header(page_title="", is_national_override=False):
             st.markdown(f"<p style='text-align: right;'><strong>{db_name}.db</strong></p>", unsafe_allow_html=True)
             
     st.divider()
+
+def build_player_table_config(df):
+    """
+    Builds a Streamlit column_config dict for a player DataFrame, adding
+    conditional formatting where it makes sense:
+      - 'Average Rating' -> ProgressColumn (0-10 scale) for at-a-glance form
+      - 'Age'            -> NumberColumn with a clean integer format
+      - 'Transfer Value' -> kept as text (FM exports it as a string like '€1.2M')
+
+    Only columns actually present in the DataFrame are configured, so this is
+    safe to pass to any st.dataframe call regardless of which columns it shows.
+    """
+    config = {}
+
+    if 'Average Rating' in df.columns:
+        # FM 'Av Rat' is a 0-10 match rating. Coerce to numeric for the bar;
+        # non-numeric / missing values simply render empty.
+        config['Average Rating'] = st.column_config.ProgressColumn(
+            "Avg Rating",
+            help="Average match rating (0-10)",
+            format="%.2f",
+            min_value=0.0,
+            max_value=10.0,
+        )
+
+    if 'Age' in df.columns:
+        config['Age'] = st.column_config.NumberColumn(
+            "Age",
+            help="Player age",
+            format="%d",
+        )
+
+    return config
+
+
+def display_player_table(df, columns=None):
+    """
+    Renders a player DataFrame with conditional formatting applied via
+    build_player_table_config. Optionally restricts to a subset of columns.
+
+    'Average Rating' is coerced to numeric so the ProgressColumn bar renders
+    correctly; this does not mutate the caller's DataFrame.
+    """
+    import pandas as pd
+
+    if df is None or df.empty:
+        st.info("No players to display.")
+        return
+
+    display_df = df[columns].copy() if columns else df.copy()
+
+    if 'Average Rating' in display_df.columns:
+        display_df['Average Rating'] = pd.to_numeric(
+            display_df['Average Rating'], errors='coerce'
+        )
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config=build_player_table_config(display_df),
+    )
+
+
+def display_pros_and_cons(analysis):
+    """
+    Render a pros & cons analysis (from role_analysis_logic.analyze_player_for_role)
+    as two side-by-side columns of readable bullet points.
+    """
+    from role_analysis_logic import format_pro_line, format_con_line
+
+    role_name = analysis["role_name"]
+    pros = analysis["pros"]
+    cons = analysis["cons"]
+
+    pro_col, con_col = st.columns(2)
+    with pro_col:
+        st.markdown("##### ✅ Strengths")
+        if pros:
+            for p in pros:
+                st.markdown(f"- {format_pro_line(p, role_name)}")
+        else:
+            st.caption("No standout strengths for this role.")
+    with con_col:
+        st.markdown("##### ⚠️ Weaknesses")
+        if cons:
+            for c in cons:
+                st.markdown(f"- {format_con_line(c, role_name)}")
+        else:
+            st.caption("No notable weaknesses for this role.")

@@ -52,7 +52,11 @@ def national_squad_matrix_page(players):
         full_matrix = full_matrix[full_matrix['Club'].str.lower() != 'retired']
 
     # Filter the full matrix to find all players eligible for the national team
-    nat_age = int(nat_age)
+    try:
+        nat_age = int(nat_age)
+    except (TypeError, ValueError):
+        st.error("The configured age limit is not a valid number. Please check your national team settings.")
+        return
     full_matrix['AgeNum'] = pd.to_numeric(full_matrix['Age'], errors='coerce')
     eligible_df = full_matrix[
         (full_matrix['Nationality'] == nat_code) | (full_matrix['Second Nationality'] == nat_code)

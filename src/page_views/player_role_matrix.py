@@ -132,12 +132,14 @@ def player_role_matrix_page():
     num_rows, num_cols = scouted_matrix.shape
     total_cells = num_rows * len(selected_roles) # A good approximation
     
-    # Pandas has a default safety limit. We'll increase it if our table is larger.
-    # We add a buffer (e.g., * 1.1) just to be safe.
+    # Pandas has a default safety limit. We'll increase it if our table is larger,
+    # then restore the original value afterwards to avoid app-wide side effects.
     current_max = pd.get_option("styler.render.max_elements")
+    limit_was_increased = False
     if total_cells > current_max:
         new_limit = int(total_cells * 1.1)
         pd.set_option("styler.render.max_elements", new_limit)
+        limit_was_increased = True
         st.info(f"💡 Large dataset detected. Temporarily increasing display limit to handle {total_cells:,} cells.")
 
     my_club_base_cols = ["Name", "Age", "Position", "Wage"]
@@ -158,7 +160,10 @@ def player_role_matrix_page():
         if second_team_club and show_second_team:
             prepare_and_display_df(second_team_matrix, f"Players from {second_team_club} (Second Team)", "second_team", my_club_display_cols, use_full_style=True)
 
-    # --- START OF NEW, ADVANCED SCOUTING CENTER ---
+    # Restore the original pandas option to avoid persistent app-wide side effects
+    if limit_was_increased:
+        pd.set_option("styler.render.max_elements", current_max)
+
     st.subheader("Scouted Players")
     
     if scouted_matrix.empty:

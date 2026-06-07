@@ -8,7 +8,8 @@ from config_handler import (get_theme_settings, save_theme_settings,
                           get_apt_weight, set_apt_weight, get_weight, set_weight, get_role_multiplier, 
                           set_role_multiplier, get_age_threshold, set_age_threshold, get_selection_bonus, 
                           set_selection_bonus, get_db_name, set_db_name, get_squad_management_setting, 
-                          set_squad_management_setting)
+                          set_squad_management_setting, get_gap_analysis_setting,
+                          set_gap_analysis_setting)
 from definitions_handler import PROJECT_ROOT
 from utils import calculate_contrast_ratio, get_available_databases
 from ui_components import clear_all_caches, display_custom_header
@@ -243,6 +244,33 @@ def settings_page():
             help="In the 'Best XI' calculator, this is the maximum number of different roles a single player can cover in the 'Additional Depth' section. A lower number encourages specialists, a higher number encourages versatile players."
         )
 
+    with st.expander("🕳️ Gap Analysis Thresholds"):
+        st.info(
+            "Tune how the Squad Gap Analysis flags weaknesses. Lower values flag more "
+            "positions (more sensitive); higher values flag only the clearest gaps."
+        )
+        new_displacement_threshold = st.slider(
+            "Displacement Threshold (hidden gaps)",
+            min_value=1.0, max_value=25.0, step=0.5,
+            value=get_gap_analysis_setting('displacement_threshold'),
+            help="How far below his best tactic-relevant slot a player must be played "
+                 "(in DWRS %, plus any wrong-side penalty) before it counts as a hidden gap."
+        )
+        new_dropoff_threshold = st.slider(
+            "Drop-off Threshold (obvious gaps)",
+            min_value=1.0, max_value=25.0, step=0.5,
+            value=get_gap_analysis_setting('dropoff_threshold'),
+            help="How far below the team's median DWRS a starter must be before the "
+                 "position counts as an obvious weakness."
+        )
+        new_wrong_side_penalty = st.slider(
+            "Wrong-Side Penalty",
+            min_value=0.0, max_value=15.0, step=0.5,
+            value=get_gap_analysis_setting('wrong_side_penalty'),
+            help="Extra weight added to a player's displacement score when he plays on "
+                 "the opposite side to his preferred side/foot."
+        )
+
     # --- START OF NEW DATABASE MAINTENANCE SECTION ---
     with st.expander("💾 Database Maintenance"):
         st.warning("⚠️ **Danger Zone:** Actions here permanently delete data.")
@@ -387,6 +415,9 @@ def settings_page():
         set_age_threshold('goalkeeper', new_goalkeeper_age)
         set_selection_bonus('natural_position', natural_pos_mult)
         set_squad_management_setting('max_roles_per_depth_player', new_max_roles)
+        set_gap_analysis_setting('displacement_threshold', new_displacement_threshold)
+        set_gap_analysis_setting('dropoff_threshold', new_dropoff_threshold)
+        set_gap_analysis_setting('wrong_side_penalty', new_wrong_side_penalty)
         set_club_identity(new_full_name, new_stadium_name)
 
         # Save only if the selection is a valid new DB name or different from the current one

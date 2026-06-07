@@ -73,7 +73,11 @@ def national_squad_selection_page(players):
                 for _, player in available_players_df.sort_values(by="Name").iterrows():
                     row = st.columns([0.8, 0.2])
                     with row[0]:
-                        st.markdown(f"**{player['Name']}** ({int(player['Age'])})")
+                        try:
+                            age_display = int(player['Age'])
+                        except (ValueError, TypeError):
+                            age_display = "N/A"
+                        st.markdown(f"**{player['Name']}** ({age_display})")
                         st.caption(f"{player['Club']} | {player['Position']}")
                     with row[1]:
                         if st.button("Add", key=f"add_{player['Unique ID']}", use_container_width=True):
@@ -95,7 +99,11 @@ def national_squad_selection_page(players):
                 for _, player in squad_df.sort_values(by="Name").iterrows():
                     row = st.columns([0.8, 0.2])
                     with row[0]:
-                        st.markdown(f"**{player['Name']}** ({int(player['Age'])})")
+                        try:
+                            age_display = int(player['Age'])
+                        except (ValueError, TypeError):
+                            age_display = "N/A"
+                        st.markdown(f"**{player['Name']}** ({age_display})")
                         st.caption(f"{player['Club']} | {player['Position']}")
                     with row[1]:
                         if st.button("Remove", key=f"remove_{player['Unique ID']}", use_container_width=True):

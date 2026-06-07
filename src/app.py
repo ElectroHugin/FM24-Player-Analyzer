@@ -15,6 +15,8 @@ from page_views.transfer_loan_management import transfer_loan_management_page
 from page_views.best_position import best_position_calculator_page  
 from page_views.player_role_matrix import player_role_matrix_page
 from page_views.role_analysis import role_analysis_page
+from page_views.player_profile import player_profile_page
+from page_views.gap_analysis import gap_analysis_page
 from page_views.assign_roles import assign_roles_page
 from page_views.national_squad_selection import national_squad_selection_page
 from page_views.national_squad_matrix import national_squad_matrix_page
@@ -27,7 +29,7 @@ from sqlite_db import (get_second_team_club, set_second_team_club, get_user_club
                         get_favorite_tactics, get_national_mode_enabled, update_player_club)
 from constants import get_valid_roles, get_tactic_roles
 from config_handler import save_theme_settings, get_theme_settings
-from ui_components import clear_all_caches, display_strength_grid, display_custom_header
+from ui_components import clear_all_caches, display_strength_grid, display_custom_header, display_player_table
 from data_parser import get_player_role_matrix
 from definitions_handler import PROJECT_ROOT
 from squad_logic import get_cached_squad_analysis
@@ -90,10 +92,10 @@ def sidebar(df, players):
             
         else: # Club Management
             # This section remains unchanged
-            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Squad Matrix", "Best XI", "Transfers", "Comparison", "Development", "Edit Player"]
-            page_icons = ["house", "person-plus", "search", "table", "trophy", "arrow-left-right", "people", "graph-up", "pencil-square"]
+            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Profile", "Squad Matrix", "Best XI", "Gap Analysis", "Transfers", "Comparison", "Development", "Edit Player"]
+            page_icons = ["house", "person-plus", "search", "person-badge", "table", "trophy", "binoculars", "arrow-left-right", "people", "graph-up", "pencil-square"]
             page_title = "Club Navigation"
-            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data"}
+            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Profile": "Player Profile", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Gap Analysis": "Gap Analysis", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data"}
             
         # This section for global pages also remains unchanged
         page_options.extend(["New Role", "New Tactic", "Settings"])
@@ -238,7 +240,9 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
                     full_df, affected_ids = parse_and_update_data(uploaded_file)
                 
                 if full_df is None:
-                    st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
+                    # parse_and_update_data already shows a detailed error message,
+                    # so we just stop here without adding a second, redundant one.
+                    pass
                 else:
                     # After processing, run other optional steps
                     if auto_assign:
@@ -354,7 +358,7 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
         st.warning(f"Could not generate a squad for the '{selected_tactic}' tactic. There may be no suitable players in your club.")
         st.subheader(f"Players at {user_club}")
         my_club_df = df[df['Club'] == user_club]
-        st.dataframe(my_club_df, use_container_width=True, hide_index=True)
+        display_player_table(my_club_df)
         return
         
     core_squad_df = analysis_results["core_squad_df"]
@@ -420,7 +424,7 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     with table_col:
         st.subheader(f"Players at {user_club}")
         my_club_df = df[df['Club'] == user_club]
-        st.dataframe(my_club_df, use_container_width=True, hide_index=True)
+        display_player_table(my_club_df)
 
     # ------------------- START OF NEW TRANSFER SUGGESTIONS SECTION -------------------
     st.markdown("---")
@@ -521,26 +525,48 @@ def main_page(uploaded_file, df, players): # Add 'players' to the function signa
     # -------------------- END OF NEW TRANSFER SUGGESTIONS SECTION --------------------
 
 
-def main():
-    df = load_data() 
+def load_app_data():
+    """
+    Single, centralized entry point for loading all player data.
+
+    Both load_data() and get_all_players() are already @st.cache_data-cached,
+    so calling this repeatedly is cheap; the point of routing every page
+    through one helper is consistency and a single place to refresh after an
+    upload. Returns a (df, players) tuple.
+    """
+    df = load_data()
     players = get_all_players()
-    page = sidebar(df, players) 
-    
+    return df, players
+
+
+def main():
+    # --- Centralized data loading: load ONCE here, pass to pages ---
+    df, players = load_app_data()
+    page = sidebar(df, players)
+
     query_params = st.query_params
     if "page" in query_params:
         page = query_params["page"][0]
     
-    # --- UPDATED ROUTER TO HANDLE ALL PAGES ---
+    # --- ROUTER ---
+    # Pages receive pre-loaded data (df / players) from main() where they use it.
+    # role_analysis_page and player_role_matrix_page intentionally take no args:
+    # they pull their data through dedicated cached helpers (get_players_by_role,
+    # get_player_role_matrix) rather than the shared players list.
     if page == "All Players":
         main_page(None, df, players)
     elif page == "Assign Roles":
         assign_roles_page(df)
     elif page == "Role Analysis":
         role_analysis_page()
+    elif page == "Player Profile":
+        player_profile_page(players)
     elif page == "Player-Role Matrix":
         player_role_matrix_page()
     elif page == "Best Position Calculator":
         best_position_calculator_page(players)
+    elif page == "Gap Analysis":
+        gap_analysis_page(players)
     elif page == "Transfer & Loan Management":
         transfer_loan_management_page(players)
     #elif page == "Shortlist": 
@@ -557,7 +583,7 @@ def main():
         create_new_tactic_page()
     elif page == "Settings":
         settings_page()
-    # --- NEW: National Page Routing ---
+    # --- National Page Routing ---
     elif page == "National Dashboard": 
         national_dashboard_page(df, players)
     elif page == "National Squad Selection":

@@ -48,47 +48,47 @@ def create_new_tactic_page():
             st.markdown("<p style='text-align: center; color: #ccc;'>Strikers</p>", unsafe_allow_html=True)
             s_cols = st.columns(5)
             with s_cols[1]:
-                selections = {'STL': st.selectbox("STL", ["- Unused -"] + sorted(pos_to_role_map.get("ST (C)", []), key=role_display_map.get), key="role_STL", format_func=format_role_display)}
+                selections = {'STL': st.selectbox("STL", ["- Unused -"] + sorted(pos_to_role_map.get("ST (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_STL", format_func=format_role_display)}
             with s_cols[2]:
-                selections['STC'] = st.selectbox("STC", ["- Unused -"] + sorted(pos_to_role_map.get("ST (C)", []), key=role_display_map.get), key="role_STC", format_func=format_role_display)
+                selections['STC'] = st.selectbox("STC", ["- Unused -"] + sorted(pos_to_role_map.get("ST (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_STC", format_func=format_role_display)
             with s_cols[3]:
-                selections['STR'] = st.selectbox("STR", ["- Unused -"] + sorted(pos_to_role_map.get("ST (C)", []), key=role_display_map.get), key="role_STR", format_func=format_role_display)
+                selections['STR'] = st.selectbox("STR", ["- Unused -"] + sorted(pos_to_role_map.get("ST (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_STR", format_func=format_role_display)
 
             # --- Attacking Midfield (5 positions) ---
             st.markdown("<p style='text-align: center; color: #ccc;'>Attacking Midfield</p>", unsafe_allow_html=True)
             am_cols = st.columns(5)
-            selections['AML'] = am_cols[0].selectbox("AML", ["- Unused -"] + sorted(pos_to_role_map.get("AM (L)", []), key=role_display_map.get), key="role_AML", format_func=format_role_display)
-            selections['AMCL'] = am_cols[1].selectbox("AMCL", ["- Unused -"] + sorted(pos_to_role_map.get("AM (C)", []), key=role_display_map.get), key="role_AMCL", format_func=format_role_display)
-            selections['AMC'] = am_cols[2].selectbox("AMC", ["- Unused -"] + sorted(pos_to_role_map.get("AM (C)", []), key=role_display_map.get), key="role_AMC", format_func=format_role_display)
-            selections['AMCR'] = am_cols[3].selectbox("AMCR", ["- Unused -"] + sorted(pos_to_role_map.get("AM (C)", []), key=role_display_map.get), key="role_AMCR", format_func=format_role_display)
-            selections['AMR'] = am_cols[4].selectbox("AMR", ["- Unused -"] + sorted(pos_to_role_map.get("AM (R)", []), key=role_display_map.get), key="role_AMR", format_func=format_role_display)
+            selections['AML'] = am_cols[0].selectbox("AML", ["- Unused -"] + sorted(pos_to_role_map.get("AM (L)", []), key=lambda r: role_display_map.get(r, r)), key="role_AML", format_func=format_role_display)
+            selections['AMCL'] = am_cols[1].selectbox("AMCL", ["- Unused -"] + sorted(pos_to_role_map.get("AM (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_AMCL", format_func=format_role_display)
+            selections['AMC'] = am_cols[2].selectbox("AMC", ["- Unused -"] + sorted(pos_to_role_map.get("AM (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_AMC", format_func=format_role_display)
+            selections['AMCR'] = am_cols[3].selectbox("AMCR", ["- Unused -"] + sorted(pos_to_role_map.get("AM (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_AMCR", format_func=format_role_display)
+            selections['AMR'] = am_cols[4].selectbox("AMR", ["- Unused -"] + sorted(pos_to_role_map.get("AM (R)", []), key=lambda r: role_display_map.get(r, r)), key="role_AMR", format_func=format_role_display)
 
             # --- Midfield (5 positions) ---
             st.markdown("<p style='text-align: center; color: #ccc;'>Midfield</p>", unsafe_allow_html=True)
             m_cols = st.columns(5)
-            selections['ML'] = m_cols[0].selectbox("ML", ["- Unused -"] + sorted(pos_to_role_map.get("M (L)", []), key=role_display_map.get), key="role_ML", format_func=format_role_display)
-            selections['MCL'] = m_cols[1].selectbox("MCL", ["- Unused -"] + sorted(pos_to_role_map.get("M (C)", []), key=role_display_map.get), key="role_MCL", format_func=format_role_display)
-            selections['MC'] = m_cols[2].selectbox("MC", ["- Unused -"] + sorted(pos_to_role_map.get("M (C)", []), key=role_display_map.get), key="role_MC", format_func=format_role_display)
-            selections['MCR'] = m_cols[3].selectbox("MCR", ["- Unused -"] + sorted(pos_to_role_map.get("M (C)", []), key=role_display_map.get), key="role_MCR", format_func=format_role_display)
-            selections['MR'] = m_cols[4].selectbox("MR", ["- Unused -"] + sorted(pos_to_role_map.get("M (R)", []), key=role_display_map.get), key="role_MR", format_func=format_role_display)
+            selections['ML'] = m_cols[0].selectbox("ML", ["- Unused -"] + sorted(pos_to_role_map.get("M (L)", []), key=lambda r: role_display_map.get(r, r)), key="role_ML", format_func=format_role_display)
+            selections['MCL'] = m_cols[1].selectbox("MCL", ["- Unused -"] + sorted(pos_to_role_map.get("M (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_MCL", format_func=format_role_display)
+            selections['MC'] = m_cols[2].selectbox("MC", ["- Unused -"] + sorted(pos_to_role_map.get("M (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_MC", format_func=format_role_display)
+            selections['MCR'] = m_cols[3].selectbox("MCR", ["- Unused -"] + sorted(pos_to_role_map.get("M (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_MCR", format_func=format_role_display)
+            selections['MR'] = m_cols[4].selectbox("MR", ["- Unused -"] + sorted(pos_to_role_map.get("M (R)", []), key=lambda r: role_display_map.get(r, r)), key="role_MR", format_func=format_role_display)
 
             # --- Defensive Midfield (5 positions) ---
             st.markdown("<p style='text-align: center; color: #ccc;'>Defensive Midfield</p>", unsafe_allow_html=True)
             dm_cols = st.columns(5)
-            selections['DML'] = dm_cols[0].selectbox("DML/WBL", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []) + pos_to_role_map.get("WB (L)", []), key=role_display_map.get), key="role_DML", format_func=format_role_display)
-            selections['DMCL'] = dm_cols[1].selectbox("DMCL", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []), key=role_display_map.get), key="role_DMCL", format_func=format_role_display)
-            selections['DMC'] = dm_cols[2].selectbox("DMC", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []), key=role_display_map.get), key="role_DMC", format_func=format_role_display)
-            selections['DMCR'] = dm_cols[3].selectbox("DMCR", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []), key=role_display_map.get), key="role_DMCR", format_func=format_role_display)
-            selections['DMR'] = dm_cols[4].selectbox("DMR/WBR", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []) + pos_to_role_map.get("WB (R)", []), key=role_display_map.get), key="role_DMR", format_func=format_role_display)
+            selections['DML'] = dm_cols[0].selectbox("DML/WBL", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []) + pos_to_role_map.get("WB (L)", []), key=lambda r: role_display_map.get(r, r)), key="role_DML", format_func=format_role_display)
+            selections['DMCL'] = dm_cols[1].selectbox("DMCL", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []), key=lambda r: role_display_map.get(r, r)), key="role_DMCL", format_func=format_role_display)
+            selections['DMC'] = dm_cols[2].selectbox("DMC", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []), key=lambda r: role_display_map.get(r, r)), key="role_DMC", format_func=format_role_display)
+            selections['DMCR'] = dm_cols[3].selectbox("DMCR", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []), key=lambda r: role_display_map.get(r, r)), key="role_DMCR", format_func=format_role_display)
+            selections['DMR'] = dm_cols[4].selectbox("DMR/WBR", ["- Unused -"] + sorted(pos_to_role_map.get("DM", []) + pos_to_role_map.get("WB (R)", []), key=lambda r: role_display_map.get(r, r)), key="role_DMR", format_func=format_role_display)
 
             # --- Defense (5 positions) ---
             st.markdown("<p style='text-align: center; color: #ccc;'>Defense</p>", unsafe_allow_html=True)
             d_cols = st.columns(5)
-            selections['DL'] = d_cols[0].selectbox("DL", ["- Unused -"] + sorted(pos_to_role_map.get("D (L)", []), key=role_display_map.get), key="role_DL", format_func=format_role_display)
-            selections['DCL'] = d_cols[1].selectbox("DCL", ["- Unused -"] + sorted(pos_to_role_map.get("D (C)", []), key=role_display_map.get), key="role_DCL", format_func=format_role_display)
-            selections['DC'] = d_cols[2].selectbox("DC", ["- Unused -"] + sorted(pos_to_role_map.get("D (C)", []), key=role_display_map.get), key="role_DC", format_func=format_role_display)
-            selections['DCR'] = d_cols[3].selectbox("DCR", ["- Unused -"] + sorted(pos_to_role_map.get("D (C)", []), key=role_display_map.get), key="role_DCR", format_func=format_role_display)
-            selections['DR'] = d_cols[4].selectbox("DR", ["- Unused -"] + sorted(pos_to_role_map.get("D (R)", []), key=role_display_map.get), key="role_DR", format_func=format_role_display)
+            selections['DL'] = d_cols[0].selectbox("DL", ["- Unused -"] + sorted(pos_to_role_map.get("D (L)", []), key=lambda r: role_display_map.get(r, r)), key="role_DL", format_func=format_role_display)
+            selections['DCL'] = d_cols[1].selectbox("DCL", ["- Unused -"] + sorted(pos_to_role_map.get("D (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_DCL", format_func=format_role_display)
+            selections['DC'] = d_cols[2].selectbox("DC", ["- Unused -"] + sorted(pos_to_role_map.get("D (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_DC", format_func=format_role_display)
+            selections['DCR'] = d_cols[3].selectbox("DCR", ["- Unused -"] + sorted(pos_to_role_map.get("D (C)", []), key=lambda r: role_display_map.get(r, r)), key="role_DCR", format_func=format_role_display)
+            selections['DR'] = d_cols[4].selectbox("DR", ["- Unused -"] + sorted(pos_to_role_map.get("D (R)", []), key=lambda r: role_display_map.get(r, r)), key="role_DR", format_func=format_role_display)
 
             # --- Goalkeeper (Mandatory) ---
             st.markdown("<p style='text-align: center; color: #ccc;'>Goalkeeper</p>", unsafe_allow_html=True)

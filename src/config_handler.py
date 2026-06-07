@@ -72,6 +72,15 @@ def load_config():
         }
         config_was_modified = True
 
+    # 8b. Ensure [GapAnalysis] section exists
+    if not config.has_section('GapAnalysis'):
+        config['GapAnalysis'] = {
+            'displacement_threshold': '8.0',
+            'dropoff_threshold': '8.0',
+            'wrong_side_penalty': '5.0'
+        }
+        config_was_modified = True
+
     # 9. Ensure [ThemeSettings] section exists
     if not config.has_section('ThemeSettings'):
         config['ThemeSettings'] = {
@@ -238,6 +247,25 @@ def set_squad_management_setting(key, value):
     if 'SquadManagement' not in config:
         config['SquadManagement'] = {}
     config['SquadManagement'][key] = str(value)
+    with open(CONFIG_FILE, 'w') as f:
+        config.write(f)
+    load_config.clear()
+def get_gap_analysis_setting(key):
+    """Gets a threshold from the [GapAnalysis] section (returns float)."""
+    config = load_config()
+    defaults = {
+        'displacement_threshold': 8.0,
+        'dropoff_threshold': 8.0,
+        'wrong_side_penalty': 5.0,
+    }
+    return float(config.get('GapAnalysis', key, fallback=str(defaults.get(key, 0.0))))
+
+def set_gap_analysis_setting(key, value):
+    """Sets a threshold in the [GapAnalysis] section."""
+    config = load_config()
+    if 'GapAnalysis' not in config:
+        config['GapAnalysis'] = {}
+    config['GapAnalysis'][key] = str(value)
     with open(CONFIG_FILE, 'w') as f:
         config.write(f)
     load_config.clear()

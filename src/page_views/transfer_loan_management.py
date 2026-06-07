@@ -6,7 +6,6 @@ import pandas as pd
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics, update_player_transfer_status, update_player_loan_status, update_player_club
 from constants import get_tactic_roles
 from squad_logic import calculate_squad_and_surplus, calculate_development_squads, get_master_role_ratings
-from config_handler import get_age_threshold
 from ui_components import display_custom_header
 
 def transfer_loan_management_page(players):
@@ -142,9 +141,6 @@ def transfer_loan_management_page(players):
             st.success(f"All changes for players in '{title}' have been saved!")
             st.rerun()
 
-    outfielder_age = get_age_threshold('outfielder')
-    gk_age = get_age_threshold('goalkeeper')
-    
     display_management_table(loan_candidates, f"For Loan (Promising Youth)", is_youth=True)
     st.divider()
     display_management_table(sell_candidates, f"For Sale / Release")
