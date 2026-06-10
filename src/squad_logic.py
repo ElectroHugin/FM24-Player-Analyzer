@@ -63,7 +63,7 @@ def _apply_footedness_swaps(team, all_players, positions):
                 
     return team
 
-st.cache_data
+@st.cache_data
 def get_master_role_ratings(user_club=None, second_team_club=None):
     """
     Calculates and caches a master dictionary of NUMERIC DWRS ratings for all players
