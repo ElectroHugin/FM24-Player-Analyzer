@@ -7,7 +7,7 @@
 # This module is intentionally UI-free so it can be reused by the Role
 # Analysis page, a future Player Profile view, or anywhere else.
 
-from constants import get_role_specific_weights, get_player_roles
+from constants import get_role_specific_weights, get_player_roles, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_personality_category
 
 # Roles that use goalkeeper attributes / are evaluated as keepers.
 ALL_GK_ROLES = ["GK-D", "SK-D", "SK-S", "SK-A"]
@@ -52,20 +52,30 @@ def _role_display_name(role_abbr):
     return role_abbr
 
 
-def analyze_player_for_role(player, role):
+def analyze_player_for_role(player, role, include_global=False, include_personality=False):
     """
     Compare a player's attributes against a role's key/preferable attributes
     and return a structured dict of pros and cons.
+
+    Optional extensions:
+      * include_global: also surface globally important attributes (e.g. Pace,
+        Acceleration) that the role's key/preferable lists don't already cover.
+        Outfield roles use the "Extremely Important"/"Important" tiers of
+        GLOBAL_STAT_CATEGORIES; GK roles use the "Top"/"High Importance" tiers
+        of GK_STAT_CATEGORIES.
+      * include_personality: add the player's Personality as a pro (good) or
+        con (bad); neutral/unknown personalities are ignored.
 
     Returns:
         {
             "role": role_abbr,
             "role_name": human-readable role name,
-            "pros": [ {"attr": str, "value": float, "tier": "key"|"preferable", "elite": bool}, ... ],
-            "cons": [ {"attr": str, "value": float, "tier": "key"|"preferable"}, ... ],
+            "pros": [ {"attr": str, "value": float, "tier": ..., "elite": bool}, ... ],
+            "cons": [ {"attr": str, "value": float, "tier": ...}, ... ],
         }
-    Pros are sorted strongest-first, cons weakest-first. Key attributes are
-    prioritized over preferable ones when ordering.
+    Personality entries carry only {"attr", "tier": "personality"} (no value).
+    Pros are sorted strongest-first, cons weakest-first; personality first,
+    then key, then global, then preferable.
     """
     role_weights = get_role_specific_weights().get(role, {"key": [], "preferable": []})
     key_attrs = role_weights.get("key", [])
@@ -97,10 +107,46 @@ def analyze_player_for_role(player, role):
         elif value <= PREF_CON_THRESHOLD:
             cons.append({"attr": attr, "value": value, "tier": "preferable"})
 
-    # Ordering: key tier first, then by value (pros high->low, cons low->high)
-    tier_rank = {"key": 0, "preferable": 1}
-    pros.sort(key=lambda p: (tier_rank[p["tier"]], -p["value"]))
-    cons.sort(key=lambda c: (tier_rank[c["tier"]], c["value"]))
+    # --- Globally important attributes (e.g. Pace, Acceleration) ---
+    # Surfaced for every role, but never double-listed if the role already
+    # treats them as key/preferable. Judged on the tighter key thresholds.
+    if include_global:
+        already = set(key_attrs) | set(pref_attrs)
+        if role in ALL_GK_ROLES:
+            global_attrs = [a for a, cat in GK_STAT_CATEGORIES.items()
+                            if cat in ("Top Importance", "High Importance")]
+        else:
+            global_attrs = [a for a, cat in GLOBAL_STAT_CATEGORIES.items()
+                            if cat in ("Extremely Important", "Important")]
+        for attr in global_attrs:
+            if attr in already:
+                continue
+            value = parse_attribute_value(player.get(attr, 0))
+            if value <= 0:
+                continue
+            if value >= KEY_PRO_THRESHOLD:
+                pros.append({
+                    "attr": attr, "value": value, "tier": "global",
+                    "elite": value >= ELITE_THRESHOLD,
+                })
+            elif value <= KEY_CON_THRESHOLD:
+                cons.append({"attr": attr, "value": value, "tier": "global"})
+
+    # --- Personality as a pro / con ---
+    if include_personality:
+        pname = player.get('Personality')
+        if pname and isinstance(pname, str) and pname.strip():
+            pcat = get_personality_category(pname)
+            if pcat == 'good':
+                pros.append({"attr": pname, "tier": "personality"})
+            elif pcat == 'bad':
+                cons.append({"attr": pname, "tier": "personality"})
+
+    # Ordering: personality first, then key, global, preferable; within a tier
+    # pros high->low, cons low->high. Personality has no value (sorts as 0).
+    tier_rank = {"personality": -1, "key": 0, "global": 1, "preferable": 2}
+    pros.sort(key=lambda p: (tier_rank.get(p["tier"], 9), -p.get("value", 0)))
+    cons.sort(key=lambda c: (tier_rank.get(c["tier"], 9), c.get("value", 0)))
 
     return {
         "role": role,
@@ -118,6 +164,8 @@ def _article(word):
 def format_pro_line(pro, role_name):
     """Render a single pro as a readable string, e.g.
     'Elite Finishing for a Poacher (Attack)' or 'Strong Tackling'."""
+    if pro.get("tier") == "personality":
+        return f"Good personality: {pro['attr']}"
     qualifier = "Elite" if pro.get("elite") else "Strong"
     base = f"{qualifier} {pro['attr']} ({int(round(pro['value']))})"
     if pro["tier"] == "key":
@@ -128,6 +176,8 @@ def format_pro_line(pro, role_name):
 def format_con_line(con, role_name):
     """Render a single con as a readable string, e.g.
     'Low Work Rate for a Pressing Forward (Support)'."""
+    if con.get("tier") == "personality":
+        return f"Poor personality: {con['attr']}"
     base = f"Low {con['attr']} ({int(round(con['value']))})"
     if con["tier"] == "key":
         return f"{base} for {_article(role_name)} {role_name}"

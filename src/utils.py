@@ -8,7 +8,7 @@ from collections import defaultdict
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
-from constants import get_player_roles, get_valid_roles, get_position_to_role_mapping, MASTER_POSITION_MAP
+from constants import get_player_roles, get_valid_roles, get_position_to_role_mapping, MASTER_POSITION_MAP, get_personality_category
 from definitions_loader import PROJECT_ROOT
 
 def value_to_float(value_str):
@@ -259,3 +259,15 @@ def color_attribute_by_value(val):
 
     except (ValueError, TypeError, AttributeError):
         return ''
+
+def color_personality(name):
+    """Cell/pill style for a personality string, traffic-light by category:
+    good = green, neutral = yellow, bad = red. Unknown/empty -> no style."""
+    cat = get_personality_category(name)
+    if cat == 'good':
+        return 'background-color: #0da025; color: white;'
+    if cat == 'neutral':
+        return 'background-color: #d8d21e; color: black;'
+    if cat == 'bad':
+        return 'background-color: #cf1e1e; color: white;'
+    return ''

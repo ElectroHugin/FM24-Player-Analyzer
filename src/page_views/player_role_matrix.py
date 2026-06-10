@@ -8,8 +8,8 @@ import math
 from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics, get_shortlist_ids, set_shortlist_ids
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
-from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float, format_role_display
-from ui_components import display_custom_header, clear_all_caches
+from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float, format_role_display, color_personality
+from ui_components import display_custom_header, clear_all_caches, personality_filter_controls, filter_df_by_personality
 
 
 def player_role_matrix_page():
@@ -66,6 +66,10 @@ def player_role_matrix_page():
     if hide_retired:
         full_matrix = full_matrix[full_matrix['Club'].str.lower() != 'retired']
 
+    # Personality filter (applies to club, second-team and scouted tables below)
+    allowed_personalities = personality_filter_controls(full_matrix, key_prefix="matrix")
+    full_matrix = filter_df_by_personality(full_matrix, allowed_personalities)
+
     my_club_matrix = full_matrix[full_matrix['Club'] == user_club].copy()
     second_team_matrix = full_matrix[full_matrix['Club'] == second_team_club].copy() if second_team_club else pd.DataFrame()
     exclude_clubs = [user_club]
@@ -120,6 +124,10 @@ def player_role_matrix_page():
                     subset=pd.IndexSlice[top_indices, [role]]
                 )
 
+        if 'Personality' in df_display.columns:
+            styler = styler.format(subset=['Personality'], na_rep="-")
+            styler = styler.map(color_personality, subset=['Personality'])
+
         st.dataframe(styler, use_container_width=True, hide_index=True)
         # --- END OF CORRECTED STYLING LOGIC ---
         
@@ -142,12 +150,12 @@ def player_role_matrix_page():
         limit_was_increased = True
         st.info(f"💡 Large dataset detected. Temporarily increasing display limit to handle {total_cells:,} cells.")
 
-    my_club_base_cols = ["Name", "Age", "Position", "Wage"]
+    my_club_base_cols = ["Name", "Age", "Position", "Personality", "Wage"]
     if show_extra_details:
         my_club_base_cols.extend(["Left Foot", "Right Foot", "Height", "Transfer Value"])
     my_club_display_cols = my_club_base_cols + selected_roles
 
-    scouted_base_cols = ["Name", "Age", "Position", "Club", "Transfer Value", "Wage"]
+    scouted_base_cols = ["Name", "Age", "Position", "Personality", "Club", "Transfer Value", "Wage"]
     if show_extra_details:
         scouted_base_cols.extend(["Left Foot", "Right Foot", "Height"])
     scouted_display_cols = scouted_base_cols + selected_roles
@@ -265,6 +273,10 @@ def player_role_matrix_page():
             return styles
         styler = styler.apply(smart_full_styler, subset=role_cols_df)
         
+        if 'Personality' in df_display.columns:
+            styler = styler.format(subset=['Personality'], na_rep="-")
+            styler = styler.map(color_personality, subset=['Personality'])
+
         st.dataframe(styler, use_container_width=True, hide_index=True)
 
         # --- CHANGE 3: Add the "Add to Shortlist" widget ---

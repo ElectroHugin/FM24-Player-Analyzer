@@ -53,7 +53,9 @@
             "WR-S": "Winger Right (Support)",
             "B2B-S": "Box-to-Box Midfielder (Support)",
             "DLP-S": "Deep Lying Playmaker (Support)",
-            "BWM-D": "Ball Winning Midfielder (Defend)"
+            "BWM-D": "Ball Winning Midfielder (Defend)",
+            "AM-S": "Attacking Midfielder (Support)",
+            "AP-A": "Advanced Playmaker (Attack)"
         },
         "Attack": {
             "AF-A": "Advanced Forward (Attack)",
@@ -68,7 +70,8 @@
             "FN-S": "False Nine (Support)",
             "RL-A": "Raumdeuter Left (Attack)",
             "RR-A": "Raumdeuter Right (Attack)",
-            "AP-S": "Advanced Playmaker (Support)"
+            "AP-S": "Advanced Playmaker (Support)",
+            "DLF-S": "Deep Lying Forward (Support)"
         }
     },
     "role_specific_weights": {
@@ -1410,6 +1413,62 @@
                 "Agility",
                 "Balance"
             ]
+        },
+        "AM-S": {
+            "key": [
+                "First Touch",
+                "Long Shots",
+                "Passing",
+                "Technique",
+                "Anticipation",
+                "Decisions",
+                "Flair",
+                "Off the Ball"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Composure",
+                "Vision",
+                "Agility"
+            ]
+        },
+        "DLF-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Finishing",
+                "Anticipation",
+                "Flair",
+                "Vision",
+                "Balance",
+                "Strength"
+            ]
+        },
+        "AP-A": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Anticipation",
+                "Flair",
+                "Acceleration",
+                "Agility"
+            ]
         }
     },
     "position_to_role_mapping": {
@@ -1482,6 +1541,7 @@
             "VOL-A"
         ],
         "M (C)": [
+            "AP-A",
             "AP-S",
             "B2B-S",
             "BWM-D",
@@ -1497,6 +1557,7 @@
             "WL-S"
         ],
         "AM (R)": [
+            "AP-A",
             "AP-S",
             "IFR-A",
             "IFR-S",
@@ -1505,6 +1566,7 @@
             "WR-S"
         ],
         "AM (L)": [
+            "AP-A",
             "AP-S",
             "IFL-A",
             "IFL-S",
@@ -1513,12 +1575,15 @@
         ],
         "AM (C)": [
             "AM-A",
+            "AM-S",
+            "AP-A",
             "AP-S",
             "RPM-S"
         ],
         "ST (C)": [
             "AF-A",
             "CF-S",
+            "DLF-S",
             "FN-S",
             "P-A",
             "PF-S"
@@ -1680,6 +1745,45 @@
             "AMR": "IFR-A",
             "MCR": "DLP-S",
             "DC": "BPD-D"
+        },
+        "3-3-3-1 Cruyff Perfect": {
+            "GK": "SK-D",
+            "DC": "BPD-D",
+            "AMR": "WR-S",
+            "MCR": "CM-S",
+            "AML": "WL-S",
+            "MCL": "RPM-S",
+            "DCL": "WCB-D",
+            "DMC": "DM-S",
+            "AMC": "AM-S",
+            "DCR": "WCB-D",
+            "STC": "DLF-S"
+        },
+        "3-3-2-2 Broken": {
+            "GK": "SK-D",
+            "STL": "AF-A",
+            "MR": "WR-S",
+            "DC": "BPD-D",
+            "ML": "WL-S",
+            "AMCR": "AM-S",
+            "AMCL": "AM-S",
+            "DCL": "WCB-D",
+            "DMC": "DM-S",
+            "DCR": "WCB-D",
+            "STR": "AF-A"
+        },
+        "3-5-2 Most Hated": {
+            "GK": "SK-S",
+            "MCR": "AP-A",
+            "DML": "WBL-A",
+            "STL": "AF-A",
+            "DC": "BPD-Co",
+            "DCL": "BPD-D",
+            "DMC": "DM-S",
+            "DCR": "BPD-D",
+            "MCL": "B2B-S",
+            "STR": "AF-A",
+            "DMR": "WBR-A"
         }
     },
     "tactic_layouts": {
@@ -1932,6 +2036,112 @@
             "Strikers": [
                 "STC"
             ]
+        },
+        "3-3-3-1 Cruyff Perfect": {
+            "Defense": [
+                "DC",
+                "DCL",
+                "DCR"
+            ],
+            "Attacking Midfield": [
+                "AMR",
+                "AML",
+                "AMC"
+            ],
+            "Midfield": [
+                "MCR",
+                "MCL"
+            ],
+            "Defensive Midfield": [
+                "DMC"
+            ],
+            "Strikers": [
+                "STC"
+            ]
+        },
+        "3-3-2-2 Broken": {
+            "Strikers": [
+                "STL",
+                "STR"
+            ],
+            "Midfield": [
+                "MR",
+                "ML"
+            ],
+            "Defense": [
+                "DC",
+                "DCL",
+                "DCR"
+            ],
+            "Attacking Midfield": [
+                "AMCR",
+                "AMCL"
+            ],
+            "Defensive Midfield": [
+                "DMC"
+            ]
+        },
+        "3-5-2 Most Hated": {
+            "Midfield": [
+                "MCR",
+                "MCL"
+            ],
+            "Defensive Midfield": [
+                "DML",
+                "DMC",
+                "DMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ],
+            "Defense": [
+                "DC",
+                "DCL",
+                "DCR"
+            ]
         }
+    },
+    "personalities": {
+        "Model Citizen": "good",
+        "Perfectionist": "good",
+        "Resolute": "good",
+        "Model Professional": "good",
+        "Professional": "good",
+        "Fairly Professional": "good",
+        "Spirited": "good",
+        "Driven": "good",
+        "Determined": "good",
+        "Fairly Determined": "good",
+        "Iron Willed": "good",
+        "Resilient": "good",
+        "Charismatic Leader": "good",
+        "Born Leader": "good",
+        "Leader": "good",
+        "Very Ambitious": "good",
+        "Ambitious": "good",
+        "Fairly Ambitious": "good",
+        "Fickle": "good",
+        "Mercenary": "good",
+        "Slack": "bad",
+        "Casual": "bad",
+        "Temperamental": "bad",
+        "Easily Discouraged": "bad",
+        "Low Determination": "bad",
+        "Spineless": "bad",
+        "Low Self-Belief": "bad",
+        "Unambitious": "bad",
+        "Jovial": "neutral",
+        "Light-Hearted": "neutral",
+        "Devoted": "neutral",
+        "Very Loyal": "neutral",
+        "Loyal": "neutral",
+        "Fairly Loyal": "neutral",
+        "Honest": "neutral",
+        "Sporting": "neutral",
+        "Fairly Sporting": "neutral",
+        "Unsporting": "neutral",
+        "Realist": "neutral",
+        "Balanced": "neutral"
     }
 }

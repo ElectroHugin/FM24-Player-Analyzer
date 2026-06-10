@@ -6,7 +6,7 @@ import pandas as pd
 from sqlite_db import (get_user_club, get_second_team_club, get_all_players,
                        get_latest_dwrs_ratings, get_dwrs_history)
 from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES
-from utils import format_role_display, get_last_name, color_attribute_by_value
+from utils import format_role_display, get_last_name, color_attribute_by_value, color_personality
 from ui_components import display_custom_header, display_pros_and_cons
 from role_analysis_logic import (analyze_player_for_role, get_top_roles_for_player,
                                  parse_attribute_value, ALL_GK_ROLES)
@@ -115,6 +115,13 @@ def player_profile_page(players):
         st.info("No players loaded. Please upload player data first.")
         return
 
+    # One-shot navigation from the global player search (sidebar): if a target
+    # player was set, force the pool to "All Players" so the player is always
+    # in scope regardless of his club. The selection itself is applied at the
+    # selectbox below. Must run BEFORE the scope radio is instantiated.
+    if st.session_state.get("profile_target_uid"):
+        st.session_state["profile_scope"] = "all"
+
     # --- Player selection, scoped like the Role Analysis page ---
     scope_labels = {"my_club": f"🏠 {user_club or 'My Club'}"}
     if second_club:
@@ -144,11 +151,28 @@ def player_profile_page(players):
         for p in pool
     }
 
+    options = list(player_map.keys())
+
+    # One-shot preselection from the global player search. The scope was forced
+    # to "all" above, so the target is guaranteed to be a valid option. Popping
+    # makes the jump single-use; afterwards the user can change freely.
+    target_uid = st.session_state.pop("profile_target_uid", None)
+    if target_uid and target_uid in options:
+        st.session_state["profile_player_select"] = target_uid
+
+    # Guard: if a previously selected player is no longer in the current pool
+    # (e.g. the user switched scope), drop the stale value so st.selectbox does
+    # not raise "is not in options".
+    if ("profile_player_select" in st.session_state
+            and st.session_state["profile_player_select"] not in options):
+        del st.session_state["profile_player_select"]
+
     with c2:
         selected_uid = st.selectbox(
             "Select a player",
-            options=list(player_map.keys()),
+            options=options,
             format_func=lambda uid: player_map[uid],
+            key="profile_player_select",
         )
 
     player = next((p for p in pool if p['Unique ID'] == selected_uid), None)
@@ -180,6 +204,17 @@ def player_profile_page(players):
     foot = player.get('Preferred Foot')
     if foot:
         tags.append(_status_tag("Foot", foot, "#6c5ce7"))
+    personality = player.get('Personality')
+    if personality:
+        p_style = color_personality(personality)
+        if p_style:
+            tags.append(
+                f"<span style='{p_style} padding:3px 10px; border-radius:12px; "
+                f"font-size:0.8rem; margin-right:6px; white-space:nowrap;'>"
+                f"Personality: {personality}</span>"
+            )
+        else:
+            tags.append(_status_tag("Personality", personality, "#555"))
     if tags:
         st.markdown("".join(tags), unsafe_allow_html=True)
 
@@ -208,7 +243,7 @@ def player_profile_page(players):
     left, right = st.columns(2)
     with left:
         st.markdown(f"### Analysis as {format_role_display(best_role)}")
-        analysis = analyze_player_for_role(player, best_role)
+        analysis = analyze_player_for_role(player, best_role, include_global=True, include_personality=True)
         display_pros_and_cons(analysis)
     with right:
         st.markdown("### Attribute Snapshot")

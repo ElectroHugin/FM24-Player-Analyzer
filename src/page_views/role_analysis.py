@@ -6,8 +6,8 @@ import pandas as pd
 from sqlite_db import get_user_club, get_second_team_club, get_all_players
 from constants import get_valid_roles
 from data_parser import get_players_by_role
-from utils import format_role_display, color_dwrs_by_value, get_last_name
-from ui_components import display_custom_header, display_pros_and_cons
+from utils import format_role_display, color_dwrs_by_value, get_last_name, color_personality
+from ui_components import display_custom_header, display_pros_and_cons, personality_filter_controls, filter_df_by_personality
 from role_analysis_logic import analyze_player_for_role
 
 @st.cache_data
@@ -62,6 +62,10 @@ def display_styled_role_df(df, title, use_full_style=False, top_n=200):
             subset=pd.IndexSlice[top_indices, [column_to_style]]
         )
 
+    if 'Personality' in df.columns:
+        styler = styler.format(subset=['Personality'], na_rep="-")
+        styler = styler.map(color_personality, subset=['Personality'])
+
     st.dataframe(styler, use_container_width=True, hide_index=True)
 
 def role_analysis_page():
@@ -74,6 +78,13 @@ def role_analysis_page():
     role = st.selectbox("Select Role", options=get_valid_roles(), format_func=format_role_display)
     
     my_df, second_df, scout_df = get_players_by_role(role, user_club, second_club)
+
+    # Personality filter (applies to all three groups below)
+    combined_for_filter = pd.concat([my_df, second_df, scout_df])
+    allowed_personalities = personality_filter_controls(combined_for_filter, key_prefix="role_analysis")
+    my_df = filter_df_by_personality(my_df, allowed_personalities)
+    second_df = filter_df_by_personality(second_df, allowed_personalities)
+    scout_df = filter_df_by_personality(scout_df, allowed_personalities)
 
     # --- Organize the three player groups into tabs for a cleaner layout ---
     if second_club:

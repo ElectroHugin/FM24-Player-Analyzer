@@ -26,6 +26,26 @@ def get_valid_roles():
     """Generates and returns a sorted list of all valid role abbreviations."""
     player_roles = get_player_roles()
     return sorted([role for category in player_roles.values() for role in category.keys()])
+
+def get_personalities():
+    """Map of personality name -> 'good' | 'neutral' | 'bad'.
+    definitions.json may define a 'personalities' key to override the built-in
+    defaults; otherwise PERSONALITY_DEFAULTS (below) is used."""
+    return load_definitions().get('personalities', PERSONALITY_DEFAULTS)
+
+def get_personality_category(name):
+    """Return 'good' | 'neutral' | 'bad' for a personality string, or '' if the
+    personality is unknown/empty. Case- and whitespace-insensitive."""
+    if not name or not isinstance(name, str):
+        return ''
+    table = get_personalities()
+    if name in table:
+        return table[name]
+    low = name.strip().lower()
+    for key, cat in table.items():
+        if key.lower() == low:
+            return cat
+    return ''
 # -----------------------------------------
 
 # Attribute mapping (HTML abbreviations to full names)
@@ -115,6 +135,7 @@ ROLE_ANALYSIS_COLUMNS = [
     "Name",
     "Age",
     "Position",
+    "Personality",
     "Left Foot",
     "Right Foot",
     "Height",
@@ -130,6 +151,7 @@ PLAYER_ROLE_MATRIX_COLUMNS = [
     "Name",
     "Age",
     "Position",
+    "Personality",
     "Nationality", 
     "Second Nationality", 
     "Left Foot",
@@ -202,6 +224,31 @@ GK_WEIGHT_DEFAULTS = {
 ROLE_MULTIPLIERS_DEFAULTS = {
     "key": 1.5,
     "preferable": 1.2
+}
+
+# Default personality classification (good | neutral | bad).
+# FM assigns exactly one personality string per player, so this is a simple
+# name -> category lookup. Override by adding a "personalities" key to
+# definitions.json (same shape). Unknown personalities are treated as neutral
+# /uncolored by the helpers that consume this.
+PERSONALITY_DEFAULTS = {
+    # --- Good (Positive) ---
+    "Model Citizen": "good", "Perfectionist": "good", "Resolute": "good",
+    "Model Professional": "good", "Professional": "good", "Fairly Professional": "good",
+    "Spirited": "good", "Driven": "good", "Determined": "good",
+    "Fairly Determined": "good", "Iron Willed": "good", "Resilient": "good",
+    "Charismatic Leader": "good", "Born Leader": "good", "Leader": "good",
+    "Very Ambitious": "good", "Ambitious": "good", "Fairly Ambitious": "good",
+    "Fickle": "good", "Mercenary": "good",
+    # --- Bad (Negative) ---
+    "Slack": "bad", "Casual": "bad", "Temperamental": "bad",
+    "Easily Discouraged": "bad", "Low Determination": "bad", "Spineless": "bad",
+    "Low Self-Belief": "bad", "Unambitious": "bad",
+    # --- Neutral ---
+    "Jovial": "neutral", "Light-Hearted": "neutral", "Devoted": "neutral",
+    "Very Loyal": "neutral", "Loyal": "neutral", "Fairly Loyal": "neutral",
+    "Honest": "neutral", "Sporting": "neutral", "Fairly Sporting": "neutral",
+    "Unsporting": "neutral", "Realist": "neutral", "Balanced": "neutral",
 }
 
 # Agreed Playing Time options

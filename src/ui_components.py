@@ -449,3 +449,76 @@ def display_pros_and_cons(analysis):
                 st.markdown(f"- {format_con_line(c, role_name)}")
         else:
             st.caption("No notable weaknesses for this role.")
+
+# --- Shared personality filter (used by Squad Matrix & Role Analysis) ---
+
+_PERSONALITY_CAT_LABELS = {"good": "🟢 Good", "neutral": "🟡 Neutral", "bad": "🔴 Bad"}
+
+
+def personality_filter_controls(df, key_prefix):
+    """Render the shared personality filter and return the SET of allowed
+    personality strings, or None when no filtering should be applied.
+
+    Two controls:
+      * a category quick-filter (Good / Neutral / Bad, multi-select); empty = all
+      * an optional 'specific personalities' multiselect, narrowed to the
+        chosen categories and to personalities actually present in `df`.
+
+    Logic: specific selection wins; else category selection; else no filter.
+    `key_prefix` must be unique per page/table to avoid widget key clashes.
+    Returns None (no filter) if the data has no 'Personality' column.
+    """
+    from constants import get_personality_category
+
+    if 'Personality' not in df.columns:
+        return None
+
+    cat_options = ["good", "neutral", "bad"]
+    if hasattr(st, "pills"):
+        chosen_cats = st.pills(
+            "Filter by personality",
+            options=cat_options,
+            format_func=lambda c: _PERSONALITY_CAT_LABELS[c],
+            selection_mode="multi",
+            key=f"{key_prefix}_pers_cats",
+        )
+    else:
+        chosen_cats = st.multiselect(
+            "Filter by personality",
+            options=cat_options,
+            format_func=lambda c: _PERSONALITY_CAT_LABELS[c],
+            key=f"{key_prefix}_pers_cats",
+            placeholder="Good / Neutral / Bad…",
+        )
+    chosen_cats = set(chosen_cats or [])
+
+    present = sorted({
+        p for p in df['Personality'].dropna().unique()
+        if isinstance(p, str) and p.strip()
+    })
+    if chosen_cats:
+        present = [p for p in present if get_personality_category(p) in chosen_cats]
+
+    specific = st.multiselect(
+        "Specific personalities (optional)",
+        options=present,
+        key=f"{key_prefix}_pers_specific",
+        placeholder="Narrow to specific personalities…",
+    )
+
+    if specific:
+        return set(specific)
+    if chosen_cats:
+        return {
+            p for p in df['Personality'].dropna().unique()
+            if isinstance(p, str) and get_personality_category(p) in chosen_cats
+        }
+    return None
+
+
+def filter_df_by_personality(df, allowed):
+    """Filter a dataframe to rows whose 'Personality' is in `allowed`.
+    `allowed` is the set returned by personality_filter_controls (None = no-op)."""
+    if allowed is None or 'Personality' not in df.columns:
+        return df
+    return df[df['Personality'].isin(allowed)]

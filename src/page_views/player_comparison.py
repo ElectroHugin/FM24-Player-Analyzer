@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from config_handler import get_theme_settings
 from sqlite_db import get_user_club, get_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_role_specific_weights
-from utils import format_role_display, hex_to_rgb, color_attribute_by_value
+from utils import format_role_display, hex_to_rgb, color_attribute_by_value, color_personality
 from ui_components import display_custom_header
 
 def player_comparison_page(players):
@@ -236,6 +236,8 @@ def player_comparison_page(players):
         
         # 4. Define the "smart" styling function.
         def smart_styler(row):
+            if row.name == 'Personality':
+                return [color_personality(val) for val in row]
             if row.name in all_attributes_set:
                 return [color_attribute_by_value(val) for val in row]
             else:

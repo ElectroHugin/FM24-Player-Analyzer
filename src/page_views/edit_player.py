@@ -22,6 +22,11 @@ def edit_player_data_page(players):
 
     player_to_edit = None
 
+    # One-shot preselection coming from the global player search (sidebar):
+    # if a target player was set, edit him unless the user picks another below.
+    forced_uid = st.session_state.pop("edit_target_uid", None)
+    forced_player = next((p for p in all_players if p['Unique ID'] == forced_uid), None) if forced_uid else None
+
     # --- Player Selection Section (remains full-width at the top) ---
     c1, c2 = st.columns([1, 1]) # Use columns to neatly separate the two selection methods
     with c1:
@@ -62,6 +67,10 @@ def edit_player_data_page(players):
             else:
                 st.warning("No players found with that name.")
     
+    # Fall back to the search-targeted player if the user hasn't selected one.
+    if not player_to_edit and forced_player:
+        player_to_edit = forced_player
+
     st.divider()
 
     # --- Main player editing form organized into columns ---

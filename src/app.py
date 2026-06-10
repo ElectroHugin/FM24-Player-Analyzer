@@ -16,6 +16,7 @@ from page_views.best_position import best_position_calculator_page
 from page_views.player_role_matrix import player_role_matrix_page
 from page_views.role_analysis import role_analysis_page
 from page_views.player_profile import player_profile_page
+from page_views.tactic_explorer import tactic_explorer_page
 from page_views.gap_analysis import gap_analysis_page
 from page_views.assign_roles import assign_roles_page
 from page_views.national_squad_selection import national_squad_selection_page
@@ -38,6 +39,70 @@ from theme_handler import set_theme_toml
 from role_logic import auto_assign_roles_to_unassigned
 
 st.set_page_config(page_title="FM 2024 Player Dashboard", layout="wide")
+
+def _render_player_search(players):
+    """Compact global player search for the sidebar (Club mode only).
+
+    Matches on player NAME only (case-insensitive substring) and shows up to
+    8 results as buttons labelled 'Name - Club . Position'. Clicking a result
+    stores the target UID in session_state and flags a one-shot jump to the
+    Player Profile page; the actual page switch is performed by option_menu's
+    manual_select in sidebar().
+    """
+    st.text_input(
+        "Player search",
+        key="player_search_query",
+        placeholder="🔎 Search player by name…",
+        label_visibility="collapsed",
+    )
+
+    if not players:
+        return
+
+    query = (st.session_state.get("player_search_query") or "").strip().lower()
+    if len(query) < 2:
+        return  # require 2+ chars to avoid flooding the sidebar
+
+    results = [p for p in players if query in (p.get("Name") or "").lower()]
+
+    def _rank(p):
+        name = (p.get("Name") or "").lower()
+        if name.startswith(query):
+            tier = 0
+        elif any(word.startswith(query) for word in name.split()):
+            tier = 1
+        else:
+            tier = 2
+        return (tier, name)
+
+    results.sort(key=_rank)
+
+    if not results:
+        st.caption("No players found.")
+        return
+
+    MAX_RESULTS = 8
+    shown = results[:MAX_RESULTS]
+
+    for i, p in enumerate(shown):
+        uid = p.get("Unique ID")
+        name = p.get("Name", "?")
+        club = p.get("Club") or "—"
+        pos = p.get("Position") or "—"
+        st.markdown(f"**{name}** · {club} · {pos}")
+        b_prof, b_edit = st.columns(2)
+        if b_prof.button("👤 Profile", key=f"psearch_prof_{i}_{uid}", use_container_width=True):
+            st.session_state["profile_target_uid"] = uid
+            st.session_state["nav_to_profile"] = True
+            st.rerun()
+        if b_edit.button("✏️ Edit", key=f"psearch_edit_{i}_{uid}", use_container_width=True):
+            st.session_state["edit_target_uid"] = uid
+            st.session_state["nav_to_edit"] = True
+            st.rerun()
+
+    if len(results) > MAX_RESULTS:
+        st.caption(f"+{len(results) - MAX_RESULTS} more — refine your search.")
+
 
 def sidebar(df, players):
     with st.sidebar:
@@ -92,10 +157,10 @@ def sidebar(df, players):
             
         else: # Club Management
             # This section remains unchanged
-            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Profile", "Squad Matrix", "Best XI", "Gap Analysis", "Transfers", "Comparison", "Development", "Edit Player"]
-            page_icons = ["house", "person-plus", "search", "person-badge", "table", "trophy", "binoculars", "arrow-left-right", "people", "graph-up", "pencil-square"]
+            page_options = ["Dashboard", "Assign Roles", "Role Analysis", "Profile", "Squad Matrix", "Best XI", "Gap Analysis", "Tactic Explorer", "Transfers", "Comparison", "Development", "Edit Player"]
+            page_icons = ["house", "person-plus", "search", "person-badge", "table", "trophy", "binoculars", "compass", "arrow-left-right", "people", "graph-up", "pencil-square"]
             page_title = "Club Navigation"
-            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Profile": "Player Profile", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Gap Analysis": "Gap Analysis", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data"}
+            page_mapping = { "Dashboard": "All Players", "Assign Roles": "Assign Roles", "Role Analysis": "Role Analysis", "Profile": "Player Profile", "Squad Matrix": "Player-Role Matrix", "Best XI": "Best Position Calculator", "Gap Analysis": "Gap Analysis", "Tactic Explorer": "Tactic Explorer", "Transfers": "Transfer & Loan Management", "Comparison": "Player Comparison", "Development": "DWRS Progress", "Edit Player": "Edit Player Data"}
             
         # This section for global pages also remains unchanged
         page_options.extend(["New Role", "New Tactic", "Settings"])
@@ -105,12 +170,28 @@ def sidebar(df, players):
         page_mapping["Settings"] = "Settings"
         # --- END OF CHANGE ---
 
+        # One-shot programmatic navigation target (set by the global player
+        # search). When a result is clicked we flag a jump to the Profile page;
+        # the menu then selects "Profile" on this run and we immediately reset
+        # the flag so normal navigation works again afterwards.
+        manual_idx = None
+        if st.session_state.get("nav_to_profile"):
+            if "Profile" in page_options:
+                manual_idx = page_options.index("Profile")
+            st.session_state["nav_to_profile"] = False
+        elif st.session_state.get("nav_to_edit"):
+            if "Edit Player" in page_options:
+                manual_idx = page_options.index("Edit Player")
+            st.session_state["nav_to_edit"] = False
+
         page = option_menu(
             menu_title=page_title,
             options=page_options,
             icons=page_icons,
             menu_icon="list-ul",
             default_index=0,
+            manual_select=manual_idx,
+            key=f"nav_menu_{st.session_state.management_mode}",
             styles={
                 "container": {"padding": "5px !important", "background-color": "transparent"},
                 "icon": {"color": secondary_color, "font-size": "20px"},
@@ -122,6 +203,7 @@ def sidebar(df, players):
 
         # --- Club Selectors (only show in club mode) ---
         if st.session_state.management_mode == "Club":
+            _render_player_search(players)
             st.divider()
             club_options = ["Select a club"] + sorted(df['Club'].unique()) if df is not None else ["Select a club"]
             current_club = get_user_club() or "Select a club"
@@ -577,6 +659,8 @@ def main():
         dwrs_progress_page(players)
     elif page == "Edit Player Data":
         edit_player_data_page(players)
+    elif page == "Tactic Explorer":
+        tactic_explorer_page()
     elif page == "Create New Role":
         create_new_role_page()
     elif page == "Create New Tactic":

@@ -8,8 +8,8 @@ import math
 from sqlite_db import get_national_team_settings, get_national_squad_ids, get_national_favorite_tactics
 from constants import get_valid_roles, get_tactic_roles
 from data_parser import get_player_role_matrix
-from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, format_role_display
-from ui_components import display_custom_header
+from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, format_role_display, color_personality
+from ui_components import display_custom_header, personality_filter_controls, filter_df_by_personality
 
 def national_squad_matrix_page(players):
     """
@@ -66,12 +66,17 @@ def national_squad_matrix_page(players):
 
     # Split the eligible players into two groups: those in the squad and those who are not
     squad_player_ids = get_national_squad_ids()
+
+    # Personality filter (applies to both the squad table and the eligible pool)
+    allowed_personalities = personality_filter_controls(eligible_df, key_prefix="nat_matrix")
+    eligible_df = filter_df_by_personality(eligible_df, allowed_personalities)
+
     squad_df = eligible_df[eligible_df['Unique ID'].isin(squad_player_ids)].copy()
     available_pool_df = eligible_df[~eligible_df['Unique ID'].isin(squad_player_ids)].copy()
 
     # --- 4. DISPLAY LOGIC ---
     # Define base columns (no financial data)
-    base_cols = ["Name", "Age", "Position", "Club"]
+    base_cols = ["Name", "Age", "Position", "Personality", "Club"]
     if show_extra_details:
         base_cols.extend(["Left Foot", "Right Foot", "Height"])
     
@@ -97,7 +102,11 @@ def national_squad_matrix_page(players):
 
         styler = styler.apply(smart_full_styler, subset=selected_roles)
         # --- END OF FIX ---
-        
+
+        if 'Personality' in display_cols:
+            styler = styler.format(subset=['Personality'], na_rep="-")
+            styler = styler.map(color_personality, subset=['Personality'])
+
         st.dataframe(styler, use_container_width=True, hide_index=True)
 
     st.divider()
@@ -180,4 +189,7 @@ def national_squad_matrix_page(players):
             return styles
             
         styler_pool = styler_pool.apply(smart_full_styler, subset=selected_roles)
+        if 'Personality' in display_cols:
+            styler_pool = styler_pool.format(subset=['Personality'], na_rep="-")
+            styler_pool = styler_pool.map(color_personality, subset=['Personality'])
         st.dataframe(styler_pool, use_container_width=True, hide_index=True)
