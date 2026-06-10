@@ -10,15 +10,15 @@
 
 ## ⭐ Recommended next steps (priority order)
 
-1. **[OPEN] Global Player Search in Sidebar** — highest value now, because it
+1. **[DONE] Global Player Search in Sidebar** — highest value now, because it
    plugs directly into the new Player Profile page. A search box in the sidebar
    filters `get_all_players()` as you type; clicking a result jumps to the
    Player Profile. Finishes the navigation loop the last session started.
-2. **[NEW] Fix `get_master_role_ratings` caching bug** — quick, high-impact.
+2. **[DONE] Fix `get_master_role_ratings` caching bug** — quick, high-impact.
    In `squad_logic.py` the `st.cache_data` decorator is missing its `@`, so the
    function recomputes every call. Fixing it speeds up Gap Analysis, Best XI,
    Transfers and the National pages.
-3. **[NEW] Gap Analysis → Transfer shortlist bridge** — turn a detected gap into
+3. **[OPEN] Gap Analysis → Transfer shortlist bridge** — turn a detected gap into
    action: from a flagged slot, show the best available scouted players for that
    slot's role and let the user shortlist them. Natural follow-up to the Gap tool.
 
@@ -33,7 +33,7 @@
   user choice. *Possible extension:* extend ProgressColumn-style bars to more
   tables where `.style` isn't already in use — low priority.
 
-- **[OPEN] Global Player Search in Sidebar** — see "Recommended next steps".
+- **[DONE] Global Player Search in Sidebar** — see "Recommended next steps".
 
 - **[RE-EVALUATE] In-Context Editing with Modals (`st.dialog`)**
   Still nice, but lower priority now that a dedicated Player Profile exists. Could
@@ -56,12 +56,14 @@
   are more config sections (`[GapAnalysis]` added). Worth doing once the feature
   set stabilizes so the exported bundle is "complete".
 
-- **[NEW] Gap Analysis → Transfer shortlist bridge** — see "Recommended next steps".
+- **[OPEN] Gap Analysis → Transfer shortlist bridge** — see "Recommended next steps".
 
-- **[NEW] Multi-tactic Gap Overview**
+- **[OPEN] Multi-tactic Gap Overview**
   Run the gap analysis across the user's favorite tactics at once and highlight
   positions that are weak in ALL of them — those are the safest transfer targets
   regardless of which system is played. Direct extension of the new Gap tool.
+
+- **[DONE] Tactic Explorer**
 
 ---
 
@@ -73,7 +75,7 @@
   Best XI already used tabs; Role Analysis now uses tabs (club groups); Gap
   Analysis uses XI/B-Team tabs. *Remaining candidate:* none pressing.
 
-- **[OPEN] Dedicated "Player Profile" View**
+- **[DONE] Dedicated "Player Profile" View**
   Shipped as `page_views/player_profile.py` — header, top roles, pros & cons,
   attribute chips, DWRS chart. **Remaining:** make it the click-through target
   for the Global Player Search (and optionally for player names elsewhere). So:
@@ -86,7 +88,7 @@
 - **[OPEN] Icons for Visual Cues** — partially in use (page icons, some emojis).
   Could be applied more consistently to subheaders/buttons. Low effort, cosmetic.
 
-- **[NEW] Custom Status Tags (pills)** — partly prototyped: the Player Profile
+- **[DONE] Custom Status Tags (pills)** — partly prototyped: the Player Profile
   already renders APT / Primary / Foot as colored pills via an inline helper.
   Promote that helper into `ui_components.py` and reuse for APT/transfer status
   in tables across the app. (Supersedes the old "Custom Status Tags" idea.)
@@ -100,7 +102,7 @@
 
 ## Proposed Larger Features
 
-- **[DONE-ish] Scouting & Shortlist Management** — a `shortlist.py` page exists
+- **[RE-EVALUATE] Scouting & Shortlist Management** — a `shortlist.py` page exists
   (currently commented out in the router) and `player_role_matrix.py` has
   shortlist add/remove. **[RE-EVALUATE]:** decide whether to re-enable the
   dedicated shortlist page and add notes/scout-rating columns, or consolidate
@@ -139,7 +141,7 @@
   `role_analysis_logic.py` and `gap_analysis_logic.py`. **[OPEN] continuation:**
   apply the same split to `transfer_loan_management.py` (still mixes calculation
   and UI) — move candidate identification into `squad_logic.py`.
-- **[NEW] Fix `get_master_role_ratings` caching** — see top.
+- **[DONE] Fix `get_master_role_ratings` caching** — see top.
 - **[RE-EVALUATE] Centralize Definitions** (move `GLOBAL_STAT_CATEGORIES` /
   `GK_STAT_CATEGORIES` into `definitions.json`). Still sensible for full
   customizability, but it's invasive and touches the DWRS core — do it only when
@@ -147,6 +149,7 @@
 - **[NEW] Minimal test harness** — there is no automated test suite. A small
   pytest file around `analytics.calculate_dwrs`, `gap_analysis_logic`, and
   `role_analysis_logic` would protect the math during future refactors.
+- **[DONE] Personality-System** — Klassifizierung, Färbung, Filter in Matrix/Role Analysis/Profil/Comparison
 
 ---
 
