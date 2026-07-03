@@ -347,7 +347,7 @@ def set_primary_role(unique_id, role):
 def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
     from analytics import calculate_dwrs
     from config_handler import get_weight
-    from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS
+    from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS, get_gk_roles
     
     conn = connect_db()
     cursor = conn.cursor()
@@ -365,7 +365,7 @@ def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
     
     weights = {cat: get_weight(cat.lower().replace(" ", "_"), default) for cat, default in WEIGHT_DEFAULTS.items()}
     gk_weights = {cat: get_weight("gk_" + cat.lower().replace(" ", "_"), default) for cat, default in GK_WEIGHT_DEFAULTS.items()}
-    all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
+    all_gk_roles = set(get_gk_roles())
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # Get the latest existing rating for every player/role to compare against
@@ -861,23 +861,58 @@ def set_national_favorite_tactics(tactic1, tactic2):
 def merge_player_records(bad_id, good_id):
     """
     Safely merges a player record with a bad (numeric) ID into a good (r-) ID.
-    This involves migrating historical ratings and then deleting the bad record.
+
+    Historical DWRS ratings are always migrated. App-managed data (assigned
+    roles, primary role, natural positions, transfer/loan status, preferred
+    side, APT) is preserved: if the good record does not exist yet, the bad
+    record is simply renamed; if both exist, empty fields on the good record
+    are filled from the bad one before it is deleted.
     """
+    APP_MANAGED_MERGE_COLUMNS = [
+        "Assigned Roles", "primary_role", "natural_positions",
+        "transfer_status", "loan_status", "preferred_side", "Agreed Playing Time"
+    ]
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        # Step 1: Update all historical DWRS records to point to the new, good ID.
+        # Step 1: Migrate historical DWRS records. OR IGNORE avoids primary
+        # key collisions when both IDs already have a rating for the same
+        # role+timestamp; leftovers under the bad ID are then removed.
         cursor.execute(
-            "UPDATE dwrs_ratings SET unique_id = ? WHERE unique_id = ?",
+            "UPDATE OR IGNORE dwrs_ratings SET unique_id = ? WHERE unique_id = ?",
             (good_id, bad_id)
         )
-        
-        # Step 2: Delete the old, now-redundant player record.
-        cursor.execute(
-            'DELETE FROM players WHERE "Unique ID" = ?',
-            (bad_id,)
-        )
-        
+        cursor.execute("DELETE FROM dwrs_ratings WHERE unique_id = ?", (bad_id,))
+
+        # Step 2: Merge the player rows without losing app-managed data.
+        cursor.execute('SELECT 1 FROM players WHERE "Unique ID" = ?', (good_id,))
+        good_exists = cursor.fetchone() is not None
+
+        if not good_exists:
+            # Rename keeps every column (roles, APT, statuses) intact.
+            cursor.execute(
+                'UPDATE players SET "Unique ID" = ? WHERE "Unique ID" = ?',
+                (good_id, bad_id)
+            )
+        else:
+            col_list = ", ".join(f'"{c}"' for c in APP_MANAGED_MERGE_COLUMNS)
+            cursor.execute(f'SELECT {col_list} FROM players WHERE "Unique ID" = ?', (bad_id,))
+            bad_row = cursor.fetchone()
+            cursor.execute(f'SELECT {col_list} FROM players WHERE "Unique ID" = ?', (good_id,))
+            good_row = cursor.fetchone()
+
+            if bad_row and good_row:
+                for col, bad_val, good_val in zip(APP_MANAGED_MERGE_COLUMNS, bad_row, good_row):
+                    good_is_empty = good_val is None or good_val in ('', '[]')
+                    bad_has_value = bad_val is not None and bad_val not in ('', '[]')
+                    if good_is_empty and bad_has_value:
+                        cursor.execute(
+                            f'UPDATE players SET "{col}" = ? WHERE "Unique ID" = ?',
+                            (bad_val, good_id)
+                        )
+
+            cursor.execute('DELETE FROM players WHERE "Unique ID" = ?', (bad_id,))
+
         conn.commit()
         st.toast(f"Unified records for ID {good_id}", icon="🔗")
     except sqlite3.Error as e:

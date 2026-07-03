@@ -62,9 +62,9 @@ def _eligible_count_for_slot(slot, role, pool, master_ratings):
     return count
 
 
-def analyze_tactic(pool, tactic, positions, layout, master_ratings):
+def analyze_tactic(pool, tactic, positions, layout, master_ratings, apply_apt_weight=True):
     """Analyze a single tactic for the given player pool. Returns a metrics dict."""
-    squad = calculate_squad_and_surplus(pool, positions, master_ratings)
+    squad = calculate_squad_and_surplus(pool, positions, master_ratings, apply_apt_weight=apply_apt_weight)
     xi = squad.get("starting_xi", {})
 
     total_slots = len(positions)
@@ -120,9 +120,11 @@ def analyze_tactic(pool, tactic, positions, layout, master_ratings):
     }
 
 
-def analyze_all_tactics(pool, master_ratings, tactics=None):
+def analyze_all_tactics(pool, master_ratings, tactics=None, apply_apt_weight=True):
     """Analyze the pool across all (or a chosen subset of) tactics.
 
+    apply_apt_weight=False is used for national squads, where a player's club
+    Agreed Playing Time must not influence selection.
     Returns a list of metrics dicts sorted coverage-first, then by median DWRS.
     """
     tactic_roles = get_tactic_roles()
@@ -135,7 +137,7 @@ def analyze_all_tactics(pool, master_ratings, tactics=None):
         if not positions:
             continue
         layout = layouts.get(t, {})
-        results.append(analyze_tactic(pool, t, positions, layout, master_ratings))
+        results.append(analyze_tactic(pool, t, positions, layout, master_ratings, apply_apt_weight=apply_apt_weight))
 
     # Coverage first (more filled slots better), then strength (higher median).
     results.sort(

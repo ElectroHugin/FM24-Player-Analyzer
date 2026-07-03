@@ -3,9 +3,10 @@
 import streamlit as st
 import pandas as pd
 
-from sqlite_db import get_user_club, get_dwrs_history, get_favorite_tactics
+from sqlite_db import (get_user_club, get_dwrs_history, get_favorite_tactics,
+                       get_national_squad_ids, get_national_favorite_tactics)
 from constants import get_valid_roles, get_tactic_roles
-from utils import format_role_display, get_last_name
+from utils import format_role_display, get_last_name, is_national_mode_active
 from ui_components import display_custom_header
 
 def dwrs_progress_page(players):
@@ -13,11 +14,22 @@ def dwrs_progress_page(players):
     display_custom_header("DWRS Player Development")
     st.info("Analyze player development trends. Choose an analysis mode to compare squad averages by role, specific players, or an individual player's progress.")
 
-    user_club = get_user_club()
-    all_players = [p for p in players if p['Club'] == user_club]
-    if not all_players:
-        st.warning("No players found for your club. Please select your club in the sidebar.")
-        return
+    national_mode = is_national_mode_active()
+    if national_mode:
+        squad_ids = get_national_squad_ids()
+        all_players = [p for p in players if p['Unique ID'] in squad_ids]
+        if not all_players:
+            st.warning("No players in the national squad yet. Go to 'National Squad' to build your team.")
+            return
+    else:
+        user_club = get_user_club()
+        all_players = [p for p in players if p['Club'] == user_club]
+        if not all_players:
+            st.warning("No players found for your club. Please select your club in the sidebar.")
+            return
+
+    # Favorite tactics differ per mode
+    get_fav_tactics = get_national_favorite_tactics if national_mode else get_favorite_tactics
 
     st.subheader("1. Choose Analysis Mode")
     analysis_mode = st.selectbox(
@@ -30,7 +42,7 @@ def dwrs_progress_page(players):
 
     # --- PRONG 1: SQUAD OVERVIEW (COMPLETELY REBUILT) ---
     if analysis_mode == "Squad Overview (by Role)":
-        fav_tactic1, _ = get_favorite_tactics()
+        fav_tactic1, _ = get_fav_tactics()
         all_tactics = ["All Roles"] + sorted(list(get_tactic_roles().keys()))
         tactic_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
         selected_tactic = st.selectbox(
@@ -91,7 +103,7 @@ def dwrs_progress_page(players):
     elif analysis_mode == "Player vs. Player (in a specific role)":
         c1, c2 = st.columns(2)
         with c1:
-            fav_tactic1, _ = get_favorite_tactics()
+            fav_tactic1, _ = get_fav_tactics()
             all_tactics = ["All Roles"] + sorted(list(get_tactic_roles().keys()))
             tactic_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
             selected_tactic = st.selectbox("Filter by Tactic", options=all_tactics, index=tactic_index)

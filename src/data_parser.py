@@ -11,6 +11,12 @@ import streamlit as st
 
 REQUIRED_COLUMN = "UID"
 
+# Columns that FM routinely puts in the standard export view but that the app
+# intentionally does not import. Listed here so the "unknown columns" warning
+# does not cry wolf on every upload of a normal export.
+# (Pun = goalkeeper Punching tendency — not used by any rating.)
+IGNORED_EXPORT_COLUMNS = {"CON", "Ability", "Position/Role/Duty", "Pun"}
+
 def parse_html_table(file):
     try:
         # Support both file-like objects (Streamlit uploads) and raw bytes/strings
@@ -63,6 +69,9 @@ def parse_html_table(file):
             return None
 
         df = pd.DataFrame(valid_rows, columns=deduped_headers)
+        # Surface malformed rows (wrong cell count) to the caller so the UI
+        # can warn instead of silently dropping player data.
+        df.attrs['dropped_row_count'] = len(rows) - len(valid_rows)
 
         # Drop any columns that were renamed as duplicates (e.g. Name_dup1)
         dup_cols = [c for c in df.columns if '_dup' in c]
@@ -96,9 +105,16 @@ def parse_and_update_data(file):
         )
         return None, []
 
+    dropped_rows = html_df.attrs.get('dropped_row_count', 0)
+    if dropped_rows:
+        st.warning(
+            f"⚠️ **{dropped_rows} malformed row(s) were skipped** because their cell count "
+            "did not match the header. Re-export the file from FM if players are missing."
+        )
+
     # Warn the user if the FM view exported unexpected extra columns.
     # (Deduplication already happened inside parse_html_table.)
-    known_fm_columns = set(attribute_mapping.keys()) | {'UID'}
+    known_fm_columns = set(attribute_mapping.keys()) | {'UID'} | IGNORED_EXPORT_COLUMNS
     extra_cols = [c for c in html_df.columns if c not in known_fm_columns and '_dup' not in c]
     if extra_cols:
         st.warning(
@@ -118,27 +134,101 @@ def parse_and_update_data(file):
         )
         return None, []
 
+    # --- SANITY CHECKS ON UIDs ---
+    # 1. Rows without a UID cannot be stored (UID is the primary key).
+    empty_uid_mask = html_df['UID'] == ''
+    if empty_uid_mask.any():
+        st.warning(f"⚠️ **{int(empty_uid_mask.sum())} row(s) without a UID were skipped.**")
+        html_df = html_df[~empty_uid_mask]
+
+    # 2. Duplicate UIDs inside one file would crash the bulk insert (primary
+    #    key violation). Keep the last occurrence (the most recent row in the
+    #    export) and tell the user.
+    dup_uid_mask = html_df.duplicated(subset='UID', keep='last')
+    if dup_uid_mask.any():
+        dup_names = html_df.loc[dup_uid_mask, 'Name'].unique()
+        st.warning(
+            f"⚠️ **Duplicate UIDs in the file** — only the last row was kept for: "
+            f"`{', '.join(dup_names[:10])}`"
+        )
+        html_df = html_df[~dup_uid_mask]
+
+    if html_df.empty:
+        st.error("❌ **No importable rows found** (all rows were missing a UID).")
+        return None, []
+
     # --- START OF THE DEFINITIVE UNIFICATION ENGINE ---
-    
+
     # 2. Fetch existing player data to build lookup maps
     existing_players = get_all_players()
     # Map for quick lookup: { 'NumericID': 'PlayerName' }
     numeric_id_to_name = {p['Unique ID']: p['Name'] for p in existing_players if not p['Unique ID'].startswith('r-')}
-    # Map for quick lookup: { 'PlayerName': 'r-ID' } -> The canonical mapping
-    name_to_r_id = {p['Name']: p['Unique ID'] for p in existing_players if p['Unique ID'].startswith('r-')}
-    
+    # All newgen (r-) records grouped by name. A plain name -> r-ID map would
+    # silently fuse namesakes; the plausibility check below needs the full
+    # records (nationality + age) to tell namesakes apart.
+    newgens_by_name = {}
+    for p in existing_players:
+        if p['Unique ID'].startswith('r-'):
+            newgens_by_name.setdefault(p['Name'], []).append(p)
+
+    def _to_int(value):
+        try:
+            return int(str(value).strip())
+        except (ValueError, TypeError):
+            return None
+
+    def _find_newgen_match(name, incoming_nat, incoming_age):
+        """
+        Resolve an incoming numeric-ID player to a known newgen r-ID — but only
+        if it is plausibly the SAME person, not just a namesake:
+          * Nationality must match (when known on both sides; it never changes).
+          * Age must not have DECREASED: between imports a player only gets
+            older, so an incoming age below the stored one rules the match out.
+            An equal or higher age is fine (later-season export).
+        Returns the r-ID for exactly one plausible candidate; None if there is
+        no candidate or the match is ambiguous (safer to leave both records).
+        """
+        candidates = newgens_by_name.get(name, [])
+        incoming_age_int = _to_int(incoming_age)
+        plausible = []
+        for rec in candidates:
+            stored_nat = (rec.get('Nationality') or '').strip()
+            if incoming_nat and stored_nat and incoming_nat != stored_nat:
+                continue
+            stored_age = _to_int(rec.get('Age'))
+            if (incoming_age_int is not None and stored_age is not None
+                    and incoming_age_int < stored_age):
+                continue
+            plausible.append(rec)
+        if len(plausible) == 1:
+            return plausible[0]['Unique ID']
+        return None
+
+    ambiguous_names = set()
+
     # 3. Iterate through incoming data to find and fix inconsistencies BEFORE saving
     for index, row in html_df.iterrows():
         incoming_id = row['UID']
         incoming_name = row['Name']
-        
+
         # SCENARIO 1: "Mistaken Identity"
         # The game exported a numeric ID for a player who we know is a newgen.
-        if not incoming_id.startswith('r-') and incoming_name in name_to_r_id:
-            correct_id = name_to_r_id[incoming_name]
-            # Silently correct the ID in the DataFrame before it ever touches the database.
-            html_df.loc[index, 'UID'] = correct_id
-            
+        if not incoming_id.startswith('r-') and incoming_name in newgens_by_name:
+            correct_id = _find_newgen_match(incoming_name, (row.get('Nat') or '').strip(), row.get('Age'))
+            if correct_id is None:
+                if len(newgens_by_name[incoming_name]) > 1:
+                    ambiguous_names.add(incoming_name)
+                # No plausible match -> treat as a genuine different player.
+            else:
+                # Correct the ID in the DataFrame before it ever touches the database.
+                html_df.loc[index, 'UID'] = correct_id
+                # If the DB also contains a stale record under the numeric ID,
+                # merge it away now — otherwise it lingers forever as a duplicate
+                # player that never receives updates.
+                if incoming_id in numeric_id_to_name and numeric_id_to_name[incoming_id] == incoming_name:
+                    merge_player_records(bad_id=incoming_id, good_id=correct_id)
+                    del numeric_id_to_name[incoming_id]
+
         # SCENARIO 2: "Data Corruption"
         # The game exported the correct r-ID, but our database has a corrupted numeric entry.
         if incoming_id.startswith('r-'):
@@ -149,6 +239,15 @@ def parse_and_update_data(file):
                 merge_player_records(bad_id=numeric_part, good_id=incoming_id)
                 # After merging, the bad numeric ID is gone from our lookup, preventing future errors.
                 del numeric_id_to_name[numeric_part]
+
+    if ambiguous_names:
+        st.warning(
+            "⚠️ **Ambiguous newgen match skipped** for: "
+            f"`{', '.join(sorted(ambiguous_names)[:10])}`. "
+            "Several known newgens share this name and nationality/age did not "
+            "single one out, so the records were left untouched to avoid merging "
+            "different players."
+        )
 
     # 4. Get the final list of UIDs after all corrections and unifications.
     affected_ids = list(html_df['UID'].unique())

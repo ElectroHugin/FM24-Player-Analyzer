@@ -88,9 +88,12 @@ def national_squad_selection_page(players):
     # --- COLUMN 2: CURRENTLY SELECTED SQUAD ---
     with col2:
         st.subheader(f"Current Squad ({len(st.session_state.national_squad_selection)} Players)")
-        
-        # Filter the main eligible list to get the full data for players in the current squad
-        squad_df = eligible_df[eligible_df['Unique ID'].isin(st.session_state.national_squad_selection)]
+
+        # Use the FULL player list here, not eligible_df: a squad member who
+        # aged out (or whose nationality data changed) must still be visible so
+        # the user can remove him — otherwise the header count and the list
+        # silently disagree.
+        squad_df = df[df['Unique ID'].isin(st.session_state.national_squad_selection)]
 
         with st.container(height=500):
             if squad_df.empty:

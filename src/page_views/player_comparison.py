@@ -5,9 +5,13 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from config_handler import get_theme_settings
-from sqlite_db import get_user_club, get_favorite_tactics
-from constants import get_valid_roles, get_tactic_roles, GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_role_specific_weights
-from utils import format_role_display, hex_to_rgb, color_attribute_by_value, color_personality
+from sqlite_db import (get_user_club, get_favorite_tactics,
+                       get_national_squad_ids, get_national_favorite_tactics,
+                       get_national_team_settings)
+from constants import (get_valid_roles, get_tactic_roles, GLOBAL_STAT_CATEGORIES,
+                       GK_STAT_CATEGORIES, get_role_specific_weights, get_gk_roles)
+from utils import (format_role_display, hex_to_rgb, color_attribute_by_value,
+                   color_personality, is_national_mode_active)
 from ui_components import display_custom_header
 
 def player_comparison_page(players):
@@ -45,10 +49,12 @@ def player_comparison_page(players):
     # --- 1. ADVANCED FILTERING SECTION ---
     st.subheader("Filter Player Selection")
     user_club = get_user_club()
+    national_mode = is_national_mode_active()
     f_col1, f_col2, f_col3 = st.columns(3)
-    
+
     with f_col1:
-        fav_tactic1, _ = get_favorite_tactics()
+        # In National mode, prefer the national favorite tactics.
+        fav_tactic1, _ = get_national_favorite_tactics() if national_mode else get_favorite_tactics()
         all_tactics = ["All Roles"] + sorted(list(get_tactic_roles().keys()))
         tactic_index = all_tactics.index(fav_tactic1) if fav_tactic1 in all_tactics else 0
         selected_tactic = st.selectbox("Filter by Tactic", options=all_tactics, index=tactic_index)
@@ -61,11 +67,18 @@ def player_comparison_page(players):
         selected_role = st.selectbox("Filter by Role", options=role_options, format_func=format_role_display)
 
     with f_col3:
-        club_filter = st.selectbox("Filter by Club", options=["My Club", "All Players"])
+        if national_mode:
+            nat_name, _, _ = get_national_team_settings()
+            pool_filter = st.selectbox("Filter by Pool", options=[f"{nat_name or 'National'} Squad", "All Players"])
+        else:
+            pool_filter = st.selectbox("Filter by Club", options=["My Club", "All Players"])
 
     player_pool = df.copy()
-    if club_filter == "My Club":
+    if pool_filter == "My Club":
         player_pool = player_pool[player_pool['Club'] == user_club]
+    elif pool_filter != "All Players":  # national squad option
+        squad_ids = get_national_squad_ids()
+        player_pool = player_pool[player_pool['Unique ID'].isin(squad_ids)]
     
     player_pool = player_pool[player_pool['Assigned Roles'].apply(lambda roles: selected_role in roles if isinstance(roles, list) else False)]
 
@@ -92,8 +105,7 @@ def player_comparison_page(players):
         comparison_df = df[df['Unique ID'].isin(selected_ids)].copy()
         
         
-        all_gk_roles = ["GK-D", "SK-D", "SK-S", "SK-A"]
-        is_gk_role = selected_role in all_gk_roles
+        is_gk_role = selected_role in get_gk_roles()
 
         role_weights = get_role_specific_weights().get(selected_role, {"key": [], "preferable": []})
         key_attrs = role_weights["key"]

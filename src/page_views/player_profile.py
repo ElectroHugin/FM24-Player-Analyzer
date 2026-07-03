@@ -4,9 +4,11 @@ import streamlit as st
 import pandas as pd
 
 from sqlite_db import (get_user_club, get_second_team_club, get_all_players,
-                       get_latest_dwrs_ratings, get_dwrs_history)
+                       get_latest_dwrs_ratings, get_dwrs_history,
+                       get_national_squad_ids, get_national_team_settings)
 from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES
-from utils import format_role_display, get_last_name, color_attribute_by_value, color_personality
+from utils import (format_role_display, get_last_name, color_attribute_by_value,
+                   color_personality, is_national_mode_active)
 from ui_components import display_custom_header, display_pros_and_cons
 from role_analysis_logic import (analyze_player_for_role, get_top_roles_for_player,
                                  parse_attribute_value, ALL_GK_ROLES)
@@ -123,11 +125,25 @@ def player_profile_page(players):
         st.session_state["profile_scope"] = "all"
 
     # --- Player selection, scoped like the Role Analysis page ---
-    scope_labels = {"my_club": f"🏠 {user_club or 'My Club'}"}
-    if second_club:
-        scope_labels["second_team"] = f"🔄 {second_club}"
-    scope_labels["scouted"] = "🔍 Scouted Players"
-    scope_labels["all"] = "🌍 All Players"
+    # In National mode the pools are the saved national squad and all players;
+    # the club-based scopes make no sense there.
+    if is_national_mode_active():
+        nat_name, _, _ = get_national_team_settings()
+        scope_labels = {
+            "national_squad": f"🌟 {nat_name or 'National'} Squad",
+            "all": "🌍 All Players",
+        }
+    else:
+        scope_labels = {"my_club": f"🏠 {user_club or 'My Club'}"}
+        if second_club:
+            scope_labels["second_team"] = f"🔄 {second_club}"
+        scope_labels["scouted"] = "🔍 Scouted Players"
+        scope_labels["all"] = "🌍 All Players"
+
+    # The scope radio keeps its value across mode switches; drop a value that
+    # is not a valid option in the current mode or st.radio raises.
+    if st.session_state.get("profile_scope") not in scope_labels:
+        st.session_state.pop("profile_scope", None)
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -138,9 +154,16 @@ def player_profile_page(players):
             key="profile_scope",
         )
 
-    pool = get_all_players() if scope == "all" else get_profile_pool(scope, user_club, second_club)
     if scope == "all":
-        pool = sorted(pool, key=lambda p: get_last_name(p.get('Name', '')))
+        pool = sorted(get_all_players(), key=lambda p: get_last_name(p.get('Name', '')))
+    elif scope == "national_squad":
+        squad_ids = get_national_squad_ids()
+        pool = sorted(
+            [p for p in get_all_players() if p.get('Unique ID') in squad_ids],
+            key=lambda p: get_last_name(p.get('Name', ''))
+        )
+    else:
+        pool = get_profile_pool(scope, user_club, second_club)
 
     if not pool:
         st.info(f"No players found in '{scope_labels[scope]}'.")

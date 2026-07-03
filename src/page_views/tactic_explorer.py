@@ -3,11 +3,12 @@
 import streamlit as st
 import pandas as pd
 
-from sqlite_db import get_all_players, get_user_club, get_second_team_club
+from sqlite_db import (get_all_players, get_user_club, get_second_team_club,
+                       get_national_squad_ids, get_national_team_settings)
 from squad_logic import get_master_role_ratings
 from constants import get_tactic_roles
 from tactic_explorer_logic import analyze_all_tactics, STRATUM_ORDER
-from utils import format_role_display, color_dwrs_by_value
+from utils import format_role_display, color_dwrs_by_value, is_national_mode_active
 from ui_components import display_custom_header
 
 STRATUM_SHORT = {
@@ -28,6 +29,17 @@ def _run_explorer(user_club, second_team_club):
     return analyze_all_tactics(pool, master), len(pool)
 
 
+@st.cache_data
+def _run_explorer_national(squad_ids):
+    """National variant: pool is the saved national squad (the squad-ID tuple
+    is part of the cache key, so re-selecting the squad refreshes the result).
+    Club APT is ignored — it must not influence national selection."""
+    ids = set(squad_ids)
+    pool = [p for p in get_all_players() if p.get('Unique ID') in ids]
+    master = get_master_role_ratings()
+    return analyze_all_tactics(pool, master, apply_apt_weight=False), len(pool)
+
+
 def _slots_with_roles(slots, positions):
     return ", ".join(f"{s} ({format_role_display(positions[s])})" for s in slots)
 
@@ -42,15 +54,25 @@ def tactic_explorer_page():
         "over filled slots only, so an unfillable position never fakes a low score."
     )
 
-    user_club = get_user_club()
-    second_team_club = get_second_team_club()
-    if not user_club:
-        st.warning("Please select your club in the sidebar.")
-        return
+    if is_national_mode_active():
+        nat_name, _, _ = get_national_team_settings()
+        squad_ids = get_national_squad_ids()
+        if not squad_ids:
+            st.info("No players have been selected for the national squad yet. Go to 'National Squad' to build your team.")
+            return
+        pool_label = f"{nat_name or 'National'} squad"
+        with st.spinner(f"Analyzing every tactic for the {pool_label}…"):
+            results, pool_size = _run_explorer_national(tuple(sorted(squad_ids)))
+    else:
+        user_club = get_user_club()
+        second_team_club = get_second_team_club()
+        if not user_club:
+            st.warning("Please select your club in the sidebar.")
+            return
 
-    pool_label = f"{user_club}" + (f" + {second_team_club}" if second_team_club else "")
-    with st.spinner(f"Analyzing every tactic for {pool_label}…"):
-        results, pool_size = _run_explorer(user_club, second_team_club)
+        pool_label = f"{user_club}" + (f" + {second_team_club}" if second_team_club else "")
+        with st.spinner(f"Analyzing every tactic for {pool_label}…"):
+            results, pool_size = _run_explorer(user_club, second_team_club)
 
     if not results:
         st.warning("No tactics defined, or no players in the selected pool.")

@@ -27,6 +27,13 @@ def get_valid_roles():
     player_roles = get_player_roles()
     return sorted([role for category in player_roles.values() for role in category.keys()])
 
+def get_gk_roles():
+    """All goalkeeper role abbreviations, derived from the 'Goalkeepers'
+    category in definitions.json so that user-created GK roles are also rated
+    with the GK weight set (falls back to the built-in four)."""
+    gk_roles = list(get_player_roles().get('Goalkeepers', {}).keys())
+    return gk_roles if gk_roles else ["GK-D", "SK-D", "SK-S", "SK-A"]
+
 def get_personalities():
     """Map of personality name -> 'good' | 'neutral' | 'bad'.
     definitions.json may define a 'personalities' key to override the built-in

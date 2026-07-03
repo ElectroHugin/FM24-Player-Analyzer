@@ -5,8 +5,8 @@ import base64
 import streamlit as st
 import re
 from collections import defaultdict
+import matplotlib
 import matplotlib.colors as mcolors
-import matplotlib.cm as cm
 
 from constants import get_player_roles, get_valid_roles, get_position_to_role_mapping, MASTER_POSITION_MAP, get_personality_category
 from definitions_loader import PROJECT_ROOT
@@ -43,6 +43,11 @@ def get_last_name(full_name):
     if isinstance(full_name, str) and full_name:
         return full_name.split(' ')[-1]
     return ""
+
+def is_national_mode_active():
+    """True when the sidebar is switched to National management mode.
+    Pages shared between both modes use this to scope their player pool."""
+    return st.session_state.get('management_mode') == 'National'
 
 def get_role_display_map():
     player_roles = get_player_roles()
@@ -221,7 +226,13 @@ def _get_smart_style(val, cmap, norm):
         return '' # Return empty string for non-numeric or None values
 
 # --- Styler for DWRS (0-100) ---
-_dwrs_cmap = cm.get_cmap('gist_rainbow')
+# matplotlib.cm.get_cmap was removed in matplotlib 3.9; the registry access
+# below works from 3.5 onward and requirements.txt does not pin a version.
+try:
+    _dwrs_cmap = matplotlib.colormaps['gist_rainbow']
+except AttributeError:
+    import matplotlib.cm as cm
+    _dwrs_cmap = cm.get_cmap('gist_rainbow')
 _dwrs_norm = mcolors.Normalize(vmin=30, vmax=95)
 
 def color_dwrs_by_value(val):

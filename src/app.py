@@ -139,15 +139,21 @@ def sidebar(df, players):
         
         # --- DYNAMIC NAVIGATION MENU ---
         if st.session_state.management_mode == "National" and is_national_mode_enabled:
-            # Define the core pages for National mode
-            page_options = ["National Dashboard", "National Squad", "Squad Matrix", "Best XI"]
-            page_icons = ["house", "people-fill", "table", "trophy"]
+            # Define the core pages for National mode. Profile, Comparison,
+            # Development and Tactic Explorer reuse the club pages, which are
+            # national-aware (they scope their pool to the national squad).
+            page_options = ["National Dashboard", "National Squad", "Squad Matrix", "Best XI", "Tactic Explorer", "Profile", "Comparison", "Development"]
+            page_icons = ["house", "people-fill", "table", "trophy", "compass", "person-badge", "people", "graph-up"]
             page_title = "National Team"
-            page_mapping = { 
+            page_mapping = {
                 "National Dashboard": "National Dashboard",
-                "National Squad": "National Squad Selection", 
+                "National Squad": "National Squad Selection",
                 "Squad Matrix": "National Squad Matrix",
                 "Best XI": "National Best XI",
+                "Tactic Explorer": "Tactic Explorer",
+                "Profile": "Player Profile",
+                "Comparison": "Player Comparison",
+                "Development": "DWRS Progress",
             }
             # --- THIS IS THE CHANGE: Use insert() to add "Assign Roles" in the second position ---
             page_options.insert(1, "Assign Roles")
@@ -626,9 +632,11 @@ def main():
     df, players = load_app_data()
     page = sidebar(df, players)
 
+    # st.query_params returns the value as a plain string; indexing [0] would
+    # only take the first character (e.g. "All Players" -> "A").
     query_params = st.query_params
     if "page" in query_params:
-        page = query_params["page"][0]
+        page = query_params["page"]
     
     # --- ROUTER ---
     # Pages receive pre-loaded data (df / players) from main() where they use it.

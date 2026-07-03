@@ -52,8 +52,10 @@ def national_best_xi_page(players):
         # Get the master dictionary of pre-calculated DWRS ratings
         master_role_ratings = get_master_role_ratings()
 
-        # REUSE the core logic from squad_logic, feeding it our national player pool
-        squad_analysis = calculate_squad_and_surplus(squad_players, positions, master_role_ratings)
+        # REUSE the core logic from squad_logic, feeding it our national player pool.
+        # apply_apt_weight=False: a player's Agreed Playing Time belongs to his
+        # club and must not skew national team selection.
+        squad_analysis = calculate_squad_and_surplus(squad_players, positions, master_role_ratings, apply_apt_weight=False)
 
     if not squad_analysis:
         st.error("Could not generate a squad. Ensure players are assigned relevant roles.")

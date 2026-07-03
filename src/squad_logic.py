@@ -7,7 +7,6 @@ from config_handler import get_age_threshold, get_apt_weight, get_selection_bonu
 from constants import get_position_to_role_mapping, TACTICAL_SLOT_TO_GAME_POSITIONS
 from utils import parse_position_string, format_role_display
 from constants import get_valid_roles, get_tactic_roles
-from data_parser import get_players_by_role
 from sqlite_db import get_all_players, get_latest_dwrs_ratings
 
 def get_last_name(full_name):
@@ -18,17 +17,29 @@ def get_last_name(full_name):
 
 def _apply_footedness_swaps(team, all_players, positions):
     """
-    A helper function to swap players in symmetrical positions.
-    It now prioritizes a player's manually set 'preferred_side'.
-    If not set, it falls back to their 'Preferred Foot'.
+    Swap players between symmetrical same-role slots so that as many EXPLICIT
+    side preferences as possible are satisfied.
+
+    Only the manually set 'preferred_side' counts. 'Preferred Foot' is
+    deliberately NOT used: a strong foot does not imply a side preference.
+    (Same principle as the Gap Analysis — see Future_Ideas.md, SCRAPPED.)
+
+    Rule: for each pair, count how many of the two players' explicit
+    preferences are satisfied now vs. after a swap; swap only if the swap
+    strictly improves that count. This covers every combination correctly,
+    including ties (e.g. both prefer Right -> keep current, no flapping).
     """
     symmetrical_pairs = [
         ('DCL', 'DCR'), ('DMCL', 'DMCR'),
         ('MCL', 'MCR'), ('AMCL', 'AMCR'),
         ('STL', 'STR')
     ]
-    
+
     player_map = {p['Unique ID']: p for p in all_players}
+
+    def _explicit_side(player):
+        side = player.get('preferred_side')
+        return side if side in ('Left', 'Right') else None
 
     for pos_L, pos_R in symmetrical_pairs:
         if pos_L in team and pos_R in team:
@@ -37,30 +48,21 @@ def _apply_footedness_swaps(team, all_players, positions):
             if role_L != role_R:
                 continue
 
-            player_L_data = team[pos_L]
-            player_R_data = team[pos_R]
-            
-            player_L = player_map.get(player_L_data.get('player_id'))
-            player_R = player_map.get(player_R_data.get('player_id'))
+            player_L = player_map.get(team[pos_L].get('player_id'))
+            player_R = player_map.get(team[pos_R].get('player_id'))
 
             if not player_L or not player_R:
                 continue
 
-            # --- THIS IS THE NEW, UPGRADED LOGIC ---
-            # Determine the effective side for each player. Prioritize the manual setting.
-            side_L = player_L.get('preferred_side') or player_L.get('Preferred Foot')
-            side_R = player_R.get('preferred_side') or player_R.get('Preferred Foot')
+            pref_L = _explicit_side(player_L)  # player currently on the LEFT slot
+            pref_R = _explicit_side(player_R)  # player currently on the RIGHT slot
 
-            # The ideal swap condition: a "Right"-sided player is on the left (pos_L)
-            # and a "Left"-sided player is on the right (pos_R).
-            if side_L == 'Right' and side_R == 'Left':
+            satisfied_now = int(pref_L == 'Left') + int(pref_R == 'Right')
+            satisfied_after_swap = int(pref_L == 'Right') + int(pref_R == 'Left')
+
+            if satisfied_after_swap > satisfied_now:
                 team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
-            elif side_L == 'Right' and side_R == None:
-                team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
-            elif side_L == None and side_R == 'Left':
-                team[pos_L], team[pos_R] = team[pos_R], team[pos_L]
-            # --- END OF NEW LOGIC ---
-                
+
     return team
 
 @st.cache_data
@@ -126,8 +128,6 @@ def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
         master_role_ratings  
     )
 
-    final_core_squad_ids = first_team_squad_data.get("core_squad_ids", set())
-
     # Prepare and return a comprehensive dictionary of results
     final_core_squad_ids = first_team_squad_data.get("core_squad_ids", set())
     core_squad_df = pd.DataFrame([p for p in my_club_players if p['Unique ID'] in final_core_squad_ids])
@@ -173,99 +173,110 @@ def create_detailed_surplus_df(player_list, master_role_ratings):
     
     return pd.DataFrame(data)
 
-def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings):
+def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings, apply_apt_weight=True):
     """
     Calculates squads using a smart depth-filling algorithm that prioritizes
     full coverage while respecting a soft cap on a player's *unique* roles.
+
+    apply_apt_weight: multiply selection scores by the Agreed Playing Time
+    weight. Club squads want this; national squads pass False because a
+    player's APT belongs to his club context, not the national team.
     """
     MAX_DEPTH_ROLES = get_squad_management_setting('max_roles_per_depth_player')
+    natural_pos_multiplier = get_selection_bonus('natural_position')
 
-    # --- THIS IS THE NEW, MORE INTELLIGENT "IRREPLACEABILITY" ALGORITHM ---
+    # Parse every player's position string exactly once. select_team used to
+    # re-parse it per position per iteration (regex work repeated thousands of
+    # times per analysis, and much more in the Tactic Explorer).
+    parsed_positions = {
+        p['Unique ID']: parse_position_string(p.get('Position', ''))
+        for p in my_club_players
+    }
+
+    pos_to_role_map = get_position_to_role_mapping()
+    role_to_game_positions = {r: [gp for gp, roles in pos_to_role_map.items() if r in roles] for r in get_valid_roles()}
+
+    def build_candidates(pos, role, available_players):
+        """All eligible candidates for one tactical slot, best score first."""
+        allowed_game_positions = set(TACTICAL_SLOT_TO_GAME_POSITIONS.get(pos, []))
+        natural_game_positions = role_to_game_positions.get(role, [])
+        candidates = []
+        for player in available_players:
+            uid = player['Unique ID']
+            if not (parsed_positions.get(uid, set()) & allowed_game_positions):
+                continue
+            # Skip players if their primary role is set and doesn't match
+            primary_role = player.get('primary_role')
+            if primary_role and primary_role != role:
+                continue
+            rating = master_role_ratings.get(role, {}).get(uid, 0)
+            if rating <= 0:
+                continue
+            apt = player.get("Agreed Playing Time", "None") or "None"
+            apt_weight = get_apt_weight(apt) if apply_apt_weight else 1.0
+            natural_pos_bonus = 1.0
+            if any(pnp in natural_game_positions for pnp in player.get('natural_positions', [])):
+                natural_pos_bonus = natural_pos_multiplier
+            candidates.append({
+                "player_id": uid,
+                "name": player['Name'],
+                "rating": rating,
+                "apt": apt,
+                "score": rating * apt_weight * natural_pos_bonus
+            })
+        candidates.sort(key=lambda c: c['score'], reverse=True)
+        return candidates
+
     def select_team(team_positions, available_players):
+        """
+        'Weakest link first': repeatedly fill the position whose best remaining
+        candidate would be hardest to replace (biggest drop-off to the next
+        best candidate). Candidate scores never change while a team is being
+        picked, so they are computed once up front; each round only skips over
+        players that were locked in elsewhere in the meantime.
+        """
         team_with_ids = {}
-        players_team = set()
-        natural_pos_multiplier = get_selection_bonus('natural_position')
-        
-        # Pre-calculate role mappings once
-        pos_to_role_map = get_position_to_role_mapping()
-        role_to_game_positions = {r: [gp for gp, roles in pos_to_role_map.items() if r in roles] for r in get_valid_roles()}
+        taken_ids = set()
+        candidates_by_pos = {
+            pos: build_candidates(pos, role, available_players)
+            for pos, role in team_positions.items()
+        }
 
-        # The main loop to fill the 11 positions
         while len(team_with_ids) < len(team_positions):
-            position_analysis = {}
-            empty_positions = [p for p in team_positions if p not in team_with_ids]
+            best_pos, best_drop_off = None, -1.0
+            for pos in team_positions:
+                if pos in team_with_ids:
+                    continue
+                cands = candidates_by_pos[pos]
+                # Lazily discard candidates already taken by other positions
+                while cands and cands[0]['player_id'] in taken_ids:
+                    cands.pop(0)
+                if not cands:
+                    continue
+                second_score = next(
+                    (c['score'] for c in cands[1:] if c['player_id'] not in taken_ids),
+                    None
+                )
+                # A position whose ONLY remaining candidate could be poached by
+                # another slot must be filled first, or it stays empty.
+                drop_off = float('inf') if second_score is None else cands[0]['score'] - second_score
+                if drop_off > best_drop_off:
+                    best_pos, best_drop_off = pos, drop_off
 
-            # Step 1: For each empty position, find ALL valid candidates and sort them by score
-            for pos in empty_positions:
-                role = team_positions[pos]
-                candidates = []
-                for player in available_players:
-                    # Skip players already tentatively assigned in this loop
-                    if player['Unique ID'] in players_team: continue
+            if best_pos is None:
+                break  # No more valid players for any remaining position
 
-                    # Check if player is eligible for this tactical position
-                    allowed_game_positions = TACTICAL_SLOT_TO_GAME_POSITIONS.get(pos, [])
-                    player_game_positions = parse_position_string(player.get('Position', ''))
-                    if not any(p_pos in allowed_game_positions for p_pos in player_game_positions): continue
-                    
-                    # Skip players if their primary role is set and doesn't match
-                    primary_role = player.get('primary_role')
-                    if primary_role and primary_role != role: continue
-                    
-                    rating = master_role_ratings.get(role, {}).get(player['Unique ID'], 0)
-                    if rating > 0:
-                        apt = player.get("Agreed Playing Time", "None") or "None"
-                        apt_weight = get_apt_weight(apt)
-                        natural_pos_bonus = 1.0
-                        player_natural_positions = player.get('natural_positions', [])
-                        if any(pnp in role_to_game_positions.get(role, []) for pnp in player_natural_positions):
-                            natural_pos_bonus = natural_pos_multiplier
-                        
-                        selection_score = rating * apt_weight * natural_pos_bonus
-                        candidates.append({
-                            "player_id": player['Unique ID'], 
-                            "name": player['Name'], 
-                            "rating": rating, 
-                            "apt": apt,
-                            "score": selection_score
-                        })
-                
-                # If any candidates were found, sort them descending by score
-                if candidates:
-                    position_analysis[pos] = sorted(candidates, key=lambda x: x['score'], reverse=True)
-
-            if not position_analysis:
-                break # No more valid players for any remaining position
-
-            # Step 2: Calculate the "irreplaceability" (drop-off score) for each position
-            for pos, candidates in position_analysis.items():
-                best_score = candidates[0]['score']
-                # If there's a second-best player, calculate the drop-off. Otherwise, it's infinite.
-                second_best_score = candidates[1]['score'] if len(candidates) > 1 else 0.0
-                drop_off = best_score - second_best_score
-                position_analysis[pos][0]['drop_off'] = drop_off
-
-            # Step 3: Find the position with the BIGGEST drop-off. This is our new "weakest link".
-            # This is the position we MUST fill now to avoid leaving it empty or with a terrible player.
-            most_irreplaceable_pos = max(
-                position_analysis, 
-                key=lambda p: position_analysis[p][0]['drop_off']
-            )
-
-            # Step 4: Lock in the winner for that position
-            winner = position_analysis[most_irreplaceable_pos][0]
-            team_with_ids[most_irreplaceable_pos] = {
-                "player_id": winner['player_id'], 
-                "name": winner['name'], 
-                "rating": f"{int(winner['rating'])}%", 
+            winner = candidates_by_pos[best_pos][0]
+            team_with_ids[best_pos] = {
+                "player_id": winner['player_id'],
+                "name": winner['name'],
+                "rating": f"{int(winner['rating'])}%",
                 "apt": winner['apt']
             }
-            players_team.add(winner['player_id'])
-            # The player is now permanently removed from the available pool for the next iteration
-            available_players = [p for p in available_players if p['Unique ID'] != winner['player_id']]
-        
-        return team_with_ids, available_players
-    # --- END OF NEW ALGORITHM ---
+            taken_ids.add(winner['player_id'])
+
+        remaining = [p for p in available_players if p['Unique ID'] not in taken_ids]
+        return team_with_ids, remaining
 
     xi_with_ids, remaining_for_b_team = select_team(positions, my_club_players)
     b_team_with_ids, depth_pool = select_team(positions, remaining_for_b_team)
@@ -346,8 +357,8 @@ def calculate_development_squads(second_team_club_players, first_team_remnants, 
     second_team_squad_data = calculate_squad_and_surplus(second_team_pool, positions, master_role_ratings)
     second_team_xi = second_team_squad_data["starting_xi"]
 
-    second_team_xi_names = {player['name'] for player in second_team_xi.values() if player['name'] != '-'}
-    second_team_player_ids = {p['Unique ID'] for p in second_team_pool if p['Name'] in second_team_xi_names}
+    # Match by player_id (cells carry it) — name matching would collide on namesakes.
+    second_team_player_ids = {cell['player_id'] for cell in second_team_xi.values() if cell.get('player_id')}
 
     # --- 2. Calculate Youth Team ---
     youth_pool = []
@@ -363,8 +374,8 @@ def calculate_development_squads(second_team_club_players, first_team_remnants, 
     youth_squad_data = calculate_squad_and_surplus(youth_pool, positions, master_role_ratings)
     youth_xi = youth_squad_data["starting_xi"]
 
-    youth_xi_names = {player['name'] for player in youth_xi.values() if player['name'] != '-'}
-    youth_player_ids = {p['Unique ID'] for p in youth_pool if p['Name'] in youth_xi_names}
+    # Match by player_id here as well, for the same namesake-safety reason.
+    youth_player_ids = {cell['player_id'] for cell in youth_xi.values() if cell.get('player_id')}
 
     # --- 3. Definitive Surplus Calculation (BUG FIX) ---
     # The final surplus is anyone in the remnant pool who is NOT in the Second XI and NOT in the Youth XI.

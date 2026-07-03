@@ -48,12 +48,17 @@ def national_dashboard_page(df, players):
                     full_df, affected_ids = parse_and_update_data(uploaded_file)
                 
                 if full_df is None:
-                    st.error("Invalid HTML file: Must contain a table with a 'UID' column.")
+                    # parse_and_update_data already shows a detailed error message,
+                    # so we don't add a second, redundant one (same as club mode).
+                    pass
                 else:
                     # Step 1 (Optional): Replace the national squad if the box was checked
                     if replace_squad:
                         with st.spinner("Replacing national squad..."):
                             set_national_squad_ids(affected_ids)
+                        # Drop any stale in-progress selection from the Squad
+                        # Selection page so it reflects the new squad.
+                        st.session_state.pop('national_squad_selection', None)
                         st.toast(f"National squad replaced with {len(affected_ids)} players from the file.", icon="🔁")
 
                     # Step 2 (Optional): Auto-assign roles
@@ -88,7 +93,8 @@ def national_dashboard_page(df, players):
     analysis_results = None
     with st.spinner(f"Analyzing your squad's fit for the '{selected_tactic}' tactic..."):
         master_ratings = get_master_role_ratings()
-        analysis_results = calculate_squad_and_surplus(squad_players, get_tactic_roles()[selected_tactic], master_ratings)
+        # apply_apt_weight=False: club playing time must not skew national selection.
+        analysis_results = calculate_squad_and_surplus(squad_players, get_tactic_roles()[selected_tactic], master_ratings, apply_apt_weight=False)
 
     # --- 5. DISPLAY KPIS (Key Performance Indicators) ---
     st.markdown("---")
