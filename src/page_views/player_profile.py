@@ -5,11 +5,13 @@ import pandas as pd
 
 from sqlite_db import (get_user_club, get_second_team_club, get_all_players,
                        get_latest_dwrs_ratings, get_dwrs_history,
-                       get_national_squad_ids, get_national_team_settings)
-from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES
+                       get_national_squad_ids, get_national_team_settings,
+                       update_dwrs_ratings)
+from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_valid_roles
+from data_parser import force_update_single_player, load_data
 from utils import (format_role_display, get_last_name, color_attribute_by_value,
                    color_personality, is_national_mode_active)
-from ui_components import display_custom_header, display_pros_and_cons
+from ui_components import display_custom_header, display_pros_and_cons, clear_all_caches
 from role_analysis_logic import (analyze_player_for_role, get_top_roles_for_player,
                                  parse_attribute_value, ALL_GK_ROLES)
 
@@ -240,6 +242,46 @@ def player_profile_page(players):
             tags.append(_status_tag("Personality", personality, "#555"))
     if tags:
         st.markdown("".join(tags), unsafe_allow_html=True)
+
+    # Flash message from a manual update on the previous run (set before the
+    # st.rerun() below, otherwise it would be lost by the rerun).
+    flash = st.session_state.pop("profile_update_flash", None)
+    if flash:
+        st.success(flash)
+
+    # --- Manual single-player update from an HTML export ---
+    with st.expander("🔁 Update this player from an HTML file"):
+        st.caption(
+            "Upload an FM export that contains **only this player**. The data is "
+            "written directly onto this profile — even if the UID in the file "
+            "differs (e.g. a missing 'r-' prefix on a newgen). Assigned roles, "
+            "primary role and transfer/loan settings are kept."
+        )
+        up_file = st.file_uploader(
+            "HTML file with exactly one player",
+            type=["html"],
+            key=f"profile_update_file_{selected_uid}",
+        )
+        confirm = st.checkbox(
+            f"Yes, I am sure this file is an update for **{player.get('Name', 'this player')}**.",
+            key=f"profile_update_confirm_{selected_uid}",
+        )
+        if st.button("Update player", type="primary", disabled=not (up_file and confirm)):
+            with st.spinner("Updating player and recalculating DWRS..."):
+                file_player_name, err = force_update_single_player(up_file, selected_uid)
+                if err:
+                    st.error(f"❌ {err}")
+                else:
+                    clear_all_caches()
+                    fresh_df = load_data()
+                    if fresh_df is not None:
+                        update_dwrs_ratings(fresh_df, get_valid_roles(), [selected_uid])
+                    clear_all_caches()
+                    msg = f"✅ {player.get('Name', 'Player')} updated from file."
+                    if file_player_name and file_player_name != player.get('Name'):
+                        msg += f" (Name in file: '{file_player_name}'.)"
+                    st.session_state["profile_update_flash"] = msg
+                    st.rerun()
 
     # --- Top roles by DWRS ---
     latest_ratings = get_latest_dwrs_ratings()

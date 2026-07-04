@@ -594,89 +594,81 @@ def set_club_identity(full_name, stadium_name):
     conn.close()
 
 
-def get_prunable_player_info(dwrs_threshold, national_code_to_protect=None):
+# Shared subquery: each player's best CURRENT rating — the latest rating per
+# (player, role), then the max over those roles. This matches what the matrix
+# pages display. The old version took the max over the ENTIRE history, so a
+# player who once peaked above the threshold could never be pruned again.
+_LATEST_BEST_DWRS_SUBQUERY = """
+    SELECT t1.unique_id, MAX(CAST(REPLACE(t1.dwrs_normalized, '%', '') AS REAL)) as max_dwrs
+    FROM dwrs_ratings t1
+    INNER JOIN (
+        SELECT unique_id, role, MAX(timestamp) as max_ts
+        FROM dwrs_ratings
+        GROUP BY unique_id, role
+    ) t2 ON t1.unique_id = t2.unique_id AND t1.role = t2.role AND t1.timestamp = t2.max_ts
+    GROUP BY t1.unique_id
+"""
+
+def _build_prune_query(select_clause, dwrs_threshold, national_code_to_protect):
     """
-    Safely calculates how many scouted players are eligible for deletion.
-    Now optionally protects players of a specific nationality.
+    One query builder for both the preview and the actual deletion, so the two
+    can never disagree about who is prunable.
+
+    NULL-safety matters here: `p."Second Nationality" != 'GER'` evaluates to
+    NULL (not TRUE) for players without a second nationality, which silently
+    protected almost every player from pruning. IFNULL(...) fixes that.
+    Players in the national squad or on the shortlist are always protected —
+    they were hand-picked by the user.
     """
-    conn = connect_db()
-    
-    # We must now also fetch Nationality and Second Nationality for filtering
-    query = """
-        SELECT
-            p."Unique ID",
-            p.Club,
-            p.Nationality,
-            p."Second Nationality",
-            MAX(CAST(REPLACE(dr.dwrs_normalized, '%', '') AS REAL)) as max_dwrs
-        FROM players p
-        LEFT JOIN dwrs_ratings dr ON p."Unique ID" = dr.unique_id
-        GROUP BY p."Unique ID"
-    """
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    
-    # Filter for scouted players (not in user's clubs)
     user_club = get_user_club()
     second_team_club = get_second_team_club()
-    exclude_clubs = [user_club]
-    if second_team_club:
-        exclude_clubs.append(second_team_club)
-    scouted_df = df[~df['Club'].isin(exclude_clubs)]
-    
-    # --- THIS IS THE NEW LOGIC ---
-    # If a national code is provided, further filter out players of that nationality
-    if national_code_to_protect:
-        scouted_df = scouted_df[
-            (scouted_df['Nationality'] != national_code_to_protect) &
-            (scouted_df['Second Nationality'] != national_code_to_protect)
-        ]
-    # --- END OF NEW LOGIC ---
 
-    # Find players whose best role is below the threshold
-    prunable_df = scouted_df[scouted_df['max_dwrs'].fillna(0) < dwrs_threshold]
-    
-    count = len(prunable_df)
-    max_rating_prunable = prunable_df['max_dwrs'].max() if count > 0 else 0
-    
+    query = f"""
+        SELECT {select_clause}
+        FROM players p
+        LEFT JOIN ({_LATEST_BEST_DWRS_SUBQUERY}) dr ON p."Unique ID" = dr.unique_id
+        WHERE IFNULL(p.Club, '') NOT IN (?, ?)
+        AND p."Unique ID" NOT IN (SELECT player_unique_id FROM national_squad)
+        AND p."Unique ID" NOT IN (SELECT player_unique_id FROM shortlist)
+    """
+    params = [user_club or '', second_team_club or '']
+
+    if national_code_to_protect:
+        query += ' AND IFNULL(p.Nationality, \'\') != ? AND IFNULL(p."Second Nationality", \'\') != ?'
+        params.extend([national_code_to_protect, national_code_to_protect])
+
+    query += " AND IFNULL(dr.max_dwrs, 0) < ?"
+    params.append(dwrs_threshold)
+    return query, params
+
+def get_prunable_player_info(dwrs_threshold, national_code_to_protect=None):
+    """
+    Calculates how many scouted players are eligible for deletion and the best
+    current rating among them. Uses exactly the same query as the deletion.
+    """
+    query, params = _build_prune_query(
+        'p."Unique ID", IFNULL(dr.max_dwrs, 0) as max_dwrs',
+        dwrs_threshold, national_code_to_protect
+    )
+    conn = connect_db()
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+
+    count = len(df)
+    max_rating_prunable = df['max_dwrs'].max() if count > 0 else 0
     return count, max_rating_prunable
 
 def prune_scouted_players(dwrs_threshold, national_code_to_protect=None):
     """
-    Finds and permanently deletes scouted players whose best role is below the threshold.
-    Now optionally protects players of a specific nationality.
+    Finds and permanently deletes scouted players whose best CURRENT role
+    rating is below the threshold. Shares its query with
+    get_prunable_player_info, so the preview always matches the deletion.
     """
     conn = connect_db()
     cursor = conn.cursor()
-    
-    user_club = get_user_club()
-    second_team_club = get_second_team_club()
 
-    # --- THIS IS THE NEW, DYNAMIC QUERY ---
-    # We build the query and parameters list dynamically to handle the optional filter
-    base_query = """
-        SELECT p."Unique ID"
-        FROM players p
-        LEFT JOIN (
-            SELECT unique_id, MAX(CAST(REPLACE(dwrs_normalized, '%', '') AS REAL)) as max_dwrs
-            FROM dwrs_ratings
-            GROUP BY unique_id
-        ) dr ON p."Unique ID" = dr.unique_id
-        WHERE p.Club NOT IN (?, ?)
-    """
-    params = [user_club, second_team_club or '']
-
-    # If a national code is provided, add the nationality exclusion to the query
-    if national_code_to_protect:
-        base_query += ' AND p.Nationality != ? AND p."Second Nationality" != ?'
-        params.extend([national_code_to_protect, national_code_to_protect])
-
-    # Add the final DWRS threshold condition
-    base_query += " AND IFNULL(dr.max_dwrs, 0) < ?"
-    params.append(dwrs_threshold)
-    # --- END OF NEW, DYNAMIC QUERY ---
-
-    cursor.execute(base_query, params)
+    query, params = _build_prune_query('p."Unique ID"', dwrs_threshold, national_code_to_protect)
+    cursor.execute(query, params)
     ids_to_delete = [row[0] for row in cursor.fetchall()]
     
     if not ids_to_delete:

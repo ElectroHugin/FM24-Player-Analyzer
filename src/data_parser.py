@@ -4,8 +4,9 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from constants import (attribute_mapping, get_valid_roles, ROLE_ANALYSIS_COLUMNS, 
                      PLAYER_ROLE_MATRIX_COLUMNS, )
-from sqlite_db import (init_db, get_all_players, get_latest_dwrs_ratings, 
-                       bulk_upsert_players, create_database_backup, merge_player_records)
+from sqlite_db import (init_db, get_all_players, get_latest_dwrs_ratings,
+                       bulk_upsert_players, create_database_backup, merge_player_records,
+                       update_player)
 
 import streamlit as st
 
@@ -163,71 +164,52 @@ def parse_and_update_data(file):
     existing_players = get_all_players()
     # Map for quick lookup: { 'NumericID': 'PlayerName' }
     numeric_id_to_name = {p['Unique ID']: p['Name'] for p in existing_players if not p['Unique ID'].startswith('r-')}
-    # All newgen (r-) records grouped by name. A plain name -> r-ID map would
-    # silently fuse namesakes; the plausibility check below needs the full
-    # records (nationality + age) to tell namesakes apart.
-    newgens_by_name = {}
-    for p in existing_players:
-        if p['Unique ID'].startswith('r-'):
-            newgens_by_name.setdefault(p['Name'], []).append(p)
+    # Map for quick lookup: { 'r-ID': 'PlayerName' }
+    r_id_to_name = {p['Unique ID']: p['Name'] for p in existing_players if p['Unique ID'].startswith('r-')}
 
-    def _to_int(value):
-        try:
-            return int(str(value).strip())
-        except (ValueError, TypeError):
-            return None
-
-    def _find_newgen_match(name, incoming_nat, incoming_age):
-        """
-        Resolve an incoming numeric-ID player to a known newgen r-ID — but only
-        if it is plausibly the SAME person, not just a namesake:
-          * Nationality must match (when known on both sides; it never changes).
-          * Age must not have DECREASED: between imports a player only gets
-            older, so an incoming age below the stored one rules the match out.
-            An equal or higher age is fine (later-season export).
-        Returns the r-ID for exactly one plausible candidate; None if there is
-        no candidate or the match is ambiguous (safer to leave both records).
-        """
-        candidates = newgens_by_name.get(name, [])
-        incoming_age_int = _to_int(incoming_age)
-        plausible = []
-        for rec in candidates:
-            stored_nat = (rec.get('Nationality') or '').strip()
-            if incoming_nat and stored_nat and incoming_nat != stored_nat:
-                continue
-            stored_age = _to_int(rec.get('Age'))
-            if (incoming_age_int is not None and stored_age is not None
-                    and incoming_age_int < stored_age):
-                continue
-            plausible.append(rec)
-        if len(plausible) == 1:
-            return plausible[0]['Unique ID']
-        return None
-
-    ambiguous_names = set()
+    id_name_conflicts = set()
+    identity_changes = set()
 
     # 3. Iterate through incoming data to find and fix inconsistencies BEFORE saving
     for index, row in html_df.iterrows():
         incoming_id = row['UID']
         incoming_name = row['Name']
 
-        # SCENARIO 1: "Mistaken Identity"
-        # The game exported a numeric ID for a player who we know is a newgen.
-        if not incoming_id.startswith('r-') and incoming_name in newgens_by_name:
-            correct_id = _find_newgen_match(incoming_name, (row.get('Nat') or '').strip(), row.get('Age'))
-            if correct_id is None:
-                if len(newgens_by_name[incoming_name]) > 1:
-                    ambiguous_names.add(incoming_name)
-                # No plausible match -> treat as a genuine different player.
-            else:
-                # Correct the ID in the DataFrame before it ever touches the database.
-                html_df.loc[index, 'UID'] = correct_id
-                # If the DB also contains a stale record under the numeric ID,
-                # merge it away now — otherwise it lingers forever as a duplicate
-                # player that never receives updates.
-                if incoming_id in numeric_id_to_name and numeric_id_to_name[incoming_id] == incoming_name:
-                    merge_player_records(bad_id=incoming_id, good_id=correct_id)
-                    del numeric_id_to_name[incoming_id]
+        # ID REUSE / IDENTITY CHANGE DETECTION:
+        # If a UID we already know arrives with a DIFFERENT name, FM has most
+        # likely re-issued the ID to a brand-new newgen after the old one
+        # retired or was deleted. The update itself still goes through (the ID
+        # is the identity), but the user must be told: assigned roles, APT and
+        # the DWRS history stored under this ID still belong to the OLD player.
+        stored_name = (r_id_to_name.get(incoming_id) if incoming_id.startswith('r-')
+                       else numeric_id_to_name.get(incoming_id))
+        if stored_name is not None and stored_name != incoming_name:
+            identity_changes.add(f"{incoming_id}: '{stored_name}' → '{incoming_name}'")
+
+        # SCENARIO 1: "Missing prefix"
+        # The game sometimes exports a newgen's ID WITHOUT the 'r-' prefix —
+        # the numeric part itself never changes. So the only valid correction
+        # is numeric X -> existing r-X. Matching by name (with or without
+        # nationality/age heuristics) is never safe: namesakes are common and
+        # a different numeric ID is by definition a different player.
+        if not incoming_id.startswith('r-'):
+            candidate_r_id = f"r-{incoming_id}"
+            if candidate_r_id in r_id_to_name:
+                if r_id_to_name[candidate_r_id] == incoming_name:
+                    # Correct the ID in the DataFrame before it touches the database.
+                    html_df.loc[index, 'UID'] = candidate_r_id
+                    # If the DB also contains a stale record under the bare
+                    # numeric ID, merge it away now — otherwise it lingers
+                    # forever as a duplicate that never receives updates.
+                    if numeric_id_to_name.get(incoming_id) == incoming_name:
+                        merge_player_records(bad_id=incoming_id, good_id=candidate_r_id)
+                        del numeric_id_to_name[incoming_id]
+                else:
+                    # Same numeric ID but a different name — should not happen;
+                    # keep both records untouched and tell the user.
+                    id_name_conflicts.add(
+                        f"{incoming_name} (UID {incoming_id}) vs. {r_id_to_name[candidate_r_id]} ({candidate_r_id})"
+                    )
 
         # SCENARIO 2: "Data Corruption"
         # The game exported the correct r-ID, but our database has a corrupted numeric entry.
@@ -240,13 +222,24 @@ def parse_and_update_data(file):
                 # After merging, the bad numeric ID is gone from our lookup, preventing future errors.
                 del numeric_id_to_name[numeric_part]
 
-    if ambiguous_names:
+    if id_name_conflicts:
         st.warning(
-            "⚠️ **Ambiguous newgen match skipped** for: "
-            f"`{', '.join(sorted(ambiguous_names)[:10])}`. "
-            "Several known newgens share this name and nationality/age did not "
-            "single one out, so the records were left untouched to avoid merging "
-            "different players."
+            "⚠️ **ID/name conflict skipped**: "
+            f"`{'; '.join(sorted(id_name_conflicts)[:10])}`. "
+            "An incoming numeric UID matches a known newgen ID but the names "
+            "differ, so the records were left untouched. Use the manual update "
+            "on the Player Profile page if this really is the same player."
+        )
+
+    if identity_changes:
+        st.warning(
+            "⚠️ **Name changed under a known UID**: "
+            f"`{'; '.join(sorted(identity_changes)[:10])}`. "
+            "FM may have re-issued this ID to a NEW newgen after the old player "
+            "retired. The data was updated, but assigned roles, playing time and "
+            "the DWRS history under this ID still belong to the previous player — "
+            "review them (e.g. reset the roles on the Assign Roles page) if this "
+            "is really a different person."
         )
 
     # 4. Get the final list of UIDs after all corrections and unifications.
@@ -268,6 +261,44 @@ def parse_and_update_data(file):
         bulk_upsert_players(players_to_upsert)
 
     return load_data(), affected_ids
+
+def force_update_single_player(file, target_uid):
+    """
+    Manual, user-confirmed update of ONE player from an HTML export.
+
+    The file must contain exactly one player row. Its data is written onto
+    `target_uid` regardless of the UID inside the file — this deliberately
+    bypasses the ID-unification heuristics, for the cases where the user KNOWS
+    the file belongs to this player (e.g. an export where the r- prefix is
+    missing or the UID differs). App-managed data (assigned roles, primary
+    role, natural positions, transfer/loan status) is preserved by
+    update_player().
+
+    Returns (file_player_name, error_message); error_message is None on success.
+    """
+    create_database_backup()
+
+    html_df = parse_html_table(file)
+    if html_df is None:
+        return None, "Could not parse the HTML file. It must contain a table with a 'UID' column."
+    if len(html_df) != 1:
+        return None, f"The file must contain exactly ONE player, but {len(html_df)} rows were found."
+
+    html_df = html_df.copy()
+    html_df.rename(columns=attribute_mapping, inplace=True)
+    known_columns = set(attribute_mapping.values())
+    record = {
+        col: html_df.iloc[0][col]
+        for col in html_df.columns
+        if col in known_columns
+    }
+    file_player_name = str(record.get('Name', '')).strip()
+    # Everything is keyed to the confirmed target player, not the file's UID.
+    record['Unique ID'] = target_uid
+    update_player(record)
+
+    return file_player_name, None
+
 
 def get_filtered_players(filter_option="Unassigned Players", club_filter="All", position_filter="All", sort_column="Name", sort_ascending=True, user_club=None):
     players = get_all_players()
