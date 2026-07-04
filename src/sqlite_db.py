@@ -345,10 +345,11 @@ def set_primary_role(unique_id, role):
     conn.close()
 
 def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
-    from analytics import calculate_dwrs
+    from analytics import build_attribute_matrix, calculate_dwrs_role_batch
     from config_handler import get_weight
     from constants import WEIGHT_DEFAULTS, GK_WEIGHT_DEFAULTS, get_gk_roles
-    
+    import numpy as np
+
     conn = connect_db()
     cursor = conn.cursor()
 
@@ -358,11 +359,11 @@ def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
     else:
         # If no IDs are provided, fall back to the old behavior (process everyone)
         df_to_process = df
-    
+
     if df_to_process.empty:
         conn.close()
         return
-    
+
     weights = {cat: get_weight(cat.lower().replace(" ", "_"), default) for cat, default in WEIGHT_DEFAULTS.items()}
     gk_weights = {cat: get_weight("gk_" + cat.lower().replace(" ", "_"), default) for cat, default in GK_WEIGHT_DEFAULTS.items()}
     all_gk_roles = set(get_gk_roles())
@@ -376,27 +377,39 @@ def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
         )
     """)
     latest_ratings_dict = {(row[0], row[1]): row[2] for row in cursor.fetchall()}
-    
-    ratings_to_insert = []
-    for _, player in df_to_process.iterrows():
-        player_dict = player.to_dict()
-        roles = player_dict.get('Assigned Roles', [])
-        if not isinstance(roles, list): roles = []
-        
-        for role in roles:
-            if role in valid_roles:
-                weights_to_use = gk_weights if role in all_gk_roles else weights
-                absolute, normalized = calculate_dwrs(player_dict, role, weights_to_use)
-                
-                # Check if the rating has changed by at least 1% or if it's a new entry
-                old_normalized = latest_ratings_dict.get((player['Unique ID'], role), '0%')
-                old_value = float(old_normalized.strip('%'))
-                new_value = float(normalized.strip('%'))
 
-                if abs(new_value - old_value) >= 1.0 or (player['Unique ID'], role) not in latest_ratings_dict:
-                    ratings_to_insert.append(
-                        (player['Unique ID'], role, absolute, normalized, timestamp)
-                    )
+    # --- Vectorized recalculation ---
+    # Parse every attribute column once, group player rows by assigned role,
+    # then compute each role's ratings for all its players in one numpy pass.
+    # (The old per-player loop took ~12 minutes on an 80k-player database.)
+    df_to_process = df_to_process.reset_index(drop=True)
+    attr_matrix = build_attribute_matrix(df_to_process)
+    uids = df_to_process['Unique ID'].tolist()
+
+    valid_roles_set = set(valid_roles)
+    role_to_rows = {}
+    for i, roles in enumerate(df_to_process['Assigned Roles']):
+        if not isinstance(roles, list):
+            continue
+        for role in roles:
+            if role in valid_roles_set:
+                role_to_rows.setdefault(role, []).append(i)
+
+    ratings_to_insert = []
+    for role, row_list in role_to_rows.items():
+        rows = np.asarray(row_list, dtype=np.intp)
+        weights_to_use = gk_weights if role in all_gk_roles else weights
+        absolute_arr, normalized_arr = calculate_dwrs_role_batch(attr_matrix, role, weights_to_use, rows)
+
+        for j, i in enumerate(row_list):
+            uid = uids[i]
+            new_value = normalized_arr[j]
+            # Insert only if it's a new entry or changed by at least 1%
+            old_normalized = latest_ratings_dict.get((uid, role))
+            if old_normalized is None or abs(new_value - float(old_normalized.strip('%'))) >= 1.0:
+                ratings_to_insert.append(
+                    (uid, role, float(absolute_arr[j]), f"{new_value:.0f}%", timestamp)
+                )
 
     if ratings_to_insert:
         # We use a simple INSERT here to add a new historical record.
@@ -408,33 +421,39 @@ def update_dwrs_ratings(df, valid_roles, player_ids_to_update=None):
     conn.commit()
     conn.close()
 
+def _parse_list_column(value, cache):
+    """Parse a stored list string (e.g. \"['CD-D', 'DM-S']\") into a list.
+    The same strings repeat thousands of times across a big database, so
+    results are memoized; each caller gets its own shallow copy."""
+    if not value:
+        return []
+    cached = cache.get(value)
+    if cached is None:
+        try:
+            parsed = ast.literal_eval(value)
+            cached = parsed if isinstance(parsed, list) else []
+        except (ValueError, SyntaxError):
+            cached = []
+        cache[value] = cached
+    return list(cached)
+
 @st.cache_data
 def get_all_players():
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM players')
     rows = cursor.fetchall()
-    
+
     # Get column names directly from the cursor description.
     # This guarantees the names are in the same order as the data in each row.
     columns = [description[0] for description in cursor.description]
 
+    eval_cache = {}
     players = []
     for row in rows:
         player = dict(zip(columns, row))
-        try:
-            player['Assigned Roles'] = ast.literal_eval(player['Assigned Roles']) if player['Assigned Roles'] else []
-        except (ValueError, SyntaxError):
-            player['Assigned Roles'] = []
-
-        try:
-            # Safely parse the 'natural_positions' string back into a list
-            player['natural_positions'] = ast.literal_eval(player.get('natural_positions', '[]'))
-            if not isinstance(player['natural_positions'], list):
-                player['natural_positions'] = []
-        except (ValueError, SyntaxError):
-            player['natural_positions'] = []
-
+        player['Assigned Roles'] = _parse_list_column(player.get('Assigned Roles'), eval_cache)
+        player['natural_positions'] = _parse_list_column(player.get('natural_positions'), eval_cache)
         players.append(player)
     conn.close()
     return players if players else []

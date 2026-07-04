@@ -2,6 +2,8 @@ streamlit
 streamlit-option-menu
 pandas
 beautifulsoup4
+lxml
 plotly
 toml
 matplotlib
+numpy

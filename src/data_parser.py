@@ -2,6 +2,14 @@
 
 import pandas as pd
 from bs4 import BeautifulSoup
+
+try:
+    # lxml parses a full 80k-row FM export in seconds; BeautifulSoup takes
+    # minutes. BS4 stays as the fallback if lxml is not installed.
+    from lxml import html as lxml_html
+    _HAVE_LXML = True
+except ImportError:
+    _HAVE_LXML = False
 from constants import (attribute_mapping, get_valid_roles, ROLE_ANALYSIS_COLUMNS, 
                      PLAYER_ROLE_MATRIX_COLUMNS, )
 from sqlite_db import (init_db, get_all_players, get_latest_dwrs_ratings,
@@ -18,6 +26,34 @@ REQUIRED_COLUMN = "UID"
 # (Pun = goalkeeper Punching tendency — not used by any rating.)
 IGNORED_EXPORT_COLUMNS = {"CON", "Ability", "Position/Role/Duty", "Pun"}
 
+def _extract_table_lxml(content):
+    """Fast table extraction via lxml. Returns (headers, rows) or (None, None)."""
+    tree = lxml_html.fromstring(content)
+    table = tree.find('.//table')
+    if table is None:
+        return None, None
+    trs = table.findall('.//tr')
+    if not trs:
+        return None, None
+    headers = [th.text_content().strip() for th in trs[0].findall('.//th')]
+    rows = [[td.text_content().strip() for td in tr.findall('.//td')] for tr in trs[1:]]
+    return headers, rows
+
+
+def _extract_table_bs4(content):
+    """BeautifulSoup fallback. Returns (headers, rows) or (None, None)."""
+    soup = BeautifulSoup(content, 'html.parser')
+    table = soup.find('table')
+    if not table:
+        return None, None
+    header_row = table.find('tr')
+    if not header_row:
+        return None, None
+    headers = [th.text.strip() for th in header_row.find_all('th')]
+    rows = [[td.text.strip() for td in tr.find_all('td')] for tr in table.find_all('tr')[1:]]
+    return headers, rows
+
+
 def parse_html_table(file):
     try:
         # Support both file-like objects (Streamlit uploads) and raw bytes/strings
@@ -27,18 +63,14 @@ def parse_html_table(file):
         else:
             content = raw
 
-        soup = BeautifulSoup(content, 'html.parser')
-        table = soup.find('table')
-        if not table:
-            print("parse_html_table: No <table> element found in file.")
-            return None
+        if _HAVE_LXML:
+            headers, rows = _extract_table_lxml(content)
+        else:
+            headers, rows = _extract_table_bs4(content)
 
-        header_row = table.find('tr')
-        if not header_row:
-            print("parse_html_table: No header row found in table.")
+        if headers is None:
+            print("parse_html_table: No <table> element (or header row) found in file.")
             return None
-
-        headers = [th.text.strip() for th in header_row.find_all('th')]
         if not headers:
             print("parse_html_table: No <th> elements found in header row.")
             return None
@@ -63,7 +95,6 @@ def parse_html_table(file):
                 seen[h] = 0
                 deduped_headers.append(h)
 
-        rows = [[td.text.strip() for td in tr.find_all('td')] for tr in table.find_all('tr')[1:]]
         valid_rows = [row for row in rows if len(row) == len(headers)]
         if not valid_rows:
             print(f"parse_html_table: No valid rows found. Total rows: {len(rows)}, expected row length: {len(headers)}.")
@@ -383,36 +414,36 @@ def get_players_by_role(role, user_club, second_team_club=None):
 
 @st.cache_data
 def get_player_role_matrix(user_club=None, second_team_club=None):
-    # This now uses the same fast, reliable data source as get_players_by_role.
-    
+    # This uses the same fast, reliable data source as get_players_by_role.
+    # Built via vectorized column maps — the old per-player/per-role nested
+    # loop took ~25 s on an 80k-player database, this takes ~2 s.
+
     players = get_all_players()
     if not players:
         return pd.DataFrame()
 
+    df = pd.DataFrame(players)
+    matrix = pd.DataFrame({
+        col: (df[col].fillna('') if col in df.columns else '')
+        for col in PLAYER_ROLE_MATRIX_COLUMNS
+    })
+
     # 1. Get ALL pre-calculated ratings in one go. This is cached and fast.
     all_ratings = get_latest_dwrs_ratings()
-    
-    matrix_data = []
-    for player in players:
-        # Start with the basic player info
-        row = {col: player.get(col, '') for col in PLAYER_ROLE_MATRIX_COLUMNS}
-        
-        # Now, fill in the ratings for each role by looking them up
-        for role in get_valid_roles():
-            # Safely get the rating tuple (abs, norm) for the player and role
-            rating_tuple = all_ratings.get(role, {}).get(player['Unique ID'])
-            
-            if rating_tuple:
-                try:
-                    # We only need the normalized string from the tuple
-                    _absolute_val, normalized_str = rating_tuple
-                    # Convert the percentage string to a number for display
-                    row[role] = int(float(normalized_str.rstrip('%')))
-                except (ValueError, AttributeError, TypeError):
-                    row[role] = None # Handle potential bad data
-            else:
-                row[role] = None # Player doesn't have a rating for this role
-        
-        matrix_data.append(row)
+    uid_series = df['Unique ID']
 
-    return pd.DataFrame(matrix_data)
+    def _norm_to_int(rating_tuple):
+        try:
+            return int(float(rating_tuple[1].rstrip('%')))
+        except (ValueError, AttributeError, TypeError, IndexError):
+            return None
+
+    for role in get_valid_roles():
+        ratings_for_role = all_ratings.get(role)
+        if not ratings_for_role:
+            matrix[role] = None
+            continue
+        mapping = {uid: _norm_to_int(t) for uid, t in ratings_for_role.items()}
+        matrix[role] = uid_series.map(mapping)
+
+    return matrix

@@ -19,17 +19,25 @@ def auto_assign_roles_to_unassigned():
         return 0
 
     unassigned_df = all_players_df[all_players_df['Assigned Roles'].apply(lambda x: not isinstance(x, list) or not x)]
-    
+
     if unassigned_df.empty:
         return 0
 
     changes = {}
     pos_map = get_position_to_role_mapping()
-    for _, player in unassigned_df.iterrows():
-        player_positions = parse_position_string(player['Position'])
-        roles = sorted(list(set(r for pos in player_positions for r in pos_map.get(pos, []))))
+    # Position strings repeat heavily across a big scouting database; parse
+    # each distinct string only once instead of per player (iterrows was the
+    # other slow part here).
+    roles_for_position_str = {}
+    for uid, pos_str in zip(unassigned_df['Unique ID'], unassigned_df['Position']):
+        if pos_str not in roles_for_position_str:
+            player_positions = parse_position_string(pos_str)
+            roles_for_position_str[pos_str] = sorted(
+                set(r for pos in player_positions for r in pos_map.get(pos, []))
+            )
+        roles = roles_for_position_str[pos_str]
         if roles:
-            changes[player['Unique ID']] = roles
+            changes[uid] = roles
     
     if changes:
         # Update the roles in the database
