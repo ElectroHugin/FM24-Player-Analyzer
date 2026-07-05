@@ -660,6 +660,41 @@ def _build_prune_query(select_clause, dwrs_threshold, national_code_to_protect):
     params.append(dwrs_threshold)
     return query, params
 
+def get_club_country():
+    """Fetches the club's country code (e.g. 'GER') for the domestic talent filter."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = "club_country_code"')
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
+
+def set_club_country(country_code):
+    """Saves the club's country code; 'None' or empty clears the setting."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    if country_code and country_code != "None":
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                       ("club_country_code", country_code))
+    else:
+        cursor.execute('DELETE FROM settings WHERE key = "club_country_code"')
+    conn.commit()
+    conn.close()
+
+@st.cache_data
+def get_distinct_nationalities():
+    """Sorted list of all nationality codes present in the database."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT Nationality FROM players
+        WHERE Nationality IS NOT NULL AND Nationality != ''
+        ORDER BY Nationality
+    """)
+    codes = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return codes
+
 def get_prunable_player_info(dwrs_threshold, national_code_to_protect=None):
     """
     Calculates how many scouted players are eligible for deletion and the best

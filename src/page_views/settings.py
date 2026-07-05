@@ -14,10 +14,11 @@ from definitions_handler import PROJECT_ROOT
 from utils import calculate_contrast_ratio, get_available_databases
 from ui_components import clear_all_caches, display_custom_header
 from theme_handler import set_theme_toml
-from sqlite_db import (update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics, get_club_identity, 
-                       set_club_identity, get_prunable_player_info, prune_scouted_players, get_national_mode_enabled, 
+from sqlite_db import (update_dwrs_ratings, get_favorite_tactics, set_favorite_tactics, get_club_identity,
+                       set_club_identity, get_prunable_player_info, prune_scouted_players, get_national_mode_enabled,
                        set_national_mode_enabled, get_national_team_settings, set_national_team_settings,
-                       get_national_favorite_tactics, set_national_favorite_tactics)
+                       get_national_favorite_tactics, set_national_favorite_tactics,
+                       get_club_country, set_club_country, get_distinct_nationalities)
 from data_parser import load_data
 from constants import get_valid_roles
 
@@ -95,6 +96,17 @@ def settings_page():
             new_full_name = st.text_input("Full Club Name", value=current_full_name or "")
         with c2:
             new_stadium_name = st.text_input("Stadium Name", value=current_stadium_name or "")
+
+        current_country = get_club_country()
+        country_options = ["None"] + get_distinct_nationalities()
+        country_index = country_options.index(current_country) if current_country in country_options else 0
+        new_club_country = st.selectbox(
+            "Club Country",
+            options=country_options,
+            index=country_index,
+            help="The nationality code of your club's country (as in the FM export, e.g. GER). "
+                 "Used by the Domestic Talent Filter on the Squad Matrix page."
+        )
 
         # --- NEW: Two Color Pickers ---
         st.subheader(f"{current_mode.capitalize()} Mode Colors")
@@ -419,6 +431,7 @@ def settings_page():
         set_gap_analysis_setting('dropoff_threshold', new_dropoff_threshold)
         set_gap_analysis_setting('wrong_side_penalty', new_wrong_side_penalty)
         set_club_identity(new_full_name, new_stadium_name)
+        set_club_country(new_club_country)
 
         # Save only if the selection is a valid new DB name or different from the current one
         if (db_action == "Create New Database" and is_valid_new_db) or (db_action == "Select Existing Database" and db_to_set != current_db_name):

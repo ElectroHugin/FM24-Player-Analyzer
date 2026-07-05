@@ -159,14 +159,17 @@ PLAYER_ROLE_MATRIX_COLUMNS = [
     "Age",
     "Position",
     "Personality",
-    "Nationality", 
-    "Second Nationality", 
+    "Nationality",
+    "Second Nationality",
     "Left Foot",
     "Right Foot",
     "Height",
     "Club",
     "Transfer Value",
-     "Wage"
+    "Wage",
+    # Needed by the Domestic Talent Filter (mentality drives development)
+    "Determination",
+    "Work Rate",
 ]
 
 # Global stat categories for DWRS rating

@@ -5,10 +5,12 @@ import pandas as pd
 from io import StringIO
 import math
 
-from sqlite_db import get_user_club, get_second_team_club, get_favorite_tactics, get_shortlist_ids, set_shortlist_ids
-from constants import get_valid_roles, get_tactic_roles
+from sqlite_db import (get_user_club, get_second_team_club, get_favorite_tactics,
+                       get_shortlist_ids, set_shortlist_ids, get_club_country)
+from constants import get_valid_roles, get_tactic_roles, get_personality_category
 from data_parser import get_player_role_matrix
-from utils import get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float, format_role_display, color_personality
+from utils import (get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float,
+                   format_role_display, color_personality, color_attribute_by_value)
 from ui_components import display_custom_header, clear_all_caches, personality_filter_controls, filter_df_by_personality
 
 
@@ -70,6 +72,67 @@ def player_role_matrix_page():
     allowed_personalities = personality_filter_controls(full_matrix, key_prefix="matrix")
     full_matrix = filter_df_by_personality(full_matrix, allowed_personalities)
 
+    # --- DOMESTIC TALENT FILTER ---
+    # Optional filter: only young players from the club's own country, with a
+    # computed Talent Score. It narrows the rows of ALL tables below; role
+    # columns and role-based sorting keep working unchanged on top of it.
+    club_country = get_club_country()
+    talent_filter_on = False
+    with st.expander("🌱 Domestic Talent Filter"):
+        if not club_country:
+            st.warning("Set your **Club Country** in Settings → Club Identity & Theme to use this filter.")
+        else:
+            talent_filter_on = st.checkbox(f"Show only talents from **{club_country}**", value=False)
+            t1, t2, t3 = st.columns(3)
+            with t1:
+                talent_age_cap = st.slider("Maximum age", 15, 24, 21)
+            with t2:
+                talent_min_mentality = st.slider(
+                    "Min. Determination + Work Rate", 0, 40, 20,
+                    help="These two visible attributes are the strongest visible drivers of player development in FM."
+                )
+            with t3:
+                talent_good_pers_only = st.checkbox("Good personalities only", value=False)
+            st.caption(
+                "**Talent Score** = best DWRS of the displayed roles "
+                "+ 2 per year under the age cap (development runway) "
+                "+ (Det + Wor − 20) / 4 "
+                "+ 3 for a good / − 5 for a bad personality."
+            )
+
+    if talent_filter_on:
+        age_num = pd.to_numeric(full_matrix['Age'], errors='coerce')
+        det_num = pd.to_numeric(full_matrix['Determination'], errors='coerce').fillna(0)
+        wor_num = pd.to_numeric(full_matrix['Work Rate'], errors='coerce').fillna(0)
+        pers_cat = full_matrix['Personality'].map(get_personality_category)
+
+        talent_mask = (
+            ((full_matrix['Nationality'] == club_country) | (full_matrix['Second Nationality'] == club_country))
+            & (age_num <= talent_age_cap)
+            & ((det_num + wor_num) >= talent_min_mentality)
+        )
+        if talent_good_pers_only:
+            talent_mask &= (pers_cat == 'good')
+
+        role_cols_present = [r for r in selected_roles if r in full_matrix.columns]
+        if role_cols_present:
+            best_dwrs = full_matrix[role_cols_present].max(axis=1)
+        else:
+            best_dwrs = pd.Series(0.0, index=full_matrix.index)
+        pers_bonus = pers_cat.map({'good': 3, 'bad': -5}).fillna(0)
+        talent_score = (
+            best_dwrs.fillna(0)
+            + 2 * (talent_age_cap - age_num.fillna(talent_age_cap))
+            + (det_num + wor_num - 20) / 4
+            + pers_bonus
+        )
+        full_matrix = full_matrix[talent_mask].copy()
+        full_matrix['Talent'] = talent_score[talent_mask].round(0)
+
+        if full_matrix.empty:
+            st.info(f"No players from {club_country} match the current talent criteria.")
+            return
+
     my_club_matrix = full_matrix[full_matrix['Club'] == user_club].copy()
     second_team_matrix = full_matrix[full_matrix['Club'] == second_team_club].copy() if second_team_club else pd.DataFrame()
     exclude_clubs = [user_club]
@@ -92,11 +155,18 @@ def player_role_matrix_page():
         existing_cols = [col for col in display_cols if col in df.columns]
         df_display = df[existing_cols]
         role_cols_df = [role for role in get_valid_roles() if role in df_display.columns]
+        # The Talent score column is formatted/colored like a DWRS value.
+        score_cols = role_cols_df + [c for c in ('Talent',) if c in df_display.columns]
 
         # --- START OF CORRECTED STYLING LOGIC ---
-        
+
         # Base styler for number formatting is always applied.
-        styler = df_display.style.format("{:.0f}", subset=role_cols_df, na_rep="-")
+        styler = df_display.style.format("{:.0f}", subset=score_cols, na_rep="-")
+        if 'Talent' in df_display.columns:
+            styler = styler.apply(lambda col: [color_dwrs_by_value(v) for v in col], subset=['Talent'])
+        mentality_cols = [c for c in ('Determination', 'Work Rate') if c in df_display.columns]
+        if mentality_cols:
+            styler = styler.map(color_attribute_by_value, subset=mentality_cols)
 
         if use_full_style:
             # For the "My Club" table, we use a smart function that styles
@@ -153,11 +223,18 @@ def player_role_matrix_page():
     my_club_base_cols = ["Name", "Age", "Position", "Personality", "Wage"]
     if show_extra_details:
         my_club_base_cols.extend(["Left Foot", "Right Foot", "Height", "Transfer Value"])
-    my_club_display_cols = my_club_base_cols + selected_roles
 
     scouted_base_cols = ["Name", "Age", "Position", "Personality", "Club", "Transfer Value", "Wage"]
     if show_extra_details:
         scouted_base_cols.extend(["Left Foot", "Right Foot", "Height"])
+
+    if talent_filter_on:
+        # Show the score right after Age, plus the mentality attributes it uses.
+        for cols in (my_club_base_cols, scouted_base_cols):
+            cols.insert(cols.index("Age") + 1, "Talent")
+            cols.extend(["Determination", "Work Rate"])
+
+    my_club_display_cols = my_club_base_cols + selected_roles
     scouted_display_cols = scouted_base_cols + selected_roles
 
     if not show_second_team and second_team_club and not second_team_matrix.empty:
@@ -182,10 +259,11 @@ def player_role_matrix_page():
         with st.expander("🔍 Advanced Filtering & Sorting", expanded=True):
             sort_c1, sort_c2 = st.columns([2, 1])
             with sort_c1:
-                sort_options = ["Name", "Shortlist"] + selected_roles
+                talent_sort_options = ["Talent"] if talent_filter_on else []
+                sort_options = ["Name", "Shortlist"] + talent_sort_options + selected_roles
                 sort_by = st.selectbox(
                     "Filter & Sort by", options=sort_options,
-                    format_func=lambda x: "Name" if x == "Name" else "Shortlist" if x == "Shortlist" else format_role_display(x)
+                    format_func=lambda x: x if x in ("Name", "Shortlist", "Talent") else format_role_display(x)
                 )
             with sort_c2:
                 # Disable direction for shortlist filter as it doesn't apply
@@ -217,7 +295,9 @@ def player_role_matrix_page():
                 (scouted_matrix['ValueNum'] <= max_value)
             ].copy()
             
-            if sort_by != "Name":
+            if sort_by not in ("Name", "Talent"):
+                # The DWRS range filter applies to role columns only; the
+                # Talent score is already constrained by the talent filter.
                 filtered_df = filtered_df[
                     (filtered_df[sort_by] >= min_dwrs) &
                     (filtered_df[sort_by] <= max_dwrs)
@@ -261,17 +341,21 @@ def player_role_matrix_page():
         df_paginated = sorted_df.iloc[start_idx:end_idx]
 
         # --- Display and Full Styling ---
-        df_display = df_paginated[scouted_display_cols]
+        df_display = df_paginated[[c for c in scouted_display_cols if c in df_paginated.columns]]
         role_cols_df = [role for role in get_valid_roles() if role in df_display.columns]
-        
-        styler = df_display.style.format("{:.0f}", subset=role_cols_df, na_rep="-")
+        score_cols = role_cols_df + [c for c in ('Talent',) if c in df_display.columns]
+
+        styler = df_display.style.format("{:.0f}", subset=score_cols, na_rep="-")
         def smart_full_styler(column):
             styles = [''] * len(column)
             valid_indices = column.dropna().index
             for index in valid_indices:
                 styles[column.index.get_loc(index)] = color_dwrs_by_value(column[index])
             return styles
-        styler = styler.apply(smart_full_styler, subset=role_cols_df)
+        styler = styler.apply(smart_full_styler, subset=score_cols)
+        mentality_cols = [c for c in ('Determination', 'Work Rate') if c in df_display.columns]
+        if mentality_cols:
+            styler = styler.map(color_attribute_by_value, subset=mentality_cols)
         
         if 'Personality' in df_display.columns:
             styler = styler.format(subset=['Personality'], na_rep="-")
