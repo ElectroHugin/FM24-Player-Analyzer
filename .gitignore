@@ -45,3 +45,4 @@ CMakeLists.txt.user*
 .vscode/
 aqtinstall.log
 *.log
+.qtcreator/
