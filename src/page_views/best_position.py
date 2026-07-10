@@ -52,6 +52,7 @@ def best_position_calculator_page(players):
     # --- UI CREATION (The rest of the file is the same as yours) ---
     column_config = {
         "Best DWRS": st.column_config.NumberColumn(format="%d%%"),
+        "Talent": st.column_config.NumberColumn(help="Talent Score: current ability + development runway + mentality + personality"),
         "Det": st.column_config.TextColumn(help="Determination"),
         "Wor": st.column_config.TextColumn(help="Work Rate"),
     }
@@ -109,9 +110,9 @@ def best_position_calculator_page(players):
         st.subheader("Development & Transfer Candidates")
         st.success("✔️ To manage these players, go to the **Transfer & Loan Management** page in the sidebar!")
 
-        loan_candidates_df = create_detailed_surplus_df(dev_squad_data.get("loan_candidates", []), master_role_ratings)
+        loan_candidates_df = create_detailed_surplus_df(dev_squad_data.get("loan_candidates", []), master_role_ratings, include_talent=True)
         if not loan_candidates_df.empty:
-            st.markdown(f"**Promising Youth for Loan (Work Rate + Determination >= 20):**")
+            st.markdown(f"**Promising Youth for Loan (ranked by Talent Score):**")
             st.dataframe(loan_candidates_df, hide_index=True, use_container_width=True, column_config=column_config)
         else:
             st.info("No promising youth players identified for loan.")

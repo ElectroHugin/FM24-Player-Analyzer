@@ -255,6 +255,14 @@ def settings_page():
             step=1,
             help="In the 'Best XI' calculator, this is the maximum number of different roles a single player can cover in the 'Additional Depth' section. A lower number encourages specialists, a higher number encourages versatile players."
         )
+        new_min_loan_talent = st.slider(
+            "Minimum Talent Score for Loan Recommendation",
+            min_value=0,
+            max_value=80,
+            value=get_squad_management_setting('min_loan_talent_score'),
+            step=1,
+            help="In the 'Best XI' Development tab, young surplus players with a Talent Score at or above this bar are recommended for a loan; below it they are listed for sale. Higher = only clear prospects go out on loan."
+        )
 
     with st.expander("🕳️ Gap Analysis Thresholds"):
         st.info(
@@ -427,6 +435,7 @@ def settings_page():
         set_age_threshold('goalkeeper', new_goalkeeper_age)
         set_selection_bonus('natural_position', natural_pos_mult)
         set_squad_management_setting('max_roles_per_depth_player', new_max_roles)
+        set_squad_management_setting('min_loan_talent_score', new_min_loan_talent)
         set_gap_analysis_setting('displacement_threshold', new_displacement_threshold)
         set_gap_analysis_setting('dropoff_threshold', new_dropoff_threshold)
         set_gap_analysis_setting('wrong_side_penalty', new_wrong_side_penalty)

@@ -11,6 +11,7 @@ from constants import get_valid_roles, get_tactic_roles, get_personality_categor
 from data_parser import get_player_role_matrix
 from utils import (get_last_name, get_natural_role_sorter, color_dwrs_by_value, value_to_float,
                    format_role_display, color_personality, color_attribute_by_value)
+from talent_logic import add_talent_column
 from ui_components import display_custom_header, clear_all_caches, personality_filter_controls, filter_df_by_personality
 
 
@@ -72,65 +73,83 @@ def player_role_matrix_page():
     allowed_personalities = personality_filter_controls(full_matrix, key_prefix="matrix")
     full_matrix = filter_df_by_personality(full_matrix, allowed_personalities)
 
-    # --- DOMESTIC TALENT FILTER ---
-    # Optional filter: only young players from the club's own country, with a
-    # computed Talent Score. It narrows the rows of ALL tables below; role
-    # columns and role-based sorting keep working unchanged on top of it.
+    # --- TALENT FILTER ---
+    # Optional filter that narrows the rows of ALL tables below to young
+    # players and adds a computed Talent Score. Nationality scope can be the
+    # club's own country (for the board's home-grown demand), foreign players
+    # only (to see what's hidden out there), or any nationality. Role columns
+    # and role-based sorting keep working unchanged on top of it.
     club_country = get_club_country()
     talent_filter_on = False
-    with st.expander("🌱 Domestic Talent Filter"):
-        if not club_country:
-            st.warning("Set your **Club Country** in Settings → Club Identity & Theme to use this filter.")
-        else:
-            talent_filter_on = st.checkbox(f"Show only talents from **{club_country}**", value=False)
-            t1, t2, t3 = st.columns(3)
-            with t1:
-                talent_age_cap = st.slider("Maximum age", 15, 24, 21)
-            with t2:
-                talent_min_mentality = st.slider(
-                    "Min. Determination + Work Rate", 0, 40, 20,
-                    help="These two visible attributes are the strongest visible drivers of player development in FM."
-                )
-            with t3:
-                talent_good_pers_only = st.checkbox("Good personalities only", value=False)
-            st.caption(
-                "**Talent Score** = best DWRS of the displayed roles "
-                "+ 2 per year under the age cap (development runway) "
-                "+ (Det + Wor − 20) / 4 "
-                "+ 3 for a good / − 5 for a bad personality."
+    talent_scope = "Domestic"
+    talent_age_cap = 21
+    with st.expander("🌱 Talent Filter"):
+        talent_filter_on = st.checkbox("Enable talent filter", value=False)
+        scope_labels = {
+            "Domestic": f"Domestic ({club_country})" if club_country else "Domestic (set country)",
+            "Foreign": "Foreign (other nations)",
+            "Any": "Any nationality",
+        }
+        talent_scope = st.radio(
+            "Nationality scope",
+            options=list(scope_labels.keys()),
+            format_func=lambda s: scope_labels[s],
+            horizontal=True,
+            help="Domestic = your club's country (set in Settings → Club Identity). "
+                 "Foreign = every other nationality. Any = no nationality restriction."
+        )
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            talent_age_cap = st.slider("Maximum age", 15, 24, 21)
+        with t2:
+            talent_min_mentality = st.slider(
+                "Min. Determination + Work Rate", 0, 40, 20,
+                help="These two visible attributes are the strongest visible drivers of player development in FM."
             )
+        with t3:
+            talent_good_pers_only = st.checkbox("Good personalities only", value=False)
+        st.caption(
+            "**Talent Score** = best DWRS of the displayed roles "
+            "+ 2 per year under the age cap (development runway) "
+            "+ (Det + Wor − 20) / 4 "
+            "+ 3 for a good / − 5 for a bad personality."
+        )
+        if talent_filter_on and talent_scope == "Domestic" and not club_country:
+            st.warning("Set your **Club Country** in Settings → Club Identity & Theme to use the Domestic scope.")
+            talent_filter_on = False
 
     if talent_filter_on:
         age_num = pd.to_numeric(full_matrix['Age'], errors='coerce')
         det_num = pd.to_numeric(full_matrix['Determination'], errors='coerce').fillna(0)
         wor_num = pd.to_numeric(full_matrix['Work Rate'], errors='coerce').fillna(0)
-        pers_cat = full_matrix['Personality'].map(get_personality_category)
+
+        if talent_scope == "Domestic":
+            nat_mask = ((full_matrix['Nationality'] == club_country)
+                        | (full_matrix['Second Nationality'] == club_country))
+        elif talent_scope == "Foreign":
+            has_nat = full_matrix['Nationality'].notna() & (full_matrix['Nationality'] != '')
+            if club_country:
+                nat_mask = (has_nat
+                            & (full_matrix['Nationality'] != club_country)
+                            & (full_matrix['Second Nationality'] != club_country))
+            else:
+                nat_mask = has_nat
+        else:  # Any nationality
+            nat_mask = pd.Series(True, index=full_matrix.index)
 
         talent_mask = (
-            ((full_matrix['Nationality'] == club_country) | (full_matrix['Second Nationality'] == club_country))
+            nat_mask
             & (age_num <= talent_age_cap)
             & ((det_num + wor_num) >= talent_min_mentality)
         )
         if talent_good_pers_only:
-            talent_mask &= (pers_cat == 'good')
+            talent_mask &= (full_matrix['Personality'].map(get_personality_category) == 'good')
 
-        role_cols_present = [r for r in selected_roles if r in full_matrix.columns]
-        if role_cols_present:
-            best_dwrs = full_matrix[role_cols_present].max(axis=1)
-        else:
-            best_dwrs = pd.Series(0.0, index=full_matrix.index)
-        pers_bonus = pers_cat.map({'good': 3, 'bad': -5}).fillna(0)
-        talent_score = (
-            best_dwrs.fillna(0)
-            + 2 * (talent_age_cap - age_num.fillna(talent_age_cap))
-            + (det_num + wor_num - 20) / 4
-            + pers_bonus
-        )
         full_matrix = full_matrix[talent_mask].copy()
-        full_matrix['Talent'] = talent_score[talent_mask].round(0)
+        full_matrix['Talent'] = add_talent_column(full_matrix, selected_roles, talent_age_cap).round(0)
 
         if full_matrix.empty:
-            st.info(f"No players from {club_country} match the current talent criteria.")
+            st.info("No players match the current talent criteria.")
             return
 
     my_club_matrix = full_matrix[full_matrix['Club'] == user_club].copy()

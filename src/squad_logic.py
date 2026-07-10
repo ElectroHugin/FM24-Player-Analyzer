@@ -8,6 +8,7 @@ from constants import get_position_to_role_mapping, TACTICAL_SLOT_TO_GAME_POSITI
 from utils import parse_position_string, format_role_display
 from constants import get_valid_roles, get_tactic_roles
 from sqlite_db import get_all_players, get_latest_dwrs_ratings
+from talent_logic import calculate_talent_score, best_dwrs_for_player, talent_age_cap_for_player
 
 def get_last_name(full_name):
     """Extracts the last name from a full name string."""
@@ -122,10 +123,11 @@ def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
     first_team_squad_data = calculate_squad_and_surplus(my_club_players, positions, master_role_ratings)
     
     dev_squad_data = calculate_development_squads(
-        second_team_players, 
-        first_team_squad_data["depth_pool"], 
-        positions,           
-        master_role_ratings  
+        second_team_players,
+        first_team_squad_data["depth_pool"],
+        positions,
+        master_role_ratings,
+        depth_player_ids=first_team_squad_data.get("depth_player_ids", set())
     )
 
     # Prepare and return a comprehensive dictionary of results
@@ -141,9 +143,12 @@ def get_cached_squad_analysis(players, tactic, user_club, second_team_club):
         "second_team_players": second_team_players
     }
 
-def create_detailed_surplus_df(player_list, master_role_ratings):
+def create_detailed_surplus_df(player_list, master_role_ratings, include_talent=False):
     if not player_list:
         return pd.DataFrame()
+
+    outfielder_cap = get_age_threshold('outfielder')
+    goalkeeper_cap = get_age_threshold('goalkeeper')
 
     data = []
     for player in player_list:
@@ -157,20 +162,29 @@ def create_detailed_surplus_df(player_list, master_role_ratings):
                 if rating > best_dwrs:
                     best_dwrs = rating
                     best_role_abbr = role
-        
+
         player_data = {
             "Name": player['Name'],
             "Age": player.get('Age', 'N/A'),
             "Position": player.get('Position', 'N/A'),
             "Best Role": format_role_display(best_role_abbr) if best_role_abbr else "N/A",
             "Best DWRS": int(best_dwrs),
+        }
+        if include_talent:
+            age_cap = talent_age_cap_for_player(player, outfielder_cap, goalkeeper_cap)
+            player_data["Talent"] = round(calculate_talent_score(
+                best_dwrs, player.get('Age'),
+                player.get('Determination'), player.get('Work Rate'),
+                player.get('Personality'), age_cap,
+            ))
+        player_data.update({
             "Det": player.get('Determination', 'N/A'),
             "Wor": player.get('Work Rate', 'N/A'),
             "Transfer": "✅" if player.get('transfer_status', 0) else "❌",
             "Loan": "✅" if player.get('loan_status', 0) else "❌",
-        }
+        })
         data.append(player_data)
-    
+
     return pd.DataFrame(data)
 
 def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings, apply_apt_weight=True):
@@ -335,22 +349,29 @@ def calculate_squad_and_surplus(my_club_players, positions, master_role_ratings,
                     player_unique_roles_covered[best_pick['Unique ID']].add(role)
     
     core_squad_ids = players_xi_or_b_team.union(depth_player_ids)
-    
+
     return {
-        "starting_xi": starting_xi, 
-        "b_team": b_team, 
+        "starting_xi": starting_xi,
+        "b_team": b_team,
         "best_depth_options": best_depth_options,
         "depth_pool": depth_pool,
+        "depth_player_ids": depth_player_ids,
         "core_squad_ids": core_squad_ids
     }
 
-def calculate_development_squads(second_team_club_players, first_team_remnants, positions, master_role_ratings):
+def calculate_development_squads(second_team_club_players, first_team_remnants, positions, master_role_ratings, depth_player_ids=None):
     """
     Calculates the Youth XI and Second Team XI using a robust process of elimination
     to ensure every surplus player is correctly categorized.
+
+    depth_player_ids: players that the first team keeps as 'Additional Depth'.
+    They are valuable squad members, so they must never fall through into the
+    loan/sell surplus.
     """
+    depth_player_ids = depth_player_ids or set()
     outfielder_age_limit = get_age_threshold('outfielder')
     goalkeeper_age_limit = get_age_threshold('goalkeeper')
+    min_loan_talent = get_squad_management_setting('min_loan_talent_score')
 
     # --- 1. Calculate Second Team ---
     second_team_pool = second_team_club_players if second_team_club_players else first_team_remnants
@@ -377,14 +398,22 @@ def calculate_development_squads(second_team_club_players, first_team_remnants, 
     # Match by player_id here as well, for the same namesake-safety reason.
     youth_player_ids = {cell['player_id'] for cell in youth_xi.values() if cell.get('player_id')}
 
-    # --- 3. Definitive Surplus Calculation (BUG FIX) ---
-    # The final surplus is anyone in the remnant pool who is NOT in the Second XI and NOT in the Youth XI.
+    # --- 3. Definitive Surplus Calculation ---
+    # The final surplus is anyone in the remnant pool who is NOT in the Second
+    # XI, NOT in the Youth XI, and NOT kept as first-team 'Additional Depth'.
     final_surplus_players = []
     for player in first_team_remnants:
-        if player['Unique ID'] not in second_team_player_ids and player['Unique ID'] not in youth_player_ids:
+        uid = player['Unique ID']
+        if (uid not in second_team_player_ids
+                and uid not in youth_player_ids
+                and uid not in depth_player_ids):
             final_surplus_players.append(player)
 
     # --- 4. Categorize the Final Surplus ---
+    # Young players are recommended for a loan when their Talent Score clears
+    # the threshold (potential worth developing elsewhere); the rest are sold.
+    # Talent captures far more than the old Work Rate + Determination check:
+    # current ability, remaining development runway and personality.
     loan_candidates = []
     sell_candidates = []
     for player in final_surplus_players:
@@ -393,20 +422,25 @@ def calculate_development_squads(second_team_club_players, first_team_remnants, 
         is_gk = 'GK' in player.get('Position', '')
         is_young = (is_gk and age <= goalkeeper_age_limit) or (not is_gk and age <= outfielder_age_limit)
 
-        if is_young:
-            try:
-                work_rate = int(player.get('Work Rate', 0) or 0)
-                determination = int(player.get('Determination', 0) or 0)
-                if (work_rate + determination) >= 20:
-                    loan_candidates.append(player)
-                else:
-                    sell_candidates.append(player) # Young but not "promising" -> SELL
-            except (ValueError, TypeError):
-                sell_candidates.append(player)
-        else:
-            sell_candidates.append(player) # Too old -> SELL
+        if not is_young:
+            sell_candidates.append(player)  # Too old to develop -> SELL
+            continue
 
-    loan_candidates.sort(key=lambda p: get_last_name(p['Name']))
+        age_cap = goalkeeper_age_limit if is_gk else outfielder_age_limit
+        best_dwrs = best_dwrs_for_player(player, master_role_ratings)
+        talent = calculate_talent_score(
+            best_dwrs, age,
+            player.get('Determination'), player.get('Work Rate'),
+            player.get('Personality'), age_cap,
+        )
+        if talent >= min_loan_talent:
+            loan_candidates.append((talent, player))
+        else:
+            sell_candidates.append(player)  # Young but not promising enough -> SELL
+
+    # Most promising prospects first.
+    loan_candidates.sort(key=lambda tp: tp[0], reverse=True)
+    loan_candidates = [player for _talent, player in loan_candidates]
     sell_candidates.sort(key=lambda p: get_last_name(p['Name']))
 
     return {

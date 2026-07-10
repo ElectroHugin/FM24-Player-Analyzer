@@ -8,7 +8,9 @@ from sqlite_db import (get_user_club, get_second_team_club, get_all_players,
                        get_national_squad_ids, get_national_team_settings,
                        update_dwrs_ratings)
 from constants import GLOBAL_STAT_CATEGORIES, GK_STAT_CATEGORIES, get_valid_roles
+from config_handler import get_age_threshold
 from data_parser import force_update_single_player, load_data
+from talent_logic import calculate_talent_score, talent_age_cap_for_player
 from utils import (format_role_display, get_last_name, color_attribute_by_value,
                    color_personality, is_national_mode_active)
 from ui_components import display_custom_header, display_pros_and_cons, clear_all_caches
@@ -107,6 +109,39 @@ def _display_development_chart(player, roles):
         st.line_chart(chart_data)
     else:
         st.info("No historical DWRS data yet. Upload more snapshots over time to see development.")
+
+
+def _display_talent(player, best_dwrs):
+    """Show a Talent Score for prospects at or below the youth age threshold.
+    Uses the same formula as the Squad Matrix talent filter."""
+    outfielder_cap = get_age_threshold('outfielder')
+    goalkeeper_cap = get_age_threshold('goalkeeper')
+    age_cap = talent_age_cap_for_player(player, outfielder_cap, goalkeeper_cap)
+
+    try:
+        age = int(player.get('Age'))
+    except (TypeError, ValueError):
+        return
+    if age > age_cap:
+        return  # Not a prospect for this age limit — no talent projection.
+
+    score = calculate_talent_score(
+        best_dwrs, age,
+        player.get('Determination'), player.get('Work Rate'),
+        player.get('Personality'), age_cap,
+    )
+
+    st.markdown("### 🌱 Talent Projection")
+    c1, c2 = st.columns([1, 3])
+    c1.metric(f"Talent Score (U{age_cap})", f"{score:.0f}")
+    with c2:
+        st.caption(
+            f"Prospect under the U{age_cap} development cap. "
+            f"Best role DWRS **{best_dwrs}%** + development runway ({age_cap}−{age} yrs) "
+            f"+ mentality (Det {player.get('Determination', '?')} / Wor {player.get('Work Rate', '?')}) "
+            f"+ personality ({player.get('Personality', '—')})."
+        )
+    st.divider()
 
 
 def player_profile_page(players):
@@ -303,6 +338,9 @@ def player_profile_page(players):
     best_role = top_roles[0]['role']
 
     st.divider()
+
+    # --- Talent projection for young prospects ---
+    _display_talent(player, top_roles[0]['normalized'])
 
     # --- Pros & Cons for the best role + key attributes side by side ---
     left, right = st.columns(2)

@@ -68,8 +68,13 @@ def load_config():
     # 8. Ensure [SquadManagement] section exists
     if not config.has_section('SquadManagement'):
         config['SquadManagement'] = {
-            'max_roles_per_depth_player': '2' # Default to 2
+            'max_roles_per_depth_player': '2', # Default to 2
+            'min_loan_talent_score': '45'      # Youth surplus talent bar for loan vs sell
         }
+        config_was_modified = True
+    elif not config.has_option('SquadManagement', 'min_loan_talent_score'):
+        # Upgrade path: existing configs miss the new key.
+        config['SquadManagement']['min_loan_talent_score'] = '45'
         config_was_modified = True
 
     # 8b. Ensure [GapAnalysis] section exists
