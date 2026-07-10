@@ -59,6 +59,13 @@ public:
     QHash<QString, QHash<QString, QString>> tacticRoles() const;
     QStringList tacticNames() const;
 
+    // JSON-file insertion order (QJsonObject sorts keys alphabetically, but
+    // the legacy Python dicts preserve file order, and squad-selection
+    // tie-breaks depend on it). Falls back to alphabetical if the raw file
+    // is unavailable.
+    QStringList tacticNamesOrdered() const;
+    QStringList tacticSlotOrder(const QString &tactic) const;
+
     // Tactic name -> {stratum -> [slots]}.
     QHash<QString, QHash<QString, QStringList>> tacticLayouts() const;
 
@@ -78,9 +85,13 @@ public:
     void setRoot(const QJsonObject &root) { m_root = root; }
 
 private:
+    void indexTacticOrder(const QByteArray &json);
+
     QJsonObject m_root;
     QString m_filePath;
     QString m_error;
+    QStringList m_tacticOrder;                    // tactic names in file order
+    QHash<QString, QStringList> m_slotOrder;      // tactic -> slots in file order
 };
 
 } // namespace fm

@@ -39,7 +39,81 @@ bool Definitions::load(const QString &filePath)
     }
 
     m_root = doc.object();
+
+    file.seek(0);
+    indexTacticOrder(file.readAll());
     return true;
+}
+
+void Definitions::indexTacticOrder(const QByteArray &json)
+{
+    // Minimal order-preserving scan of the "tactic_roles" object: records the
+    // file order of tactic names and of each tactic's slot keys, which
+    // QJsonObject discards (it sorts keys). Handles strings/escapes and
+    // nesting; definitions.json is machine-written, so this stays simple.
+    m_tacticOrder.clear();
+    m_slotOrder.clear();
+
+    const QString text = QString::fromUtf8(json);
+    const int anchor = text.indexOf(QStringLiteral("\"tactic_roles\""));
+    if (anchor < 0)
+        return;
+    int i = text.indexOf(QLatin1Char('{'), anchor);
+    if (i < 0)
+        return;
+
+    int depth = 0;
+    QString currentTactic;
+    bool inString = false;
+    QString stringValue;
+    for (; i < text.size(); ++i) {
+        const QChar c = text[i];
+        if (inString) {
+            if (c == QLatin1Char('\\') && i + 1 < text.size()) {
+                stringValue.append(text[i + 1]);
+                ++i;
+            } else if (c == QLatin1Char('"')) {
+                inString = false;
+                // A string at depth 1/2 followed by ':' is a key.
+                int j = i + 1;
+                while (j < text.size() && text[j].isSpace())
+                    ++j;
+                const bool isKey = j < text.size() && text[j] == QLatin1Char(':');
+                if (isKey && depth == 1) {
+                    currentTactic = stringValue;
+                    m_tacticOrder.append(stringValue);
+                } else if (isKey && depth == 2) {
+                    m_slotOrder[currentTactic].append(stringValue);
+                }
+            } else {
+                stringValue.append(c);
+            }
+            continue;
+        }
+        if (c == QLatin1Char('"')) {
+            inString = true;
+            stringValue.clear();
+        } else if (c == QLatin1Char('{')) {
+            ++depth;
+        } else if (c == QLatin1Char('}')) {
+            --depth;
+            if (depth == 0)
+                break; // end of tactic_roles object
+        }
+    }
+}
+
+QStringList Definitions::tacticNamesOrdered() const
+{
+    return m_tacticOrder.isEmpty() ? tacticNames() : m_tacticOrder;
+}
+
+QStringList Definitions::tacticSlotOrder(const QString &tactic) const
+{
+    const QStringList order = m_slotOrder.value(tactic);
+    if (!order.isEmpty())
+        return order;
+    return m_root.value(QLatin1String("tactic_roles")).toObject().value(tactic).toObject().keys();
 }
 
 bool Definitions::save()

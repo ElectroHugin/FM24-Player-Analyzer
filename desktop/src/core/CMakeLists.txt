@@ -10,12 +10,20 @@ add_library(fmcore STATIC
     Definitions.cpp
     DwrsEngine.h
     DwrsEngine.cpp
+    GapAnalysis.h
+    GapAnalysis.cpp
     GistRainbowLut.h
     LegacyMigrator.h
     LegacyMigrator.cpp
     Player.h
     PlayerStore.h
     PlayerStore.cpp
+    RoleAnalysis.h
+    RoleAnalysis.cpp
+    SquadBuilder.h
+    SquadBuilder.cpp
+    TacticExplorer.h
+    TacticExplorer.cpp
     TalentEngine.h
     TalentEngine.cpp
     Utils.h
