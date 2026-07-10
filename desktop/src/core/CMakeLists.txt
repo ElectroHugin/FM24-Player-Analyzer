@@ -18,6 +18,8 @@ add_library(fmcore STATIC
     Player.h
     PlayerStore.h
     PlayerStore.cpp
+    RatingsUpdater.h
+    RatingsUpdater.cpp
     RoleAnalysis.h
     RoleAnalysis.cpp
     SquadBuilder.h

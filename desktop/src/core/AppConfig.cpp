@@ -55,6 +55,12 @@ AppConfig::AppConfig(const QString &configFilePath)
     ensureDefaults();
 }
 
+void AppConfig::reload()
+{
+    m_settings = std::make_unique<QSettings>(m_filePath, QSettings::IniFormat);
+    ensureDefaults();
+}
+
 QString AppConfig::iniKey(const QString &name)
 {
     return name.toLower().replace(QLatin1Char(' '), QLatin1Char('_'));

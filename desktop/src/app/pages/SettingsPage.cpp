@@ -1,0 +1,425 @@
+#include "SettingsPage.h"
+
+#include "../AppContext.h"
+#include "../MigrationWizard.h"
+#include "../theming/ThemeManager.h"
+#include "core/Constants.h"
+#include "core/Utils.h"
+
+#include <QColorDialog>
+#include <QComboBox>
+#include <QDir>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QInputDialog>
+#include <QLabel>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QSpinBox>
+#include <QTabWidget>
+#include <QVBoxLayout>
+
+namespace fm {
+
+namespace {
+
+const QStringList &weightCategoryOrder()
+{
+    static const QStringList order = {
+        QStringLiteral("Extremely Important"), QStringLiteral("Important"),
+        QStringLiteral("Good"), QStringLiteral("Decent"), QStringLiteral("Almost Irrelevant")};
+    return order;
+}
+
+const QStringList &gkWeightCategoryOrder()
+{
+    static const QStringList order = {
+        QStringLiteral("Top Importance"), QStringLiteral("High Importance"),
+        QStringLiteral("Medium Importance"), QStringLiteral("Key"),
+        QStringLiteral("Preferable"), QStringLiteral("Other")};
+    return order;
+}
+
+QWidget *wrapScrollable(QWidget *content)
+{
+    auto *scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidget(content);
+    return scroll;
+}
+
+} // namespace
+
+SettingsPage::SettingsPage(AppContext &context, ThemeManager &theme, QWidget *parent)
+    : PageBase(context, parent)
+    , m_theme(theme)
+{
+    auto *layout = new QVBoxLayout(this);
+    auto *heading = new QLabel(QStringLiteral("<h2>%1</h2>").arg(tr("Einstellungen")), this);
+    layout->addWidget(heading);
+
+    auto *tabs = new QTabWidget(this);
+    tabs->addTab(buildWeightsTab(), tr("DWRS-Gewichte"));
+    tabs->addTab(buildThresholdsTab(), tr("Schwellenwerte"));
+    tabs->addTab(buildThemeTab(), tr("Design"));
+    tabs->addTab(buildDatabaseTab(), tr("Datenbank"));
+    layout->addWidget(tabs, 1);
+
+    auto *saveRow = new QHBoxLayout;
+    saveRow->addStretch(1);
+    auto *saveButton = new QPushButton(tr("Alle Einstellungen speichern"), this);
+    saveButton->setDefault(true);
+    saveRow->addWidget(saveButton);
+    layout->addLayout(saveRow);
+    connect(saveButton, &QPushButton::clicked, this, &SettingsPage::saveAll);
+
+    refresh();
+}
+
+QWidget *SettingsPage::buildWeightsTab()
+{
+    auto *content = new QWidget;
+    auto *layout = new QVBoxLayout(content);
+
+    const auto makeSpin = [this](double max = 20.0) {
+        auto *spin = new QDoubleSpinBox;
+        spin->setRange(0.0, max);
+        spin->setDecimals(2);
+        spin->setSingleStep(0.1);
+        return spin;
+    };
+
+    auto *fieldGroup = new QGroupBox(tr("Feldspieler-Kategorien"), content);
+    auto *fieldForm = new QFormLayout(fieldGroup);
+    for (const QString &category : weightCategoryOrder()) {
+        auto *spin = makeSpin();
+        m_weightSpins.insert(category, spin);
+        fieldForm->addRow(category + QStringLiteral(":"), spin);
+    }
+    layout->addWidget(fieldGroup);
+
+    auto *gkGroup = new QGroupBox(tr("Torwart-Kategorien"), content);
+    auto *gkForm = new QFormLayout(gkGroup);
+    for (const QString &category : gkWeightCategoryOrder()) {
+        auto *spin = makeSpin();
+        m_gkWeightSpins.insert(category, spin);
+        gkForm->addRow(category + QStringLiteral(":"), spin);
+    }
+    layout->addWidget(gkGroup);
+
+    auto *multGroup = new QGroupBox(tr("Rollen-Multiplikatoren"), content);
+    auto *multForm = new QFormLayout(multGroup);
+    m_keyMultSpin = makeSpin();
+    m_prefMultSpin = makeSpin();
+    multForm->addRow(tr("Schlüssel-Attribute:"), m_keyMultSpin);
+    multForm->addRow(tr("Bevorzugte Attribute:"), m_prefMultSpin);
+    layout->addWidget(multGroup);
+
+    auto *aptGroup = new QGroupBox(tr("Spielzeit-Gewichte (Agreed Playing Time)"), content);
+    auto *aptForm = new QFormLayout(aptGroup);
+    QStringList allApt = fieldPlayerAptOptions() + gkAptOptions();
+    allApt.removeDuplicates();
+    for (const QString &apt : allApt) {
+        if (apt == QLatin1String("None"))
+            continue;
+        auto *spin = makeSpin(5.0);
+        m_aptSpins.insert(apt, spin);
+        aptForm->addRow(apt + QStringLiteral(":"), spin);
+    }
+    layout->addWidget(aptGroup);
+    layout->addStretch(1);
+
+    return wrapScrollable(content);
+}
+
+QWidget *SettingsPage::buildThresholdsTab()
+{
+    auto *content = new QWidget;
+    auto *layout = new QVBoxLayout(content);
+
+    auto *ageGroup = new QGroupBox(tr("Jugend-Altersgrenzen"), content);
+    auto *ageForm = new QFormLayout(ageGroup);
+    m_outfielderAgeSpin = new QSpinBox;
+    m_outfielderAgeSpin->setRange(15, 30);
+    m_goalkeeperAgeSpin = new QSpinBox;
+    m_goalkeeperAgeSpin->setRange(15, 35);
+    ageForm->addRow(tr("Feldspieler bis Alter:"), m_outfielderAgeSpin);
+    ageForm->addRow(tr("Torhüter bis Alter:"), m_goalkeeperAgeSpin);
+    layout->addWidget(ageGroup);
+
+    auto *squadGroup = new QGroupBox(tr("Kader-Management"), content);
+    auto *squadForm = new QFormLayout(squadGroup);
+    m_naturalPosSpin = new QDoubleSpinBox;
+    m_naturalPosSpin->setRange(1.0, 2.0);
+    m_naturalPosSpin->setDecimals(2);
+    m_naturalPosSpin->setSingleStep(0.01);
+    m_maxDepthRolesSpin = new QSpinBox;
+    m_maxDepthRolesSpin->setRange(1, 10);
+    m_minLoanTalentSpin = new QSpinBox;
+    m_minLoanTalentSpin->setRange(0, 200);
+    squadForm->addRow(tr("Bonus natürliche Position:"), m_naturalPosSpin);
+    squadForm->addRow(tr("Max. Rollen pro Depth-Spieler:"), m_maxDepthRolesSpin);
+    squadForm->addRow(tr("Min. Talent-Score für Leihe:"), m_minLoanTalentSpin);
+    layout->addWidget(squadGroup);
+
+    auto *gapGroup = new QGroupBox(tr("Gap-Analyse"), content);
+    auto *gapForm = new QFormLayout(gapGroup);
+    const auto makeGapSpin = [] {
+        auto *spin = new QDoubleSpinBox;
+        spin->setRange(0.0, 50.0);
+        spin->setDecimals(1);
+        return spin;
+    };
+    m_displacementSpin = makeGapSpin();
+    m_dropoffSpin = makeGapSpin();
+    m_wrongSideSpin = makeGapSpin();
+    gapForm->addRow(tr("Displacement-Schwelle:"), m_displacementSpin);
+    gapForm->addRow(tr("Dropoff-Schwelle:"), m_dropoffSpin);
+    gapForm->addRow(tr("Falsche-Seite-Malus:"), m_wrongSideSpin);
+    layout->addWidget(gapGroup);
+    layout->addStretch(1);
+
+    return wrapScrollable(content);
+}
+
+QWidget *SettingsPage::buildThemeTab()
+{
+    auto *content = new QWidget;
+    auto *layout = new QVBoxLayout(content);
+
+    auto *modeForm = new QFormLayout;
+    m_modeCombo = new QComboBox;
+    m_modeCombo->addItem(tr("Nacht (dunkel)"), QStringLiteral("night"));
+    m_modeCombo->addItem(tr("Tag (hell)"), QStringLiteral("day"));
+    modeForm->addRow(tr("Aktiver Modus:"), m_modeCombo);
+    layout->addLayout(modeForm);
+
+    const QList<QPair<QString, QString>> colorKeys = {
+        {QStringLiteral("primary_color"), tr("Akzentfarbe")},
+        {QStringLiteral("text_color"), tr("Textfarbe")},
+        {QStringLiteral("background_color"), tr("Hintergrund")},
+        {QStringLiteral("secondary_background_color"), tr("Sekundärer Hintergrund")},
+    };
+
+    for (const QString &mode : {QStringLiteral("night"), QStringLiteral("day")}) {
+        auto *group = new QGroupBox(mode == QLatin1String("night") ? tr("Nacht-Farben")
+                                                                   : tr("Tag-Farben"),
+                                    content);
+        auto *form = new QFormLayout(group);
+        for (const auto &[key, label] : colorKeys) {
+            const QString fullKey = mode + QLatin1Char('_') + key;
+            auto *button = new QPushButton;
+            button->setFixedWidth(140);
+            m_colorButtons.insert(fullKey, button);
+            connect(button, &QPushButton::clicked, this, [this, fullKey, button] {
+                const QColor initial(m_pendingColors.value(fullKey));
+                const QColor picked =
+                    QColorDialog::getColor(initial, this, tr("Farbe wählen"));
+                if (!picked.isValid())
+                    return;
+                m_pendingColors.insert(fullKey, picked.name());
+                button->setText(picked.name());
+                button->setStyleSheet(QStringLiteral("background-color:%1").arg(picked.name()));
+                updateContrastWarning();
+            });
+            form->addRow(label + QStringLiteral(":"), button);
+        }
+        layout->addWidget(group);
+    }
+
+    m_contrastLabel = new QLabel(content);
+    m_contrastLabel->setWordWrap(true);
+    layout->addWidget(m_contrastLabel);
+    layout->addStretch(1);
+
+    return wrapScrollable(content);
+}
+
+QWidget *SettingsPage::buildDatabaseTab()
+{
+    auto *content = new QWidget;
+    auto *layout = new QVBoxLayout(content);
+
+    auto *selectGroup = new QGroupBox(tr("Aktive Datenbank"), content);
+    auto *selectLayout = new QHBoxLayout(selectGroup);
+    m_dbCombo = new QComboBox;
+    auto *switchButton = new QPushButton(tr("Wechseln"));
+    selectLayout->addWidget(m_dbCombo, 1);
+    selectLayout->addWidget(switchButton);
+    layout->addWidget(selectGroup);
+
+    connect(switchButton, &QPushButton::clicked, this, [this] {
+        const QString name = m_dbCombo->currentText();
+        if (name.isEmpty() || name == m_context.currentDbName())
+            return;
+        QString error;
+        if (!m_context.openDatabase(name, &error))
+            QMessageBox::critical(this, tr("Datenbank"), error);
+    });
+
+    auto *actionsRow = new QHBoxLayout;
+    auto *createButton = new QPushButton(tr("Neue Datenbank anlegen…"), content);
+    auto *migrateButton = new QPushButton(tr("Legacy-Datenbank importieren…"), content);
+    actionsRow->addWidget(createButton);
+    actionsRow->addWidget(migrateButton);
+    actionsRow->addStretch(1);
+    layout->addLayout(actionsRow);
+
+    connect(createButton, &QPushButton::clicked, this, [this] {
+        const QString name = QInputDialog::getText(this, tr("Neue Datenbank"),
+                                                   tr("Name (ohne .db):"));
+        if (name.trimmed().isEmpty())
+            return;
+        QString error;
+        if (!m_context.openDatabase(name.trimmed(), &error))
+            QMessageBox::critical(this, tr("Datenbank"), error);
+        refresh();
+    });
+    connect(migrateButton, &QPushButton::clicked, this, [this] {
+        MigrationWizard wizard(m_context, this);
+        wizard.exec();
+        refresh();
+        if (!wizard.migratedDbName().isEmpty()
+            && QMessageBox::question(this, tr("Import"),
+                                     tr("Importierte Datenbank '%1' jetzt aktivieren?")
+                                         .arg(wizard.migratedDbName()))
+                   == QMessageBox::Yes) {
+            QString error;
+            if (!m_context.openDatabase(wizard.migratedDbName(), &error))
+                QMessageBox::critical(this, tr("Datenbank"), error);
+            refresh();
+        }
+    });
+
+    auto *pathInfo = new QLabel(content);
+    pathInfo->setWordWrap(true);
+    pathInfo->setText(tr("Datenordner: %1\n(Änderbar über bootstrap.ini; "
+                         "Verschiebe-Assistent folgt in einem späteren Meilenstein.)")
+                          .arg(QDir::toNativeSeparators(m_context.paths().dataDir())));
+    layout->addWidget(pathInfo);
+    layout->addStretch(1);
+
+    return wrapScrollable(content);
+}
+
+void SettingsPage::refresh()
+{
+    AppConfig &config = m_context.config();
+
+    for (auto it = m_weightSpins.begin(); it != m_weightSpins.end(); ++it)
+        it.value()->setValue(config.weight(it.key()));
+    for (auto it = m_gkWeightSpins.begin(); it != m_gkWeightSpins.end(); ++it)
+        it.value()->setValue(config.gkWeight(it.key()));
+    m_keyMultSpin->setValue(config.roleMultiplier(QStringLiteral("key")));
+    m_prefMultSpin->setValue(config.roleMultiplier(QStringLiteral("preferable")));
+    for (auto it = m_aptSpins.begin(); it != m_aptSpins.end(); ++it)
+        it.value()->setValue(config.aptWeight(it.key()));
+
+    m_outfielderAgeSpin->setValue(config.ageThreshold(QStringLiteral("outfielder")));
+    m_goalkeeperAgeSpin->setValue(config.ageThreshold(QStringLiteral("goalkeeper")));
+    m_naturalPosSpin->setValue(config.selectionBonus(QStringLiteral("natural_position")));
+    m_maxDepthRolesSpin->setValue(
+        config.squadManagementSetting(QStringLiteral("max_roles_per_depth_player")));
+    m_minLoanTalentSpin->setValue(
+        config.squadManagementSetting(QStringLiteral("min_loan_talent_score")));
+    m_displacementSpin->setValue(
+        config.gapAnalysisSetting(QStringLiteral("displacement_threshold")));
+    m_dropoffSpin->setValue(config.gapAnalysisSetting(QStringLiteral("dropoff_threshold")));
+    m_wrongSideSpin->setValue(config.gapAnalysisSetting(QStringLiteral("wrong_side_penalty")));
+
+    const auto themeSettings = config.themeSettings();
+    m_modeCombo->setCurrentIndex(
+        themeSettings.value(QStringLiteral("current_mode")) == QLatin1String("day") ? 1 : 0);
+    m_pendingColors.clear();
+    for (auto it = m_colorButtons.begin(); it != m_colorButtons.end(); ++it) {
+        const QString value = themeSettings.value(it.key());
+        m_pendingColors.insert(it.key(), value);
+        it.value()->setText(value);
+        it.value()->setStyleSheet(QStringLiteral("background-color:%1").arg(value));
+    }
+    updateContrastWarning();
+
+    m_dbCombo->clear();
+    m_dbCombo->addItems(m_context.availableDatabases());
+    m_dbCombo->setCurrentText(m_context.currentDbName());
+}
+
+void SettingsPage::updateContrastWarning()
+{
+    QStringList warnings;
+    for (const QString &mode : {QStringLiteral("night"), QStringLiteral("day")}) {
+        const QColor text(m_pendingColors.value(mode + QStringLiteral("_text_color")));
+        const QColor bg(m_pendingColors.value(mode + QStringLiteral("_background_color")));
+        if (text.isValid() && bg.isValid()) {
+            const double ratio = contrastRatio(text, bg);
+            if (ratio < 4.5) {
+                warnings << tr("⚠ %1: Kontrast Text/Hintergrund nur %2:1 (WCAG empfiehlt ≥ 4,5:1)")
+                                .arg(mode == QLatin1String("night") ? tr("Nacht") : tr("Tag"))
+                                .arg(ratio, 0, 'f', 1);
+            }
+        }
+    }
+    m_contrastLabel->setText(warnings.isEmpty() ? tr("✓ Kontrastwerte in Ordnung")
+                                                : warnings.join(QLatin1Char('\n')));
+}
+
+void SettingsPage::saveAll()
+{
+    AppConfig &config = m_context.config();
+
+    // Detect whether any DWRS-relevant weight actually changed.
+    bool weightsChanged = false;
+    const auto noteChange = [&](double oldValue, double newValue) {
+        if (!qFuzzyCompare(oldValue + 1.0, newValue + 1.0))
+            weightsChanged = true;
+    };
+
+    for (auto it = m_weightSpins.begin(); it != m_weightSpins.end(); ++it) {
+        noteChange(config.weight(it.key()), it.value()->value());
+        config.setWeight(it.key(), it.value()->value());
+    }
+    for (auto it = m_gkWeightSpins.begin(); it != m_gkWeightSpins.end(); ++it) {
+        noteChange(config.gkWeight(it.key()), it.value()->value());
+        config.setGkWeight(it.key(), it.value()->value());
+    }
+    noteChange(config.roleMultiplier(QStringLiteral("key")), m_keyMultSpin->value());
+    config.setRoleMultiplier(QStringLiteral("key"), m_keyMultSpin->value());
+    noteChange(config.roleMultiplier(QStringLiteral("preferable")), m_prefMultSpin->value());
+    config.setRoleMultiplier(QStringLiteral("preferable"), m_prefMultSpin->value());
+    for (auto it = m_aptSpins.begin(); it != m_aptSpins.end(); ++it)
+        config.setAptWeight(it.key(), it.value()->value());
+
+    config.setAgeThreshold(QStringLiteral("outfielder"), m_outfielderAgeSpin->value());
+    config.setAgeThreshold(QStringLiteral("goalkeeper"), m_goalkeeperAgeSpin->value());
+    config.setSelectionBonus(QStringLiteral("natural_position"), m_naturalPosSpin->value());
+    config.setSquadManagementSetting(QStringLiteral("max_roles_per_depth_player"),
+                                     m_maxDepthRolesSpin->value());
+    config.setSquadManagementSetting(QStringLiteral("min_loan_talent_score"),
+                                     m_minLoanTalentSpin->value());
+    config.setGapAnalysisSetting(QStringLiteral("displacement_threshold"),
+                                 m_displacementSpin->value());
+    config.setGapAnalysisSetting(QStringLiteral("dropoff_threshold"), m_dropoffSpin->value());
+    config.setGapAnalysisSetting(QStringLiteral("wrong_side_penalty"), m_wrongSideSpin->value());
+
+    auto themeSettings = config.themeSettings();
+    themeSettings.insert(QStringLiteral("current_mode"),
+                         m_modeCombo->currentData().toString());
+    for (auto it = m_pendingColors.constBegin(); it != m_pendingColors.constEnd(); ++it)
+        themeSettings.insert(it.key(), it.value());
+    config.saveThemeSettings(themeSettings);
+
+    m_context.reloadEngines();
+    m_theme.setMode(m_modeCombo->currentData().toString());
+    m_theme.apply();
+
+    if (weightsChanged) {
+        emit recalcRequested();
+    } else {
+        QMessageBox::information(this, tr("Einstellungen"), tr("Einstellungen gespeichert."));
+    }
+}
+
+} // namespace fm

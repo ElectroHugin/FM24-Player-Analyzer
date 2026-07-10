@@ -1,8 +1,11 @@
 #include <QApplication>
-#include <QLabel>
-#include <QMainWindow>
+#include <QMessageBox>
 #include <QTimer>
 
+#include "AppContext.h"
+#include "FirstRunDialog.h"
+#include "MainWindow.h"
+#include "theming/ThemeManager.h"
 #include "core/Version.h"
 
 int main(int argc, char *argv[])
@@ -12,10 +15,26 @@ int main(int argc, char *argv[])
     QApplication::setApplicationVersion(fm::appVersion());
     QApplication::setOrganizationName(QStringLiteral("FM24PlayerAnalyzer"));
 
-    QMainWindow window;
-    window.setWindowTitle(fm::appName());
-    window.setCentralWidget(new QLabel(QStringLiteral("FM24 Player Analyzer — Skelett"), &window));
-    window.resize(1600, 950);
+    fm::AppContext context;
+
+    if (context.paths().isFirstRun()) {
+        fm::FirstRunDialog dialog(fm::AppPaths::defaultDataDir());
+        if (dialog.exec() != QDialog::Accepted)
+            return 0;
+        context.paths().setDataDir(dialog.chosenDataDir());
+    }
+
+    QString error;
+    if (!context.initialize(&error)) {
+        QMessageBox::critical(nullptr, fm::appName(),
+                              QObject::tr("Start fehlgeschlagen:\n%1").arg(error));
+        return 1;
+    }
+
+    fm::ThemeManager theme(context.config());
+    theme.apply();
+
+    fm::MainWindow window(context, theme);
     window.show();
 
     // --smoke: exit immediately after the event loop starts (build verification)

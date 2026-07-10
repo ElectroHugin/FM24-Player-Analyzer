@@ -1,0 +1,2147 @@
+{
+    "player_roles": {
+        "Goalkeepers": {
+            "GK-D": "Goalkeeper (Defend)",
+            "SK-D": "Sweeper Keeper (Defend)",
+            "SK-S": "Sweeper Keeper (Support)",
+            "SK-A": "Sweeper Keeper (Attack)"
+        },
+        "Defense": {
+            "BPD-Co": "Ball-Playing Defender (Cover)",
+            "BPD-D": "Ball-Playing Defender (Defend)",
+            "BPD-St": "Ball-Playing Defender (Stopper)",
+            "CD-Co": "Central Defender (Cover)",
+            "CD-D": "Central Defender (Defend)",
+            "CD-St": "Central Defender (Stopper)",
+            "FBL-A": "Full-Back Left (Attack)",
+            "FBL-Au": "Full-Back Left (Automatic)",
+            "FBL-D": "Full-Back Left (Defend)",
+            "FBL-S": "Full-Back Left (Support)",
+            "FBR-A": "Full-Back Right (Attack)",
+            "FBR-Au": "Full-Back Right (Automatic)",
+            "FBR-D": "Full-Back Right (Defend)",
+            "FBR-S": "Full-Back Right (Support)",
+            "IFBL-D": "Inverted Full-Back Left (Defend)",
+            "IFBR-D": "Inverted Full-Back Right (Defend)",
+            "IWBL-A": "Inverted Wing-Back Left (Attack)",
+            "IWBL-Au": "Inverted Wing-Back Left (Automatic)",
+            "IWBL-D": "Inverted Wing-Back Left (Defend)",
+            "IWBL-S": "Inverted Wing-Back Left (Support)",
+            "IWBR-A": "Inverted Wing-Back Right (Attack)",
+            "IWBR-Au": "Inverted Wing-Back Right (Automatic)",
+            "IWBR-D": "Inverted Wing-Back Right (Defend)",
+            "IWBR-S": "Inverted Wing-Back Right (Support)",
+            "Lib-S": "Libero (Support)",
+            "NNFBL-D": "No-Nonsense Full-Back Left (Defend)",
+            "NNFBR-D": "No-Nonsense Full-Back Right (Defend)",
+            "NNCB-Co": "No-Nonsense Centre-Back (Cover)",
+            "NNCB-D": "No-Nonsense Centre-Back (Defend)",
+            "NNCB-St": "No-Nonsense Centre-Back (Stopper)",
+            "WCB-A": "Wide Centre-Back (Attack)",
+            "WCB-D": "Wide Centre-Back (Defend)",
+            "WCB-S": "Wide Centre-Back (Support)",
+            "WBL-A": "Wing Back Left (Attack)",
+            "WBR-A": "Wing Back Right (Attack)"
+        },
+        "Midfield": {
+            "CM-S": "Central Midfielder (Support)",
+            "DM-S": "Defensive Midfielder (Support)",
+            "IWR-S": "Inverted Winger Right (Support)",
+            "RPM-S": "Roaming Playmaker (Support)",
+            "VOL-A": "Segundo Volante (Attack)",
+            "WL-S": "Winger Left (Support)",
+            "WR-S": "Winger Right (Support)",
+            "B2B-S": "Box-to-Box Midfielder (Support)",
+            "DLP-S": "Deep Lying Playmaker (Support)",
+            "BWM-D": "Ball Winning Midfielder (Defend)",
+            "AM-S": "Attacking Midfielder (Support)",
+            "AP-A": "Advanced Playmaker (Attack)"
+        },
+        "Attack": {
+            "AF-A": "Advanced Forward (Attack)",
+            "AM-A": "Attacking Midfielder (Attack)",
+            "CF-S": "Complete Forward (Support)",
+            "IFL-A": "Inside Forward Left (Attack)",
+            "IFL-S": "Inside Forward Left (Support)",
+            "IFR-A": "Inside Forward Right (Attack)",
+            "IFR-S": "Inside Forward Right (Support)",
+            "PF-S": "Pressing Forward (Support)",
+            "P-A": "Poacher (Attack)",
+            "FN-S": "False Nine (Support)",
+            "RL-A": "Raumdeuter Left (Attack)",
+            "RR-A": "Raumdeuter Right (Attack)",
+            "AP-S": "Advanced Playmaker (Support)",
+            "DLF-S": "Deep Lying Forward (Support)"
+        }
+    },
+    "role_specific_weights": {
+        "FBR-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Tackling",
+                "Technique",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Flair",
+                "Positioning",
+                "Agility",
+                "Balance"
+            ]
+        },
+        "WCB-D": {
+            "key": [
+                "Handling",
+                "Marking",
+                "Tackling",
+                "Positioning",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "Dribbling",
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Work Rate",
+                "Agility",
+                "Pace"
+            ]
+        },
+        "WCB-S": {
+            "key": [
+                "Dribbling",
+                "Heading",
+                "Marking",
+                "Tackling",
+                "Positioning",
+                "Jumping Reach",
+                "Pace",
+                "Strength"
+            ],
+            "preferable": [
+                "Crossing",
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Off the Ball",
+                "Work Rate",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "WCB-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Heading",
+                "Marking",
+                "Tackling",
+                "Off the Ball",
+                "Jumping Reach",
+                "Pace",
+                "Stamina",
+                "Strength"
+            ],
+            "preferable": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Positioning",
+                "Work Rate",
+                "Agility"
+            ]
+        },
+        "BPD-D": {
+            "key": [
+                "Heading",
+                "Marking",
+                "Passing",
+                "Tackling",
+                "Composure",
+                "Positioning",
+                "Jumping Reach"
+            ],
+            "preferable": [
+                "First Touch",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Concentration",
+                "Decisions",
+                "Vision",
+                "Pace",
+                "Strength"
+            ]
+        },
+        "BPD-St": {
+            "key": [
+                "Heading",
+                "Passing",
+                "Tackling",
+                "Aggression",
+                "Bravery",
+                "Composure",
+                "Decisions",
+                "Positioning",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Technique",
+                "Anticipation",
+                "Concentration",
+                "Vision"
+            ]
+        },
+        "BPD-Co": {
+            "key": [
+                "Marking",
+                "Passing",
+                "Tackling",
+                "Anticipation",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Positioning",
+                "Pace"
+            ],
+            "preferable": [
+                "Heading",
+                "First Touch",
+                "Technique",
+                "Bravery",
+                "Vision",
+                "Jumping Reach",
+                "Strength"
+            ]
+        },
+        "CD-D": {
+            "key": [
+                "Heading",
+                "Marking",
+                "Tackling",
+                "Positioning",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Pace"
+            ]
+        },
+        "CD-St": {
+            "key": [
+                "Heading",
+                "Tackling",
+                "Aggression",
+                "Bravery",
+                "Decisions",
+                "Positioning",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "Marking",
+                "Anticipation",
+                "Composure",
+                "Concentration"
+            ]
+        },
+        "CD-Co": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Positioning",
+                "Pace"
+            ],
+            "preferable": [
+                "Heading",
+                "Bravery",
+                "Composure",
+                "Jumping Reach",
+                "Strength"
+            ]
+        },
+        "NNCB-D": {
+            "key": [
+                "Heading",
+                "Marking",
+                "Tackling",
+                "Positioning",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Pace"
+            ]
+        },
+        "NNCB-St": {
+            "key": [
+                "Heading",
+                "Tackling",
+                "Aggression",
+                "Bravery",
+                "Positioning",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "Marking",
+                "Anticipation",
+                "Concentration"
+            ]
+        },
+        "NNCB-Co": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Pace"
+            ],
+            "preferable": [
+                "Heading",
+                "Bravery",
+                "Jumping Reach",
+                "Strength"
+            ]
+        },
+        "Lib-S": {
+            "key": [
+                "First Touch",
+                "Heading",
+                "Marking",
+                "Passing",
+                "Tackling",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Positioning",
+                "Teamwork",
+                "Jumping Reach",
+                "Strength"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Anticipation",
+                "Bravery",
+                "Concentration",
+                "Vision",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "FBL-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Tackling",
+                "Technique",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Flair",
+                "Positioning",
+                "Agility",
+                "Balance"
+            ]
+        },
+        "DM-S": {
+            "key": [
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Aggression",
+                "Composure",
+                "Decisions",
+                "Work Rate",
+                "Stamina",
+                "Strength"
+            ]
+        },
+        "CM-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Decisions",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Technique",
+                "Anticipation",
+                "Composure",
+                "Concentration",
+                "Off the Ball",
+                "Vision",
+                "Work Rate",
+                "Stamina"
+            ]
+        },
+        "IFL-A": {
+            "key": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Technique",
+                "Anticipation",
+                "Off the Ball",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "Long Shots",
+                "Passing",
+                "Composure",
+                "Flair",
+                "Work Rate",
+                "Pace",
+                "Stamina",
+                "Balance"
+            ]
+        },
+        "IFR-A": {
+            "key": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Technique",
+                "Anticipation",
+                "Off the Ball",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "Long Shots",
+                "Passing",
+                "Composure",
+                "Flair",
+                "Work Rate",
+                "Pace",
+                "Stamina",
+                "Balance"
+            ]
+        },
+        "IFL-S": {
+            "key": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Technique",
+                "Off the Ball",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "Long Shots",
+                "Passing",
+                "Anticipation",
+                "Composure",
+                "Flair",
+                "Vision",
+                "Work Rate",
+                "Pace",
+                "Stamina",
+                "Balance"
+            ]
+        },
+        "PF-S": {
+            "key": [
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Decisions",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Passing"
+            ]
+        },
+        "AF-A": {
+            "key": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Technique",
+                "Composure",
+                "Off the Ball",
+                "Acceleration"
+            ],
+            "preferable": [
+                "Passing",
+                "Anticipation",
+                "Decisions",
+                "Work Rate",
+                "Agility",
+                "Balance",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "CF-S": {
+            "key": [
+                "Dribbling",
+                "First Touch",
+                "Heading",
+                "Long Shots",
+                "Passing",
+                "Technique",
+                "Anticipation",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Vision",
+                "Acceleration",
+                "Agility",
+                "Strength"
+            ],
+            "preferable": [
+                "Finishing",
+                "Teamwork",
+                "Work Rate",
+                "Balance",
+                "Jumping Reach",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "SK-A": {
+            "key": [
+                "Command of Area",
+                "Kicking",
+                "One vs One",
+                "Reflexes",
+                "Anticipation",
+                "Composure",
+                "Concentration",
+                "Positioning",
+                "Agility"
+            ],
+            "preferable": [
+                "Aerial Reach",
+                "Communication",
+                "Eccentricity",
+                "First Touch",
+                "Handling",
+                "Passing",
+                "Throwing",
+                "Vision",
+                "Acceleration",
+                "Decisions",
+                "Rushing Out (Tendency)"
+            ]
+        },
+        "SK-D": {
+            "key": [
+                "Command of Area",
+                "Kicking",
+                "One vs One",
+                "Reflexes",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Agility"
+            ],
+            "preferable": [
+                "Aerial Reach",
+                "Communication",
+                "First Touch",
+                "Handling",
+                "Passing",
+                "Rushing Out (Tendency)",
+                "Throwing",
+                "Composure",
+                "Decisions",
+                "Vision",
+                "Acceleration"
+            ]
+        },
+        "SK-S": {
+            "key": [
+                "Command of Area",
+                "Kicking",
+                "One vs One",
+                "Reflexes",
+                "Rushing Out (Tendency)",
+                "Anticipation",
+                "Composure",
+                "Concentration",
+                "Positioning",
+                "Agility"
+            ],
+            "preferable": [
+                "Aerial Reach",
+                "Communication",
+                "First Touch",
+                "Handling",
+                "Passing",
+                "Throwing",
+                "Decisions",
+                "Vision",
+                "Acceleration"
+            ]
+        },
+        "GK-D": {
+            "key": [
+                "Aerial Reach",
+                "Command of Area",
+                "Communication",
+                "Handling",
+                "Kicking",
+                "Reflexes",
+                "Concentration",
+                "Positioning",
+                "Agility"
+            ],
+            "preferable": [
+                "One vs One",
+                "Throwing",
+                "Anticipation",
+                "Decisions"
+            ]
+        },
+        "IFR-S": {
+            "key": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Technique",
+                "Anticipation",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "Long Shots",
+                "Passing",
+                "Composure",
+                "Flair",
+                "Work Rate",
+                "Balance",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "AM-A": {
+            "key": [
+                "Dribbling",
+                "First Touch",
+                "Long Shots",
+                "Passing",
+                "Technique",
+                "Anticipation",
+                "Decisions",
+                "Flair",
+                "Off the Ball"
+            ],
+            "preferable": [
+                "Finishing",
+                "Composure",
+                "Vision",
+                "Agility"
+            ]
+        },
+        "RPM-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Anticipation",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision",
+                "Work Rate",
+                "Acceleration",
+                "Stamina"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Long Shots",
+                "Concentration",
+                "Positioning",
+                "Agility",
+                "Balance",
+                "Pace"
+            ]
+        },
+        "VOL-A": {
+            "key": [
+                "Finishing",
+                "Long Shots",
+                "Passing",
+                "Tackling",
+                "Anticipation",
+                "Off the Ball",
+                "Positioning",
+                "Work Rate",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Acceleration",
+                "Balance",
+                "Strength"
+            ]
+        },
+        "IWR-S": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Passing",
+                "Technique",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "First Touch",
+                "Long Shots",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Vision",
+                "Work Rate",
+                "Balance",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "IFBR-D": {
+            "key": [
+                "Heading",
+                "Marking",
+                "Tackling",
+                "Positioning",
+                "Strength"
+            ],
+            "preferable": [
+                "Dribbling",
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Work Rate",
+                "Agility",
+                "Jumping Reach",
+                "Pace"
+            ]
+        },
+        "IFBL-D": {
+            "key": [
+                "Heading",
+                "Marking",
+                "Tackling",
+                "Positioning",
+                "Strength"
+            ],
+            "preferable": [
+                "Dribbling",
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Bravery",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Work Rate",
+                "Agility",
+                "Jumping Reach",
+                "Pace"
+            ]
+        },
+        "NNFBR-D": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Positioning",
+                "Strength"
+            ],
+            "preferable": [
+                "Heading",
+                "Aggression",
+                "Bravery",
+                "Concentration",
+                "Teamwork"
+            ]
+        },
+        "NNFBL-D": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Positioning",
+                "Strength"
+            ],
+            "preferable": [
+                "Heading",
+                "Aggression",
+                "Bravery",
+                "Concentration",
+                "Teamwork"
+            ]
+        },
+        "FBR-D": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning"
+            ],
+            "preferable": [
+                "Crossing",
+                "Passing",
+                "Decisions",
+                "Teamwork",
+                "Work Rate",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "FBL-D": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning"
+            ],
+            "preferable": [
+                "Crossing",
+                "Passing",
+                "Decisions",
+                "Teamwork",
+                "Work Rate",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "FBR-S": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Crossing",
+                "Dribbling",
+                "Passing",
+                "Technique",
+                "Decisions",
+                "Work Rate",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "FBL-S": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Crossing",
+                "Dribbling",
+                "Passing",
+                "Technique",
+                "Decisions",
+                "Work Rate",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "FBR-Au": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Crossing",
+                "Dribbling",
+                "Passing",
+                "Technique",
+                "Decisions",
+                "Work Rate",
+                "Agility",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "FBL-Au": {
+            "key": [
+                "Marking",
+                "Tackling",
+                "Anticipation",
+                "Concentration",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Crossing",
+                "Dribbling",
+                "Passing",
+                "Technique",
+                "Decisions",
+                "Work Rate",
+                "Agility",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "IWBR-D": {
+            "key": [
+                "Passing",
+                "Tackling",
+                "Anticipation",
+                "Decisions",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Technique",
+                "Composure",
+                "Concentration",
+                "Off the Ball",
+                "Work Rate",
+                "Acceleration",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "IWBL-D": {
+            "key": [
+                "Passing",
+                "Tackling",
+                "Anticipation",
+                "Decisions",
+                "Positioning",
+                "Teamwork"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Technique",
+                "Composure",
+                "Concentration",
+                "Off the Ball",
+                "Work Rate",
+                "Acceleration",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "IWBR-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Composure",
+                "Decisions",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Marking",
+                "Technique",
+                "Anticipation",
+                "Concentration",
+                "Off the Ball",
+                "Positioning",
+                "Vision",
+                "Work Rate",
+                "Acceleration",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "IWBL-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Composure",
+                "Decisions",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Marking",
+                "Technique",
+                "Anticipation",
+                "Concentration",
+                "Off the Ball",
+                "Positioning",
+                "Vision",
+                "Work Rate",
+                "Acceleration",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "IWBR-A": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision",
+                "Acceleration"
+            ],
+            "preferable": [
+                "Crossing",
+                "Dribbling",
+                "Long Shots",
+                "Marking",
+                "Anticipation",
+                "Concentration",
+                "Flair",
+                "Positioning",
+                "Work Rate",
+                "Agility",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "IWBL-A": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision",
+                "Acceleration"
+            ],
+            "preferable": [
+                "Crossing",
+                "Dribbling",
+                "Long Shots",
+                "Marking",
+                "Anticipation",
+                "Concentration",
+                "Flair",
+                "Positioning",
+                "Work Rate",
+                "Agility",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "IWBR-Au": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Composure",
+                "Decisions",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Marking",
+                "Technique",
+                "Anticipation",
+                "Concentration",
+                "Off the Ball",
+                "Positioning",
+                "Vision",
+                "Work Rate",
+                "Acceleration",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "IWBL-Au": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Tackling",
+                "Composure",
+                "Decisions",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Marking",
+                "Technique",
+                "Anticipation",
+                "Concentration",
+                "Off the Ball",
+                "Positioning",
+                "Vision",
+                "Work Rate",
+                "Acceleration",
+                "Agility",
+                "Stamina"
+            ]
+        },
+        "WR-S": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Technique",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "First Touch",
+                "Passing",
+                "Off the Ball",
+                "Work Rate",
+                "Balance",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "WL-S": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Technique",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "First Touch",
+                "Passing",
+                "Off the Ball",
+                "Work Rate",
+                "Balance",
+                "Pace",
+                "Stamina"
+            ]
+        },
+        "P-A": {
+            "key": [
+                "Finishing",
+                "Anticipation",
+                "Composure",
+                "Off the Ball"
+            ],
+            "preferable": [
+                "First Touch",
+                "Heading",
+                "Technique",
+                "Decisions",
+                "Acceleration"
+            ]
+        },
+        "FN-S": {
+            "key": [
+                "Dribbling",
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Vision",
+                "Acceleration",
+                "Agility"
+            ],
+            "preferable": [
+                "Finishing",
+                "Anticipation",
+                "Flair",
+                "Teamwork",
+                "Balance"
+            ]
+        },
+        "RL-A": {
+            "key": [
+                "Finishing",
+                "Anticipation",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Off the Ball",
+                "Balance"
+            ],
+            "preferable": [
+                "First Touch",
+                "Technique",
+                "Work Rate",
+                "Acceleration",
+                "Stamina"
+            ]
+        },
+        "RR-A": {
+            "key": [
+                "Finishing",
+                "Anticipation",
+                "Composure",
+                "Concentration",
+                "Decisions",
+                "Off the Ball",
+                "Balance"
+            ],
+            "preferable": [
+                "First Touch",
+                "Technique",
+                "Work Rate",
+                "Acceleration",
+                "Stamina"
+            ]
+        },
+        "B2B-S": {
+            "key": [
+                "Passing",
+                "Tackling",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Stamina"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Finishing",
+                "First Touch",
+                "Long Shots",
+                "Technique",
+                "Aggression",
+                "Anticipation",
+                "Composure",
+                "Decisions",
+                "Positioning",
+                "Acceleration",
+                "Balance",
+                "Pace",
+                "Strength"
+            ]
+        },
+        "AP-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Anticipation",
+                "Flair",
+                "Agility"
+            ]
+        },
+        "DLP-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Teamwork",
+                "Vision"
+            ],
+            "preferable": [
+                "Anticipation",
+                "Off the Ball",
+                "Positioning",
+                "Balance"
+            ]
+        },
+        "BWM-D": {
+            "key": [
+                "Tackling",
+                "Aggression",
+                "Anticipation",
+                "Teamwork",
+                "Work Rate",
+                "Stamina"
+            ],
+            "preferable": [
+                "Marking",
+                "Bravery",
+                "Concentration",
+                "Positioning",
+                "Agility",
+                "Pace",
+                "Strength"
+            ]
+        },
+        "WBL-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Tackling",
+                "Technique",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Flair",
+                "Positioning",
+                "Agility",
+                "Balance"
+            ]
+        },
+        "WBR-A": {
+            "key": [
+                "Crossing",
+                "Dribbling",
+                "Tackling",
+                "Technique",
+                "Off the Ball",
+                "Teamwork",
+                "Work Rate",
+                "Acceleration",
+                "Pace",
+                "Stamina"
+            ],
+            "preferable": [
+                "First Touch",
+                "Marking",
+                "Passing",
+                "Anticipation",
+                "Concentration",
+                "Decisions",
+                "Flair",
+                "Positioning",
+                "Agility",
+                "Balance"
+            ]
+        },
+        "AM-S": {
+            "key": [
+                "First Touch",
+                "Long Shots",
+                "Passing",
+                "Technique",
+                "Anticipation",
+                "Decisions",
+                "Flair",
+                "Off the Ball"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Composure",
+                "Vision",
+                "Agility"
+            ]
+        },
+        "DLF-S": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork"
+            ],
+            "preferable": [
+                "Finishing",
+                "Anticipation",
+                "Flair",
+                "Vision",
+                "Balance",
+                "Strength"
+            ]
+        },
+        "AP-A": {
+            "key": [
+                "First Touch",
+                "Passing",
+                "Technique",
+                "Composure",
+                "Decisions",
+                "Off the Ball",
+                "Teamwork",
+                "Vision"
+            ],
+            "preferable": [
+                "Dribbling",
+                "Anticipation",
+                "Flair",
+                "Acceleration",
+                "Agility"
+            ]
+        }
+    },
+    "position_to_role_mapping": {
+        "GK": [
+            "GK-D",
+            "SK-D",
+            "SK-S",
+            "SK-A"
+        ],
+        "D (C)": [
+            "CD-D",
+            "CD-St",
+            "CD-Co",
+            "BPD-D",
+            "BPD-St",
+            "BPD-Co",
+            "NNCB-D",
+            "NNCB-St",
+            "NNCB-Co",
+            "Lib-S",
+            "WCB-D",
+            "WCB-S",
+            "WCB-A"
+        ],
+        "D (R)": [
+            "FBR-D",
+            "FBR-S",
+            "FBR-A",
+            "FBR-Au",
+            "NNFBR-D",
+            "IFBR-D",
+            "IWBR-A",
+            "IWBR-Au",
+            "IWBR-D",
+            "IWBR-S",
+            "WBR-A"
+        ],
+        "D (L)": [
+            "FBL-D",
+            "FBL-S",
+            "FBL-A",
+            "FBL-Au",
+            "NNFBL-D",
+            "IFBL-D",
+            "IWBL-A",
+            "IWBL-Au",
+            "IWBL-D",
+            "IWBL-S",
+            "WBL-A"
+        ],
+        "WB (R)": [
+            "IWBR-A",
+            "IWBR-Au",
+            "IWBR-D",
+            "IWBR-S",
+            "WBR-A"
+        ],
+        "WB (L)": [
+            "IWBL-A",
+            "IWBL-Au",
+            "IWBL-D",
+            "IWBL-S",
+            "WBL-A"
+        ],
+        "DM": [
+            "BWM-D",
+            "DLP-S",
+            "DM-S",
+            "RPM-S",
+            "VOL-A"
+        ],
+        "M (C)": [
+            "AP-A",
+            "AP-S",
+            "B2B-S",
+            "BWM-D",
+            "CM-S",
+            "DLP-S",
+            "RPM-S"
+        ],
+        "M (R)": [
+            "WR-S",
+            "IWR-S"
+        ],
+        "M (L)": [
+            "WL-S"
+        ],
+        "AM (R)": [
+            "AP-A",
+            "AP-S",
+            "IFR-A",
+            "IFR-S",
+            "IWR-S",
+            "RR-A",
+            "WR-S"
+        ],
+        "AM (L)": [
+            "AP-A",
+            "AP-S",
+            "IFL-A",
+            "IFL-S",
+            "RL-A",
+            "WL-S"
+        ],
+        "AM (C)": [
+            "AM-A",
+            "AM-S",
+            "AP-A",
+            "AP-S",
+            "RPM-S"
+        ],
+        "ST (C)": [
+            "AF-A",
+            "CF-S",
+            "DLF-S",
+            "FN-S",
+            "P-A",
+            "PF-S"
+        ]
+    },
+    "tactic_roles": {
+        "4-2-4 EF 424 IF HP": {
+            "GK": "SK-D",
+            "DR": "FBR-A",
+            "DCR": "BPD-D",
+            "DCL": "BPD-D",
+            "DL": "FBL-A",
+            "DMCR": "DM-S",
+            "DMCL": "DM-S",
+            "AMR": "IFR-A",
+            "AML": "IFL-S",
+            "STR": "PF-S",
+            "STL": "AF-A"
+        },
+        "4-2-3-1 Highway Star": {
+            "GK": "SK-D",
+            "DR": "FBR-A",
+            "DCR": "BPD-D",
+            "DCL": "BPD-D",
+            "DL": "FBL-A",
+            "DMCR": "DM-S",
+            "DMCL": "DM-S",
+            "AMR": "IFR-S",
+            "AMC": "AM-A",
+            "AML": "IFL-S",
+            "ST": "AF-A"
+        },
+        "4-5-1 Speed King": {
+            "GK": "SK-D",
+            "DR": "FBR-A",
+            "DCR": "BPD-D",
+            "DCL": "BPD-D",
+            "DL": "FBL-A",
+            "DMC": "DM-S",
+            "MCR": "CM-S",
+            "MCL": "CM-S",
+            "AMR": "IFR-S",
+            "AML": "IFL-S",
+            "ST": "AF-A"
+        },
+        "4-2-2-2 Silvermoon": {
+            "GK": "SK-D",
+            "DR": "FBR-A",
+            "DCR": "BPD-D",
+            "DCL": "BPD-D",
+            "DL": "FBL-A",
+            "DMCR": "VOL-A",
+            "DMCL": "RPM-S",
+            "MR": "IWR-S",
+            "AMCL": "AM-A",
+            "STC": "PF-S",
+            "STL": "AF-A"
+        },
+        "4-2-1-1-2 Perfect Strangers": {
+            "GK": "SK-D",
+            "DR": "FBR-A",
+            "DCR": "BPD-D",
+            "DCL": "BPD-D",
+            "DL": "IWBL-A",
+            "DMCR": "DM-S",
+            "DMCL": "VOL-A",
+            "ML": "WL-S",
+            "AMR": "IFR-S",
+            "STR": "PF-S",
+            "STL": "AF-A"
+        },
+        "4-2-2-2 The In Law": {
+            "GK": "SK-D",
+            "DR": "FBR-A",
+            "DCR": "BPD-D",
+            "DCL": "BPD-D",
+            "DL": "FBL-A",
+            "DMCR": "RPM-S",
+            "DMCL": "VOL-A",
+            "AMCR": "AM-A",
+            "AML": "IFL-A",
+            "STR": "AF-A",
+            "STC": "CF-S"
+        },
+        "4-3-3 Striker Force": {
+            "GK": "SK-D",
+            "DL": "IWBL-A",
+            "DCL": "BPD-D",
+            "DCR": "BPD-D",
+            "DR": "FBR-A",
+            "DMCL": "VOL-A",
+            "DMCR": "DM-S",
+            "ML": "WL-S",
+            "STL": "AF-A",
+            "STC": "CF-S",
+            "STR": "PF-S"
+        },
+        "4-2-1-3 Emerald Cucumber": {
+            "GK": "SK-D",
+            "DL": "FBL-A",
+            "DCL": "BPD-D",
+            "DCR": "BPD-D",
+            "DR": "FBR-A",
+            "DMCL": "VOL-A",
+            "DMCR": "DM-S",
+            "AMR": "IFR-S",
+            "STL": "PF-S",
+            "STC": "AF-A",
+            "STR": "PF-S"
+        },
+        "4-1-1-4 Moo Grob": {
+            "GK": "SK-D",
+            "DL": "FBL-A",
+            "DCL": "BPD-D",
+            "DCR": "BPD-D",
+            "DR": "FBR-A",
+            "DMCR": "DM-S",
+            "MCL": "CM-S",
+            "AML": "IFL-S",
+            "AMR": "IFR-S",
+            "STL": "AF-A",
+            "STR": "PF-S"
+        },
+        "4-4-2 GIN 25": {
+            "GK": "SK-D",
+            "DL": "FBL-S",
+            "DCL": "BPD-D",
+            "DCR": "BPD-D",
+            "DR": "FBR-S",
+            "ML": "WL-S",
+            "MCL": "VOL-A",
+            "MCR": "VOL-A",
+            "MR": "WR-S",
+            "STL": "AF-A",
+            "STR": "PF-S"
+        },
+        "4-1-2-1-2 Snowblind": {
+            "GK": "SK-D",
+            "DCL": "BPD-D",
+            "STR": "PF-S",
+            "STL": "AF-A",
+            "DL": "IWBL-A",
+            "DCR": "BPD-D",
+            "MCL": "B2B-S",
+            "AMR": "IFR-S",
+            "DMCR": "DM-S",
+            "DR": "FBR-A",
+            "ML": "WL-S"
+        },
+        "3-4-2-1 Amorim Speciale": {
+            "GK": "SK-S",
+            "DCR": "BPD-D",
+            "MCL": "BWM-D",
+            "DMR": "WBR-A",
+            "AMCL": "AP-S",
+            "DML": "WBL-A",
+            "STC": "AF-A",
+            "DCL": "BPD-D",
+            "AMR": "IFR-A",
+            "MCR": "DLP-S",
+            "DC": "BPD-D"
+        },
+        "3-3-3-1 Cruyff Perfect": {
+            "GK": "SK-D",
+            "DC": "BPD-D",
+            "AMR": "WR-S",
+            "MCR": "CM-S",
+            "AML": "WL-S",
+            "MCL": "RPM-S",
+            "DCL": "WCB-D",
+            "DMC": "DM-S",
+            "AMC": "AM-S",
+            "DCR": "WCB-D",
+            "STC": "DLF-S"
+        },
+        "3-3-2-2 Broken": {
+            "GK": "SK-D",
+            "STL": "AF-A",
+            "MR": "WR-S",
+            "DC": "BPD-D",
+            "ML": "WL-S",
+            "AMCR": "AM-S",
+            "AMCL": "AM-S",
+            "DCL": "WCB-D",
+            "DMC": "DM-S",
+            "DCR": "WCB-D",
+            "STR": "AF-A"
+        },
+        "3-5-2 Most Hated": {
+            "GK": "SK-S",
+            "MCR": "AP-A",
+            "DML": "WBL-A",
+            "STL": "AF-A",
+            "DC": "BPD-Co",
+            "DCL": "BPD-D",
+            "DMC": "DM-S",
+            "DCR": "BPD-D",
+            "MCL": "B2B-S",
+            "STR": "AF-A",
+            "DMR": "WBR-A"
+        }
+    },
+    "tactic_layouts": {
+        "4-1-1-4 Moo Grob": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCR"
+            ],
+            "Midfield": [
+                "MCL"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
+        },
+        "4-2-1-1-2 Perfect Strangers": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Midfield": [
+                "ML"
+            ],
+            "Attacking Midfield": [
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
+        },
+        "4-2-1-3 Emerald Cucumber": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STC",
+                "STR"
+            ]
+        },
+        "4-2-2-2 Silvermoon": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Midfield": [
+                "MR"
+            ],
+            "Attacking Midfield": [
+                "AMCL"
+            ],
+            "Strikers": [
+                "STL",
+                "STC"
+            ]
+        },
+        "4-2-2-2 The In Law": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMCR"
+            ],
+            "Strikers": [
+                "STC",
+                "STR"
+            ]
+        },
+        "4-2-3-1 Highway Star": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMC",
+                "AMR"
+            ],
+            "Strikers": [
+                "ST"
+            ]
+        },
+        "4-2-4 EF 424 IF HP": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
+        },
+        "4-3-3 Striker Force": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMCL",
+                "DMCR"
+            ],
+            "Midfield": [
+                "ML"
+            ],
+            "Strikers": [
+                "STL",
+                "STC",
+                "STR"
+            ]
+        },
+        "4-4-2 GIN 25": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Midfield": [
+                "ML",
+                "MCL",
+                "MCR",
+                "MR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ]
+        },
+        "4-5-1 Speed King": {
+            "Defense": [
+                "DL",
+                "DCL",
+                "DCR",
+                "DR"
+            ],
+            "Defensive Midfield": [
+                "DMC"
+            ],
+            "Midfield": [
+                "MCL",
+                "MCR"
+            ],
+            "Attacking Midfield": [
+                "AML",
+                "AMR"
+            ],
+            "Strikers": [
+                "ST"
+            ]
+        },
+        "4-1-2-1-2 Snowblind": {
+            "Defense": [
+                "DCL",
+                "DL",
+                "DCR",
+                "DR"
+            ],
+            "Strikers": [
+                "STR",
+                "STL"
+            ],
+            "Midfield": [
+                "MCL",
+                "ML"
+            ],
+            "Attacking Midfield": [
+                "AMR"
+            ],
+            "Defensive Midfield": [
+                "DMCR"
+            ]
+        },
+        "3-4-2-1 Amorim Speciale": {
+            "Defense": [
+                "DCR",
+                "DCL",
+                "DC"
+            ],
+            "Midfield": [
+                "MCL",
+                "MCR"
+            ],
+            "Defensive Midfield": [
+                "DMR",
+                "DML"
+            ],
+            "Attacking Midfield": [
+                "AMCL",
+                "AMR"
+            ],
+            "Strikers": [
+                "STC"
+            ]
+        },
+        "3-3-3-1 Cruyff Perfect": {
+            "Defense": [
+                "DC",
+                "DCL",
+                "DCR"
+            ],
+            "Attacking Midfield": [
+                "AMR",
+                "AML",
+                "AMC"
+            ],
+            "Midfield": [
+                "MCR",
+                "MCL"
+            ],
+            "Defensive Midfield": [
+                "DMC"
+            ],
+            "Strikers": [
+                "STC"
+            ]
+        },
+        "3-3-2-2 Broken": {
+            "Strikers": [
+                "STL",
+                "STR"
+            ],
+            "Midfield": [
+                "MR",
+                "ML"
+            ],
+            "Defense": [
+                "DC",
+                "DCL",
+                "DCR"
+            ],
+            "Attacking Midfield": [
+                "AMCR",
+                "AMCL"
+            ],
+            "Defensive Midfield": [
+                "DMC"
+            ]
+        },
+        "3-5-2 Most Hated": {
+            "Midfield": [
+                "MCR",
+                "MCL"
+            ],
+            "Defensive Midfield": [
+                "DML",
+                "DMC",
+                "DMR"
+            ],
+            "Strikers": [
+                "STL",
+                "STR"
+            ],
+            "Defense": [
+                "DC",
+                "DCL",
+                "DCR"
+            ]
+        }
+    },
+    "personalities": {
+        "Model Citizen": "good",
+        "Perfectionist": "good",
+        "Resolute": "good",
+        "Model Professional": "good",
+        "Professional": "good",
+        "Fairly Professional": "good",
+        "Spirited": "good",
+        "Driven": "good",
+        "Determined": "good",
+        "Fairly Determined": "good",
+        "Iron Willed": "good",
+        "Resilient": "good",
+        "Charismatic Leader": "good",
+        "Born Leader": "good",
+        "Leader": "good",
+        "Very Ambitious": "good",
+        "Ambitious": "good",
+        "Fairly Ambitious": "good",
+        "Fickle": "good",
+        "Mercenary": "good",
+        "Slack": "bad",
+        "Casual": "bad",
+        "Temperamental": "bad",
+        "Easily Discouraged": "bad",
+        "Low Determination": "bad",
+        "Spineless": "bad",
+        "Low Self-Belief": "bad",
+        "Unambitious": "bad",
+        "Jovial": "neutral",
+        "Light-Hearted": "neutral",
+        "Devoted": "neutral",
+        "Very Loyal": "neutral",
+        "Loyal": "neutral",
+        "Fairly Loyal": "neutral",
+        "Honest": "neutral",
+        "Sporting": "neutral",
+        "Fairly Sporting": "neutral",
+        "Unsporting": "neutral",
+        "Realist": "neutral",
+        "Balanced": "neutral"
+    }
+}

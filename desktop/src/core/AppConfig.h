@@ -19,6 +19,10 @@ public:
 
     QString filePath() const { return m_filePath; }
 
+    // Re-reads the file from disk (e.g. after the migration wizard replaced
+    // it) and re-seeds any missing sections.
+    void reload();
+
     // [Database]
     QString dbName() const;
     void setDbName(const QString &name);
