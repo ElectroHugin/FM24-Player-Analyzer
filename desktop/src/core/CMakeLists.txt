@@ -1,4 +1,17 @@
 add_library(fmcore STATIC
+    AppConfig.h
+    AppConfig.cpp
+    Attributes.h
+    Constants.h
+    Constants.cpp
+    Definitions.h
+    Definitions.cpp
+    GistRainbowLut.h
+    Player.h
+    PlayerStore.h
+    PlayerStore.cpp
+    Utils.h
+    Utils.cpp
     Version.h
     Version.cpp
 )
@@ -6,8 +19,10 @@ add_library(fmcore STATIC
 target_include_directories(fmcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 # Deliberately no Qt6::Widgets: fmcore must stay headless-testable.
+# Qt6::Gui is needed for QColor only.
 target_link_libraries(fmcore PUBLIC
     Qt6::Core
+    Qt6::Gui
     Qt6::Sql
     Qt6::Concurrent
 )
