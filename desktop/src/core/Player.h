@@ -31,10 +31,11 @@ struct Player {
     QString wageRaw;
     QString transferValueRaw;
     double transferValue = 0.0; // parsed; "Not for Sale" -> kUnbuyableValue
-    double averageRating = 0.0;
-    int heightCm = 0;
-    int leftFoot = 0;           // 1-20, 0 = unknown
-    int rightFoot = 0;
+    double averageRating = 0.0; // 0.0 = none (FM exports "-" when unrated)
+    QString heightRaw;          // e.g. "191 cm" as exported
+    int heightCm = 0;           // parsed; 0 = unknown
+    QString leftFoot;           // FM exports text: "Very Strong", "Weak", ...
+    QString rightFoot;
     QString preferredFoot;
     QString preferredSide;      // "", "Left", "Right"
     QString primaryRole;

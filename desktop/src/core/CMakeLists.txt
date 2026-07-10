@@ -4,12 +4,20 @@ add_library(fmcore STATIC
     Attributes.h
     Constants.h
     Constants.cpp
+    Database.h
+    Database.cpp
     Definitions.h
     Definitions.cpp
+    DwrsEngine.h
+    DwrsEngine.cpp
     GistRainbowLut.h
+    LegacyMigrator.h
+    LegacyMigrator.cpp
     Player.h
     PlayerStore.h
     PlayerStore.cpp
+    TalentEngine.h
+    TalentEngine.cpp
     Utils.h
     Utils.cpp
     Version.h
