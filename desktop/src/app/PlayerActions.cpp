@@ -1,6 +1,7 @@
 #include "PlayerActions.h"
 
 #include "AppContext.h"
+#include "widgets/CellStyleDelegate.h"
 #include "widgets/PlayerTableModel.h"
 
 #include <QCoreApplication>
@@ -126,6 +127,7 @@ void showContextMenu(AppContext &context, QWidget *parent, const QString &uid,
 void attachToView(AppContext &context, QTableView *view, PlayerFilterProxy *proxy,
                   int ignoreDoubleClickColumn)
 {
+    CellStyleDelegate::install(view); // keep model DWRS/attribute colors visible
     view->setContextMenuPolicy(Qt::CustomContextMenu);
     QObject::connect(view, &QTableView::customContextMenuRequested, view,
                      [&context, view, proxy](const QPoint &pos) {
@@ -150,6 +152,7 @@ void attachToView(AppContext &context, QTableView *view, PlayerFilterProxy *prox
 void attachToTableWidget(AppContext &context, QTableWidget *table, int uidColumn,
                          bool doubleClickOpensProfile)
 {
+    CellStyleDelegate::install(table); // keep model DWRS/attribute colors visible
     const auto uidForRow = [table, uidColumn](int row) {
         const QTableWidgetItem *item = table->item(row, uidColumn);
         return item ? item->data(Qt::UserRole).toString() : QString();

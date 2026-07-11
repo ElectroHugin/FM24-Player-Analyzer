@@ -1,6 +1,7 @@
 #include "PlayerComparisonPage.h"
 
 #include "../AppContext.h"
+#include "../widgets/CellStyleDelegate.h"
 #include "../widgets/Charts.h"
 #include "core/Constants.h"
 #include "core/Utils.h"
@@ -155,6 +156,7 @@ PlayerComparisonPage::PlayerComparisonPage(AppContext &context, ThemeManager &th
     m_detailTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_detailTable->setAlternatingRowColors(true);
     m_detailTable->setMinimumHeight(520);
+    CellStyleDelegate::install(m_detailTable);
     layout->addWidget(m_detailTable);
     layout->addStretch(1);
 

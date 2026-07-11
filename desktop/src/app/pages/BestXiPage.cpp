@@ -327,8 +327,13 @@ void BestXiPage::fillSurplusTable(QTableWidget *table,
                        new QTableWidgetItem(bestRole.isEmpty()
                                                 ? QStringLiteral("–")
                                                 : roleNames.value(bestRole, bestRole)));
-        table->setItem(row, column++,
-                       new NumericItem(QStringLiteral("%1%").arg(qRound(bestDwrs)), bestDwrs));
+        auto *dwrsItem = new NumericItem(QStringLiteral("%1%").arg(qRound(bestDwrs)), bestDwrs);
+        if (bestDwrs > 0.0) {
+            const CellStyle dwrsStyle = dwrsCellStyle(bestDwrs);
+            dwrsItem->setBackground(dwrsStyle.background);
+            dwrsItem->setForeground(dwrsStyle.text);
+        }
+        table->setItem(row, column++, dwrsItem);
         if (includeTalent) {
             const double ageCap =
                 TalentEngine::ageCapForPlayer(*player, outfielderCap, goalkeeperCap);

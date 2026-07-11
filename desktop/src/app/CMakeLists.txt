@@ -59,6 +59,8 @@ add_executable(fmplayeranalyzer WIN32
     pages/TransfersPage.cpp
     theming/ThemeManager.h
     theming/ThemeManager.cpp
+    widgets/CellStyleDelegate.h
+    widgets/CellStyleDelegate.cpp
     widgets/Charts.h
     widgets/Charts.cpp
     widgets/PersonalityFilterWidget.h

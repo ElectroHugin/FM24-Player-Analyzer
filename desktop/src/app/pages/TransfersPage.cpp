@@ -211,6 +211,11 @@ void TransfersPage::fillTable(Section &section, const std::vector<const Player *
             bestRole.isEmpty() ? QStringLiteral("–")
                                : QStringLiteral("%1% (%2)").arg(qRound(bestDwrs)).arg(bestRole));
         dwrsItem->setFlags(dwrsItem->flags() & ~Qt::ItemIsEditable);
+        if (bestDwrs > 0.0) {
+            const CellStyle dwrsStyle = dwrsCellStyle(bestDwrs);
+            dwrsItem->setBackground(dwrsStyle.background);
+            dwrsItem->setForeground(dwrsStyle.text);
+        }
         table->setItem(row, ColBestDwrs, dwrsItem);
 
         if (youth) {

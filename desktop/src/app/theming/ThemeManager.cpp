@@ -214,12 +214,14 @@ QListWidget::item, QListView::item { padding: 6px 10px; border-radius: 6px; }
 QListWidget::item:selected, QListView::item:selected {
     background-color: %ACCENTSUBTLE%; color: %FG%; }
 QListWidget::item:hover:!selected, QListView::item:hover:!selected { background-color: %HOVER%; }
+/* Cell painting (background/text/padding) is done by CellStyleDelegate so the
+   model's DWRS/attribute colors survive; do NOT add a QTableView::item rule —
+   it makes the stylesheet own item painting and drops those colors. */
 QTableView, QTreeView {
     background-color: %BG%; alternate-background-color: %ROWALT%; color: %FG%;
     border: 1px solid %BORDER%; border-radius: 8px;
     gridline-color: transparent;
     selection-background-color: %ACCENTSUBTLE%; selection-color: %FG%; }
-QTableView::item { padding: 5px 8px; border: none; }
 QHeaderView { background: transparent; }
 QHeaderView::section {
     background-color: %BG%; color: %MUTED%; font-weight: 600;

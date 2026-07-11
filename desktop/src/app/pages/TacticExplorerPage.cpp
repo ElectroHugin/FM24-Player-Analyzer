@@ -1,6 +1,7 @@
 #include "TacticExplorerPage.h"
 
 #include "../AppContext.h"
+#include "../widgets/CellStyleDelegate.h"
 #include "PageHelpers.h"
 #include "core/Utils.h"
 
@@ -123,6 +124,7 @@ TacticExplorerPage::TacticExplorerPage(AppContext &context, QWidget *parent)
     m_rankTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_rankTable->setAlternatingRowColors(true);
     m_rankTable->setMinimumHeight(320);
+    CellStyleDelegate::install(m_rankTable);
     layout->addWidget(m_rankTable);
     auto *legend = new QLabel(
         tr("GK/DEF/DM/MID/AM/ST = Median-DWRS je Mannschaftsteil. Leer = Slots, die die "
@@ -163,6 +165,7 @@ TacticExplorerPage::TacticExplorerPage(AppContext &context, QWidget *parent)
     m_depthTable->setAlternatingRowColors(true);
     m_depthTable->setSortingEnabled(true);
     m_depthTable->setMinimumHeight(280);
+    CellStyleDelegate::install(m_depthTable);
     layout->addWidget(m_depthTable);
     layout->addStretch(1);
 
