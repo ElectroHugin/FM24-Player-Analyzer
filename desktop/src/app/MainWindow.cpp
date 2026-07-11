@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "AppContext.h"
+#include "pages/DashboardPage.h"
 #include "pages/PlaceholderPage.h"
 #include "pages/SettingsPage.h"
 #include "theming/ThemeManager.h"
@@ -81,7 +82,6 @@ const QList<MenuEntry> &globalMenu()
 QString milestoneFor(const QString &pageId)
 {
     static const QHash<QString, QString> milestones = {
-        {QStringLiteral("dashboard"), QStringLiteral("M7")},
         {QStringLiteral("assign_roles"), QStringLiteral("M8")},
         {QStringLiteral("role_analysis"), QStringLiteral("M8")},
         {QStringLiteral("squad_matrix"), QStringLiteral("M8")},
@@ -244,13 +244,15 @@ void MainWindow::rebuildMenu()
 
 PageBase *MainWindow::createPage(const QString &pageId)
 {
+    if (pageId == QLatin1String("dashboard"))
+        return new DashboardPage(m_context, m_theme, this);
     if (pageId == QLatin1String("settings")) {
         auto *page = new SettingsPage(m_context, m_theme, this);
         connect(page, &SettingsPage::recalcRequested, this, &MainWindow::startDwrsRecalc);
         return page;
     }
 
-    // Everything else arrives in M7-M11.
+    // Everything else arrives in M8-M11.
     QString label = pageId;
     for (const auto &entry : clubMenu() + nationalMenu() + globalMenu()) {
         if (entry.pageId == pageId) {

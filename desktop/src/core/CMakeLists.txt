@@ -13,6 +13,8 @@ add_library(fmcore STATIC
     GapAnalysis.h
     GapAnalysis.cpp
     GistRainbowLut.h
+    HtmlImporter.h
+    HtmlImporter.cpp
     LegacyMigrator.h
     LegacyMigrator.cpp
     Player.h
@@ -22,6 +24,8 @@ add_library(fmcore STATIC
     RatingsUpdater.cpp
     RoleAnalysis.h
     RoleAnalysis.cpp
+    RoleAssignment.h
+    RoleAssignment.cpp
     SquadBuilder.h
     SquadBuilder.cpp
     TacticExplorer.h

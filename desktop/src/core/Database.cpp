@@ -417,6 +417,49 @@ bool Database::deletePlayers(const QList<int> &playerIds)
     return m_db.commit();
 }
 
+bool Database::renamePlayerUid(int playerId, const QString &newUid)
+{
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral("UPDATE players SET uid = ? WHERE id = ?"));
+    query.bindValue(0, newUid);
+    query.bindValue(1, playerId);
+    if (!query.exec()) {
+        m_error = query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool Database::mergePlayerInto(int badPlayerId, int goodPlayerId)
+{
+    if (badPlayerId == goodPlayerId)
+        return true;
+    if (!m_db.transaction()) {
+        m_error = m_db.lastError().text();
+        return false;
+    }
+    // OR IGNORE skips history rows that would collide on (player, role, ts);
+    // leftovers under the bad id are removed with the player row (CASCADE).
+    QSqlQuery query(m_db);
+    query.prepare(QStringLiteral(
+        "UPDATE OR IGNORE dwrs_history SET player_id = ? WHERE player_id = ?"));
+    query.bindValue(0, goodPlayerId);
+    query.bindValue(1, badPlayerId);
+    if (!query.exec()) {
+        m_error = query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
+    query.prepare(QStringLiteral("DELETE FROM players WHERE id = ?"));
+    query.bindValue(0, badPlayerId);
+    if (!query.exec()) {
+        m_error = query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
+    return m_db.commit();
+}
+
 bool Database::appendDwrsRatings(const std::vector<DwrsEntry> &entries)
 {
     if (entries.empty())

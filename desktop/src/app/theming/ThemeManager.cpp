@@ -61,6 +61,11 @@ QString ThemeManager::buildStyleSheet() const
     // Hover/pressed shades derived from the secondary background.
     const QString hover = m_secondaryBackground.lighter(m_mode == QLatin1String("night") ? 130 : 96).name();
     const QString border = m_secondaryBackground.lighter(m_mode == QLatin1String("night") ? 160 : 88).name();
+    // Muted text for captions/footnotes.
+    const QString muted = QStringLiteral("rgba(%1,%2,%3,0.65)")
+                              .arg(m_text.red())
+                              .arg(m_text.green())
+                              .arg(m_text.blue());
 
     return QStringLiteral(R"(
 QMainWindow, QDialog, QWizard { background-color: %1; color: %3; }
@@ -97,8 +102,13 @@ QScrollBar::handle:vertical { background: %6; border-radius: 5px; min-height: 24
 QScrollBar:horizontal { background: %1; height: 12px; }
 QScrollBar::handle:horizontal { background: %6; border-radius: 5px; min-width: 24px; }
 QToolTip { background-color: %2; color: %3; border: 1px solid %6; }
+QFrame#kpiTile { background-color: %2; border: 1px solid %6; border-radius: 8px; }
+QLabel#kpiValue { font-size: 20pt; font-weight: 600; color: %4; }
+QLabel#kpiCaption { color: %8; }
+QFrame#suggestionCard { background-color: %2; border: 1px solid %6; border-radius: 8px; }
+QLabel#sectionTitle { font-size: 12pt; font-weight: 600; }
 )")
-        .arg(bg, bg2, fg, accent, accentText, border, hover);
+        .arg(bg, bg2, fg, accent, accentText, border, hover, muted);
 }
 
 } // namespace fm

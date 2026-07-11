@@ -10,12 +10,16 @@ add_executable(fmplayeranalyzer WIN32
     MainWindow.cpp
     MigrationWizard.h
     MigrationWizard.cpp
+    pages/DashboardPage.h
+    pages/DashboardPage.cpp
     pages/PageBase.h
     pages/PlaceholderPage.h
     pages/SettingsPage.h
     pages/SettingsPage.cpp
     theming/ThemeManager.h
     theming/ThemeManager.cpp
+    widgets/StrengthGridWidget.h
+    widgets/StrengthGridWidget.cpp
     resources/app.qrc
 )
 

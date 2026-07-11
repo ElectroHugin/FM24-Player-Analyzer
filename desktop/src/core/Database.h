@@ -54,6 +54,15 @@ public:
 
     bool deletePlayers(const QList<int> &playerIds);
 
+    // Gives an existing player a new uid (ID unification: the DB row keeps
+    // its id, history and app-managed columns).
+    bool renamePlayerUid(int playerId, const QString &newUid);
+
+    // Merges a corrupted duplicate into the real record: moves the DWRS
+    // history (skipping rows that would collide) and deletes the bad player.
+    // App-managed field merging happens at the Player level in the importer.
+    bool mergePlayerInto(int badPlayerId, int goodPlayerId);
+
     // --- DWRS history ---
     bool appendDwrsRatings(const std::vector<DwrsEntry> &entries);
     LatestRatings latestDwrsRatings();
