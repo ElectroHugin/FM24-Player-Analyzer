@@ -1,6 +1,7 @@
 #include "NationalDashboardPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../theming/ThemeManager.h"
 #include "../widgets/StrengthGridWidget.h"
 #include "PageHelpers.h"
@@ -180,6 +181,7 @@ NationalDashboardPage::NationalDashboardPage(AppContext &context, ThemeManager &
     m_squadTable->setSortingEnabled(true);
     m_squadTable->horizontalHeader()->setStretchLastSection(true);
     m_squadTable->setMinimumHeight(430);
+    PlayerActions::attachToTableWidget(m_context, m_squadTable);
     tableColumn->addWidget(m_squadTableTitle);
     tableColumn->addWidget(m_squadTable, 1);
     squadRow->addLayout(tableColumn, 1);
@@ -296,7 +298,9 @@ void NationalDashboardPage::rebuildAnalysis()
     m_squadTable->setRowCount(static_cast<int>(squadPlayers.size()));
     int row = 0;
     for (const Player *player : squadPlayers) {
-        m_squadTable->setItem(row, 0, new QTableWidgetItem(player->name));
+        auto *nameItem = new QTableWidgetItem(player->name);
+        nameItem->setData(Qt::UserRole, player->uid);
+        m_squadTable->setItem(row, 0, nameItem);
         m_squadTable->setItem(row, 1,
                               new NumericItem(QString::number(player->age), player->age));
         m_squadTable->setItem(

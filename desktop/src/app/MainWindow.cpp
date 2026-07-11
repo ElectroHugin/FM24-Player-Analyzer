@@ -150,6 +150,7 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
     updateDbLabel();
     updateHeader();
 
+    connect(&m_context, &AppContext::navigationRequested, this, &MainWindow::navigateTo);
     connect(&m_context, &AppContext::databaseChanged, this, [this](const QString &) {
         updateDbLabel();
         updateHeader();
@@ -190,19 +191,24 @@ void MainWindow::buildSidebar()
 {
     auto *sidebar = new QFrame(this);
     sidebar->setObjectName(QStringLiteral("sidebar"));
-    sidebar->setFixedWidth(240);
+    sidebar->setFixedWidth(256);
 
     auto *layout = new QVBoxLayout(sidebar);
-    layout->setContentsMargins(10, 12, 10, 12);
+    layout->setContentsMargins(10, 14, 10, 12);
     layout->setSpacing(8);
 
-    auto *title = new QLabel(QStringLiteral("<b>FM24 Player Analyzer</b>"), sidebar);
+    auto *title = new QLabel(
+        QStringLiteral("<span style='font-size:12pt; font-weight:600;'>⚽ FM24 Player "
+                       "Analyzer</span>"),
+        sidebar);
     title->setAlignment(Qt::AlignCenter);
     layout->addWidget(title);
 
     m_dbLabel = new QLabel(sidebar);
     m_dbLabel->setAlignment(Qt::AlignCenter);
+    m_dbLabel->setObjectName(QStringLiteral("kpiCaption"));
     layout->addWidget(m_dbLabel);
+    layout->addSpacing(4);
 
     m_modeCombo = new QComboBox(sidebar);
     m_modeCombo->addItem(tr("🏟 Vereins-Management"), QStringLiteral("club"));
@@ -247,6 +253,9 @@ void MainWindow::buildSidebar()
             });
 
     m_menu = new QListWidget(sidebar);
+    m_menu->setCursor(Qt::PointingHandCursor);
+    m_menu->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_menu->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     layout->addWidget(m_menu, 1);
     connect(m_menu, &QListWidget::currentItemChanged, this,
             [this](QListWidgetItem *current, QListWidgetItem *) {
@@ -278,7 +287,8 @@ void MainWindow::rebuildMenu()
         item->setFlags(Qt::NoItemFlags);
         QFont font = item->font();
         font.setBold(true);
-        font.setPointSizeF(font.pointSizeF() * 0.85);
+        font.setPointSizeF(font.pointSizeF() * 0.8);
+        font.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
         item->setFont(font);
     };
     const auto addEntries = [this](const QList<MenuEntry> &entries) {

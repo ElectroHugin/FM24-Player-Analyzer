@@ -1,6 +1,7 @@
 #include "SquadMatrixPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../widgets/PersonalityFilterWidget.h"
 #include "../widgets/PlayerTableModel.h"
 #include "core/TalentEngine.h"
@@ -248,6 +249,10 @@ void SquadMatrixPage::buildSection(TableSection *section, const QString &title, 
     connect(exportButton, &QPushButton::clicked, this,
             [this, section] { exportCsv(*section); });
 
+    // Right-click menu + double-click profile on every table; the scouted
+    // star column keeps its single-click shortlist toggle.
+    PlayerActions::attachToView(m_context, section->table, section->proxy,
+                                scouted ? 0 : -1);
     if (scouted) {
         connect(section->table, &QTableView::clicked, this,
                 [this, section](const QModelIndex &index) {

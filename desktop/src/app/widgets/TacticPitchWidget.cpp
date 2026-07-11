@@ -3,6 +3,8 @@
 #include "../theming/ThemeManager.h"
 #include "core/Constants.h"
 
+#include <QContextMenuEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -63,6 +65,7 @@ TacticPitchWidget::TacticPitchWidget(ThemeManager &theme, QWidget *parent)
     QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
+    setMouseTracking(true); // pointing-hand cursor over player boxes
     connect(&m_theme, &ThemeManager::themeChanged, this, qOverload<>(&QWidget::update));
 }
 
@@ -160,7 +163,9 @@ void TacticPitchWidget::paintEvent(QPaintEvent *)
     smallFont.setPointSizeF(font().pointSizeF() * 0.82);
     smallFont.setItalic(true);
 
+    m_boxRects.clear();
     const auto drawBox = [&](const QRectF &box, const QString &slot) {
+        m_boxRects.insert(slot, box);
         const XiCell cell = m_team.value(slot);
         QPainterPath path;
         path.addRoundedRect(box, 6, 6);
@@ -224,6 +229,43 @@ void TacticPitchWidget::paintEvent(QPaintEvent *)
                             pitch.width() - 2 * padding, cellH);
         drawBox(gkRect, QStringLiteral("GK"));
     }
+}
+
+QString TacticPitchWidget::uidAt(const QPoint &pos) const
+{
+    for (auto it = m_boxRects.constBegin(); it != m_boxRects.constEnd(); ++it) {
+        if (it.value().contains(pos))
+            return m_team.value(it.key()).playerUid;
+    }
+    return QString();
+}
+
+void TacticPitchWidget::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    const QString uid = uidAt(event->pos());
+    if (!uid.isEmpty()) {
+        emit playerDoubleClicked(uid);
+        event->accept();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+void TacticPitchWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    setCursor(uidAt(event->pos()).isEmpty() ? Qt::ArrowCursor : Qt::PointingHandCursor);
+    QWidget::mouseMoveEvent(event);
+}
+
+void TacticPitchWidget::contextMenuEvent(QContextMenuEvent *event)
+{
+    const QString uid = uidAt(event->pos());
+    if (!uid.isEmpty()) {
+        emit playerContextMenuRequested(uid, event->globalPos());
+        event->accept();
+        return;
+    }
+    QWidget::contextMenuEvent(event);
 }
 
 } // namespace fm

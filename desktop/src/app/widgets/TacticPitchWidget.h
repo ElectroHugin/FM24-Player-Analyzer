@@ -35,14 +35,25 @@ public:
 
     void clearData();
 
+signals:
+    // Player interactions (M13): boxes are clickable.
+    void playerDoubleClicked(const QString &uid);
+    void playerContextMenuRequested(const QString &uid, const QPoint &globalPos);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth(int width) const override { return width * 105 / 68; }
     QSize sizeHint() const override { return {480, 480 * 105 / 68}; }
 
 private:
+    QString uidAt(const QPoint &pos) const;
+
     ThemeManager &m_theme;
+    QHash<QString, QRectF> m_boxRects; // slot -> painted rect (for hit tests)
     QHash<QString, XiCell> m_team;
     QHash<QString, QString> m_positions;
     QHash<QString, QStringList> m_layout;

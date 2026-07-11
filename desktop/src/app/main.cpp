@@ -1,5 +1,9 @@
 #include <QApplication>
+#include <QFont>
+#include <QIcon>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QTimer>
 
 #include "AppContext.h"
@@ -8,12 +12,47 @@
 #include "theming/ThemeManager.h"
 #include "core/Version.h"
 
+namespace {
+
+// Programmatic app icon: a mini pitch with center circle — no asset files.
+QIcon makeAppIcon()
+{
+    QIcon icon;
+    for (const int size : {16, 24, 32, 48, 64, 128, 256}) {
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const qreal s = size;
+        painter.setBrush(QColor(0x2a, 0x5d, 0x34));
+        painter.setPen(Qt::NoPen);
+        painter.drawRoundedRect(QRectF(0, 0, s, s), s * 0.2, s * 0.2);
+        QPen line(QColor(255, 255, 255, 220), qMax<qreal>(1.0, s * 0.05));
+        painter.setPen(line);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(QPointF(s * 0.08, s * 0.5), QPointF(s * 0.92, s * 0.5));
+        painter.drawEllipse(QPointF(s * 0.5, s * 0.5), s * 0.18, s * 0.18);
+        painter.drawRect(QRectF(s * 0.3, 0, s * 0.4, s * 0.16));
+        painter.drawRect(QRectF(s * 0.3, s * 0.84, s * 0.4, s * 0.16));
+        painter.end();
+        icon.addPixmap(pixmap);
+    }
+    return icon;
+}
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName(fm::appName());
     QApplication::setApplicationVersion(fm::appVersion());
     QApplication::setOrganizationName(QStringLiteral("FM24PlayerAnalyzer"));
+    QApplication::setWindowIcon(makeAppIcon());
+
+    QFont appFont(QStringLiteral("Segoe UI"), 10);
+    appFont.setHintingPreference(QFont::PreferFullHinting);
+    app.setFont(appFont);
 
     fm::AppContext context;
 

@@ -69,6 +69,30 @@ public:
     QString pendingProfileUid() const { return m_pendingProfileUid; }
     void setPendingProfileUid(const QString &uid) { m_pendingProfileUid = uid; }
 
+    // Same one-shot handoff for the edit page and the comparison page
+    // (player context menus).
+    QString takePendingEditUid()
+    {
+        const QString uid = m_pendingEditUid;
+        m_pendingEditUid.clear();
+        return uid;
+    }
+    void setPendingEditUid(const QString &uid) { m_pendingEditUid = uid; }
+    QStringList takePendingComparisonUids()
+    {
+        const QStringList uids = m_pendingComparisonUids;
+        m_pendingComparisonUids.clear();
+        return uids;
+    }
+    void addPendingComparisonUid(const QString &uid)
+    {
+        if (!m_pendingComparisonUids.contains(uid))
+            m_pendingComparisonUids.append(uid);
+    }
+
+    // Pages/menus ask the main window to switch pages through this.
+    void requestNavigation(const QString &pageId) { emit navigationRequested(pageId); }
+
     // Sidebar management mode (club vs. national). Session state like the
     // legacy 'management_mode'; pages shared between both modes scope their
     // player pool with this.
@@ -101,6 +125,8 @@ signals:
     void dataChanged();
     // A different database file was opened.
     void databaseChanged(const QString &dbName);
+    // Switch to the given page (handled by MainWindow).
+    void navigationRequested(const QString &pageId);
 
 private:
     AppPaths m_paths;
@@ -114,6 +140,8 @@ private:
     RoleRatings m_ratings;
     LatestRatings m_latestRatings;
     QString m_pendingProfileUid;
+    QString m_pendingEditUid;
+    QStringList m_pendingComparisonUids;
     bool m_nationalUiMode = false;
 };
 

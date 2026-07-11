@@ -12,6 +12,8 @@ add_executable(fmplayeranalyzer WIN32
     MigrationWizard.cpp
     ImportRunner.h
     ImportRunner.cpp
+    PlayerActions.h
+    PlayerActions.cpp
     RecalcHelper.h
     RecalcHelper.cpp
     pages/AssignRolesPage.h

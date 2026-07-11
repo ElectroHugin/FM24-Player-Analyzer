@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <utility>
 
 namespace fm {
 
@@ -183,6 +184,23 @@ void PlayerComparisonPage::refresh()
         && m_poolCombo->currentData().toString() == QLatin1String("club")) {
         m_poolCombo->setCurrentIndex(1);
     }
+
+    // One-shot handoff from the player context menu ("Zum Vergleich"): make
+    // sure the player is reachable — pool "Alle Spieler", and a role he has.
+    const QStringList pending = m_context.takePendingComparisonUids();
+    if (!pending.isEmpty()) {
+        m_pendingCheck += pending;
+        m_poolCombo->setCurrentIndex(m_poolCombo->findData(QStringLiteral("all")));
+        if (const Player *player = m_context.store().findByUid(pending.first())) {
+            const QString currentRole = m_roleCombo->currentData().toString();
+            if (!player->assignedRoles.contains(currentRole)
+                && !player->assignedRoles.isEmpty()) {
+                // Switch to "Alle Rollen" so every role is selectable, then
+                // pick the player's first assigned role after the combo fill.
+                m_tacticCombo->setCurrentIndex(0);
+            }
+        }
+    }
     const QString previous = m_tacticCombo->currentData().toString();
     const bool hadSelection = m_tacticCombo->count() > 0;
     QStringList tactics = m_context.definitions().tacticNames();
@@ -207,7 +225,15 @@ void PlayerComparisonPage::refresh()
 void PlayerComparisonPage::rebuildRoleCombo()
 {
     m_updating = true;
-    const QString previous = m_roleCombo->currentData().toString();
+    QString previous = m_roleCombo->currentData().toString();
+    // Pending handoff: prefer a role the handed-over player actually has.
+    if (!m_pendingCheck.isEmpty()) {
+        if (const Player *player = m_context.store().findByUid(m_pendingCheck.first())) {
+            if (!player->assignedRoles.contains(previous)
+                && !player->assignedRoles.isEmpty())
+                previous = player->assignedRoles.first();
+        }
+    }
     const QString tactic = m_tacticCombo->currentData().toString();
     QStringList roles;
     if (tactic.isEmpty()) {
@@ -237,7 +263,10 @@ void PlayerComparisonPage::rebuildPlayerList()
 {
     m_updating = true;
     const QStringList previouslySelected = selectedUids();
-    const QSet<QString> checked(previouslySelected.cbegin(), previouslySelected.cend());
+    QSet<QString> checked(previouslySelected.cbegin(), previouslySelected.cend());
+    for (const QString &uid : std::as_const(m_pendingCheck))
+        checked.insert(uid);
+    m_pendingCheck.clear();
     m_playerList->clear();
 
     const QString role = m_roleCombo->currentData().toString();

@@ -1,6 +1,7 @@
 #include "NationalSquadMatrixPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../widgets/PersonalityFilterWidget.h"
 #include "../widgets/PlayerTableModel.h"
 #include "PageHelpers.h"
@@ -95,6 +96,7 @@ void NationalSquadMatrixPage::buildSection(Section *section, const QString &titl
     layout->addWidget(section->table);
     connect(section->search, &QLineEdit::textChanged, this,
             [proxy = section->proxy](const QString &text) { proxy->setNameFilter(text); });
+    PlayerActions::attachToView(m_context, section->table, section->proxy);
 }
 
 QStringList NationalSquadMatrixPage::selectedRoles() const

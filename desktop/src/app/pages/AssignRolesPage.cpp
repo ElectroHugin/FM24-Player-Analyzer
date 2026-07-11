@@ -1,6 +1,7 @@
 #include "AssignRolesPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../RecalcHelper.h"
 #include "../widgets/PlayerTableModel.h"
 #include "core/Utils.h"
@@ -110,6 +111,7 @@ AssignRolesPage::AssignRolesPage(AppContext &context, QWidget *parent)
     m_table->setAlternatingRowColors(true);
     m_table->verticalHeader()->setVisible(false);
     m_table->horizontalHeader()->setStretchLastSection(true);
+    PlayerActions::attachToView(m_context, m_table, m_proxy);
     splitter->addWidget(m_table);
 
     auto *editorPanel = new QWidget(splitter);

@@ -1,6 +1,7 @@
 #include "TransfersPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "core/Utils.h"
 
 #include <QComboBox>
@@ -105,6 +106,8 @@ void TransfersPage::buildSectionUi(Section *section, const QString &title, bool 
     section->table->setSelectionBehavior(QAbstractItemView::SelectRows);
     section->table->horizontalHeader()->setStretchLastSection(true);
     section->table->setMinimumHeight(280);
+    // Context menu only: double-click must keep editing the new-club cell.
+    PlayerActions::attachToTableWidget(m_context, section->table, ColName, false);
     layout->addWidget(section->table);
 
     auto *buttonRow = new QHBoxLayout;

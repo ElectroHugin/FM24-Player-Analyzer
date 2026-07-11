@@ -1,6 +1,7 @@
 #include "NationalBestXiPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../widgets/TacticPitchWidget.h"
 #include "PageHelpers.h"
 
@@ -98,6 +99,15 @@ NationalBestXiPage::NationalBestXiPage(AppContext &context, ThemeManager &theme,
         if (!m_updating)
             rebuild();
     });
+
+    for (TacticPitchWidget *pitch : {m_xiPitch, m_bTeamPitch}) {
+        connect(pitch, &TacticPitchWidget::playerDoubleClicked, this,
+                [this](const QString &uid) { PlayerActions::openProfile(m_context, uid); });
+        connect(pitch, &TacticPitchWidget::playerContextMenuRequested, this,
+                [this](const QString &uid, const QPoint &globalPos) {
+                    PlayerActions::showContextMenu(m_context, this, uid, globalPos);
+                });
+    }
 }
 
 void NationalBestXiPage::refresh()

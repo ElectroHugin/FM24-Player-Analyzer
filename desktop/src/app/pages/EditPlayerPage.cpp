@@ -148,6 +148,10 @@ const Player *EditPlayerPage::currentPlayer() const
 
 void EditPlayerPage::refresh()
 {
+    // One-shot handoff from the player context menu ("Bearbeiten").
+    const QString pending = m_context.takePendingEditUid();
+    if (!pending.isEmpty())
+        m_currentUid = pending;
     rebuildClubCombo();
     runSearch();
     showEditor();

@@ -1,6 +1,7 @@
 #include "DashboardPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../theming/ThemeManager.h"
 #include "../widgets/StrengthGridWidget.h"
 #include "core/Database.h"
@@ -327,6 +328,7 @@ QWidget *DashboardPage::buildSquadSection(QWidget *parent)
     m_clubTable->setSortingEnabled(true);
     m_clubTable->horizontalHeader()->setStretchLastSection(true);
     m_clubTable->setMinimumHeight(430);
+    PlayerActions::attachToTableWidget(m_context, m_clubTable);
     tableColumn->addWidget(m_clubTableTitle);
     tableColumn->addWidget(m_clubTable, 1);
     layout->addLayout(tableColumn, 1);
@@ -568,7 +570,9 @@ void DashboardPage::updateClubTable(const std::vector<const Player *> &clubPlaye
     m_clubTable->setRowCount(static_cast<int>(clubPlayers.size()));
     int row = 0;
     for (const Player *player : clubPlayers) {
-        m_clubTable->setItem(row, 0, new QTableWidgetItem(player->name));
+        auto *nameItem = new QTableWidgetItem(player->name);
+        nameItem->setData(Qt::UserRole, player->uid);
+        m_clubTable->setItem(row, 0, nameItem);
         m_clubTable->setItem(row, 1,
                              new NumericItem(QString::number(player->age), player->age));
         m_clubTable->setItem(row, 2, new QTableWidgetItem(player->positionRaw));

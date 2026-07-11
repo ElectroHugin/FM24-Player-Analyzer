@@ -1,6 +1,7 @@
 #include "GapAnalysisPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../widgets/TacticPitchWidget.h"
 #include "PageHelpers.h"
 #include "core/GapAnalysis.h"
@@ -139,6 +140,12 @@ QWidget *GapAnalysisPage::buildTeamTab(TeamView *view)
     view->pitch->setVisible(false);
     pitchLayout->addWidget(view->pitch, 0, Qt::AlignHCenter);
     connect(pitchBox, &QGroupBox::toggled, view->pitch, &QWidget::setVisible);
+    connect(view->pitch, &TacticPitchWidget::playerDoubleClicked, this,
+            [this](const QString &uid) { PlayerActions::openProfile(m_context, uid); });
+    connect(view->pitch, &TacticPitchWidget::playerContextMenuRequested, this,
+            [this](const QString &uid, const QPoint &globalPos) {
+                PlayerActions::showContextMenu(m_context, this, uid, globalPos);
+            });
     layout->addWidget(pitchBox);
     layout->addStretch(1);
     return tab;

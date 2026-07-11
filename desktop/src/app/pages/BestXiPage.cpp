@@ -1,6 +1,7 @@
 #include "BestXiPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../widgets/TacticPitchWidget.h"
 #include "PageHelpers.h"
 #include "core/TalentEngine.h"
@@ -186,6 +187,19 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
         if (!m_updating)
             rebuild();
     });
+
+    // Player boxes on the pitches are interactive (M13).
+    for (TacticPitchWidget *pitch :
+         {m_xiPitch, m_bTeamPitch, m_secondXiPitch, m_youthXiPitch}) {
+        connect(pitch, &TacticPitchWidget::playerDoubleClicked, this,
+                [this](const QString &uid) { PlayerActions::openProfile(m_context, uid); });
+        connect(pitch, &TacticPitchWidget::playerContextMenuRequested, this,
+                [this](const QString &uid, const QPoint &globalPos) {
+                    PlayerActions::showContextMenu(m_context, this, uid, globalPos);
+                });
+    }
+    PlayerActions::attachToTableWidget(m_context, m_loanTable);
+    PlayerActions::attachToTableWidget(m_context, m_sellTable);
 }
 
 void BestXiPage::refresh()
@@ -303,7 +317,9 @@ void BestXiPage::fillSurplusTable(QTableWidget *table,
         }
 
         int column = 0;
-        table->setItem(row, column++, new QTableWidgetItem(player->name));
+        auto *nameItem = new QTableWidgetItem(player->name);
+        nameItem->setData(Qt::UserRole, player->uid);
+        table->setItem(row, column++, nameItem);
         table->setItem(row, column++,
                        new NumericItem(QString::number(player->age), player->age));
         table->setItem(row, column++, new QTableWidgetItem(player->positionRaw));

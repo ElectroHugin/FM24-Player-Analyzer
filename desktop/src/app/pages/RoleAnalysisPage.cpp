@@ -1,6 +1,7 @@
 #include "RoleAnalysisPage.h"
 
 #include "../AppContext.h"
+#include "../PlayerActions.h"
 #include "../widgets/PersonalityFilterWidget.h"
 #include "../widgets/PlayerTableModel.h"
 #include "core/RoleAnalysis.h"
@@ -141,6 +142,7 @@ QWidget *RoleAnalysisPage::buildGroupTab(Group *group)
     group->table->setAlternatingRowColors(true);
     group->table->verticalHeader()->setVisible(false);
     layout->addWidget(group->table);
+    PlayerActions::attachToView(m_context, group->table, group->proxy);
     return widget;
 }
 

@@ -40,6 +40,7 @@ private:
     QComboBox *m_poolCombo = nullptr;
     QListWidget *m_playerList = nullptr;
     QLabel *m_hint = nullptr;
+    QStringList m_pendingCheck; // uids handed over by "Zum Vergleich hinzufügen"
 
     QLabel *m_gameplayTitle = nullptr;
     QLabel *m_metaTitle = nullptr;
