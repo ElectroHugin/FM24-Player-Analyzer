@@ -3,7 +3,11 @@
 #include "AppContext.h"
 #include "pages/AssignRolesPage.h"
 #include "pages/DashboardPage.h"
+#include "pages/DwrsProgressPage.h"
+#include "pages/EditPlayerPage.h"
 #include "pages/PlaceholderPage.h"
+#include "pages/PlayerComparisonPage.h"
+#include "pages/PlayerProfilePage.h"
 #include "pages/RoleAnalysisPage.h"
 #include "pages/SettingsPage.h"
 #include "pages/SquadMatrixPage.h"
@@ -88,10 +92,6 @@ const QList<MenuEntry> &globalMenu()
 QString milestoneFor(const QString &pageId)
 {
     static const QHash<QString, QString> milestones = {
-        {QStringLiteral("player_profile"), QStringLiteral("M9")},
-        {QStringLiteral("player_comparison"), QStringLiteral("M9")},
-        {QStringLiteral("dwrs_development"), QStringLiteral("M9")},
-        {QStringLiteral("edit_player"), QStringLiteral("M9")},
         {QStringLiteral("best_xi"), QStringLiteral("M10")},
         {QStringLiteral("gap_analysis"), QStringLiteral("M10")},
         {QStringLiteral("tactic_explorer"), QStringLiteral("M10")},
@@ -283,6 +283,14 @@ PageBase *MainWindow::createPage(const QString &pageId)
         return new SquadMatrixPage(m_context, this);
     if (pageId == QLatin1String("transfers"))
         return new TransfersPage(m_context, this);
+    if (pageId == QLatin1String("player_profile"))
+        return new PlayerProfilePage(m_context, m_theme, this);
+    if (pageId == QLatin1String("player_comparison"))
+        return new PlayerComparisonPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("dwrs_development"))
+        return new DwrsProgressPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("edit_player"))
+        return new EditPlayerPage(m_context, this);
     if (pageId == QLatin1String("settings")) {
         auto *page = new SettingsPage(m_context, m_theme, this);
         connect(page, &SettingsPage::recalcRequested, this, &MainWindow::startDwrsRecalc);
@@ -309,6 +317,20 @@ void MainWindow::navigateTo(const QString &pageId)
         m_stack->addWidget(page);
     }
     m_stack->setCurrentWidget(page);
+
+    // Keep the sidebar selection in sync (e.g. jump from the player search).
+    if (!m_menu->currentItem()
+        || m_menu->currentItem()->data(Qt::UserRole).toString() != pageId) {
+        for (int i = 0; i < m_menu->count(); ++i) {
+            if (m_menu->item(i)->data(Qt::UserRole).toString() == pageId) {
+                m_menu->blockSignals(true);
+                m_menu->setCurrentRow(i);
+                m_menu->blockSignals(false);
+                break;
+            }
+        }
+    }
+
     page->refresh();
 }
 

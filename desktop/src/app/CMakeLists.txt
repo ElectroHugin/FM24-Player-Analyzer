@@ -16,8 +16,16 @@ add_executable(fmplayeranalyzer WIN32
     pages/AssignRolesPage.cpp
     pages/DashboardPage.h
     pages/DashboardPage.cpp
+    pages/DwrsProgressPage.h
+    pages/DwrsProgressPage.cpp
+    pages/EditPlayerPage.h
+    pages/EditPlayerPage.cpp
     pages/PageBase.h
     pages/PlaceholderPage.h
+    pages/PlayerComparisonPage.h
+    pages/PlayerComparisonPage.cpp
+    pages/PlayerProfilePage.h
+    pages/PlayerProfilePage.cpp
     pages/RoleAnalysisPage.h
     pages/RoleAnalysisPage.cpp
     pages/SettingsPage.h
@@ -28,6 +36,8 @@ add_executable(fmplayeranalyzer WIN32
     pages/TransfersPage.cpp
     theming/ThemeManager.h
     theming/ThemeManager.cpp
+    widgets/Charts.h
+    widgets/Charts.cpp
     widgets/PersonalityFilterWidget.h
     widgets/PersonalityFilterWidget.cpp
     widgets/PlayerTableModel.h
