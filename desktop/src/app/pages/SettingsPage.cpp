@@ -114,10 +114,36 @@ QWidget *SettingsPage::buildClubTab()
     tacticForm->addRow(tr("Sekundäre Taktik:"), m_favTactic2Combo);
     layout->addWidget(tacticGroup);
 
+    auto *natGroup = new QGroupBox(tr("Nationalteam"), content);
+    auto *natForm = new QFormLayout(natGroup);
+    m_natNameEdit = new QLineEdit;
+    m_natNameEdit->setMinimumWidth(260);
+    m_natNameEdit->setPlaceholderText(tr("z. B. Deutschland U21"));
+    m_natCodeEdit = new QLineEdit;
+    m_natCodeEdit->setMaxLength(3);
+    m_natCodeEdit->setMaximumWidth(80);
+    m_natCodeEdit->setPlaceholderText(QStringLiteral("GER"));
+    m_natAgeSpin = new QSpinBox;
+    m_natAgeSpin->setRange(15, 99);
+    m_natAgeSpin->setValue(99);
+    m_natAgeSpin->setToolTip(tr("99 = keine Altersgrenze (A-Nationalteam); z. B. 21 für U21."));
+    m_natFav1Combo = new QComboBox;
+    m_natFav1Combo->setMinimumWidth(260);
+    m_natFav2Combo = new QComboBox;
+    m_natFav2Combo->setMinimumWidth(260);
+    natForm->addRow(tr("Team-Name:"), m_natNameEdit);
+    natForm->addRow(tr("Länder-Code (3 Buchstaben):"), m_natCodeEdit);
+    natForm->addRow(tr("Altersgrenze (99 = keine):"), m_natAgeSpin);
+    natForm->addRow(tr("Primäre National-Taktik:"), m_natFav1Combo);
+    natForm->addRow(tr("Sekundäre National-Taktik:"), m_natFav2Combo);
+    layout->addWidget(natGroup);
+
     auto *hint = new QLabel(
         tr("Diese Einstellungen gelten pro Datenbank (Spielstand). Das Vereins-Land "
            "steuert den Inland-Filter der Squad Matrix; die Lieblings-Taktiken werden "
-           "auf Dashboard, Squad Matrix und Transfers vorausgewählt."),
+           "auf Dashboard, Squad Matrix und Transfers vorausgewählt. Die "
+           "Nationalteam-Angaben aktivieren die National-Seiten (Kader-Auswahl, "
+           "National-Dashboard, …)."),
         content);
     hint->setWordWrap(true);
     layout->addWidget(hint);
@@ -390,6 +416,15 @@ void SettingsPage::refresh()
     fillTacticCombo(m_favTactic2Combo,
                     m_context.database().setting(QStringLiteral("favorite_tactic_2")));
 
+    m_natNameEdit->setText(m_context.nationalTeamName());
+    m_natCodeEdit->setText(m_context.nationalTeamCode());
+    const int natAge = m_context.nationalTeamAgeLimit();
+    m_natAgeSpin->setValue(natAge > 0 ? natAge : 99);
+    fillTacticCombo(m_natFav1Combo,
+                    m_context.database().setting(QStringLiteral("national_fav_tactic_1")));
+    fillTacticCombo(m_natFav2Combo,
+                    m_context.database().setting(QStringLiteral("national_fav_tactic_2")));
+
     for (auto it = m_weightSpins.begin(); it != m_weightSpins.end(); ++it)
         it.value()->setValue(config.weight(it.key()));
     for (auto it = m_gkWeightSpins.begin(); it != m_gkWeightSpins.end(); ++it)
@@ -465,6 +500,13 @@ void SettingsPage::saveAll()
                 m_clubCountryEdit->text().trimmed().toUpper());
     saveSetting(QStringLiteral("favorite_tactic_1"), m_favTactic1Combo->currentText());
     saveSetting(QStringLiteral("favorite_tactic_2"), m_favTactic2Combo->currentText());
+    saveSetting(QStringLiteral("national_team_name"), m_natNameEdit->text().trimmed());
+    saveSetting(QStringLiteral("national_team_country_code"),
+                m_natCodeEdit->text().trimmed().toUpper());
+    saveSetting(QStringLiteral("national_team_age_limit"),
+                QString::number(m_natAgeSpin->value()));
+    saveSetting(QStringLiteral("national_fav_tactic_1"), m_natFav1Combo->currentText());
+    saveSetting(QStringLiteral("national_fav_tactic_2"), m_natFav2Combo->currentText());
 
     // Detect whether any DWRS-relevant weight actually changed.
     bool weightsChanged = false;

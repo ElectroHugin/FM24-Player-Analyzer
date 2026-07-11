@@ -113,8 +113,9 @@ PlayerComparisonPage::PlayerComparisonPage(AppContext &context, ThemeManager &th
     filterRow->addWidget(m_roleCombo);
     filterRow->addWidget(new QLabel(tr("Pool:"), content));
     m_poolCombo = new QComboBox(content);
-    m_poolCombo->addItem(tr("Mein Verein"));
-    m_poolCombo->addItem(tr("Alle Spieler"));
+    m_poolCombo->addItem(tr("Mein Verein"), QStringLiteral("club"));
+    m_poolCombo->addItem(tr("Nationalkader"), QStringLiteral("national"));
+    m_poolCombo->addItem(tr("Alle Spieler"), QStringLiteral("all"));
     filterRow->addWidget(m_poolCombo);
     filterRow->addStretch(1);
     layout->addLayout(filterRow);
@@ -177,6 +178,11 @@ PlayerComparisonPage::PlayerComparisonPage(AppContext &context, ThemeManager &th
 void PlayerComparisonPage::refresh()
 {
     m_updating = true;
+    // In national mode default the pool to the national squad (legacy).
+    if (m_context.nationalUiMode()
+        && m_poolCombo->currentData().toString() == QLatin1String("club")) {
+        m_poolCombo->setCurrentIndex(1);
+    }
     const QString previous = m_tacticCombo->currentData().toString();
     const bool hadSelection = m_tacticCombo->count() > 0;
     QStringList tactics = m_context.definitions().tacticNames();
@@ -236,11 +242,14 @@ void PlayerComparisonPage::rebuildPlayerList()
 
     const QString role = m_roleCombo->currentData().toString();
     const QString userClub = m_context.userClub();
-    const bool myClubOnly = m_poolCombo->currentIndex() == 0;
+    const QString poolKey = m_poolCombo->currentData().toString();
 
     std::vector<const Player *> pool;
     for (const Player &player : m_context.store().players()) {
-        if (myClubOnly && (userClub.isEmpty() || player.club != userClub))
+        if (poolKey == QLatin1String("club")
+            && (userClub.isEmpty() || player.club != userClub))
+            continue;
+        if (poolKey == QLatin1String("national") && !player.inNationalSquad)
             continue;
         if (!player.assignedRoles.contains(role))
             continue;

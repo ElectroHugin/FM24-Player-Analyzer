@@ -65,6 +65,25 @@ public:
     QString pendingProfileUid() const { return m_pendingProfileUid; }
     void setPendingProfileUid(const QString &uid) { m_pendingProfileUid = uid; }
 
+    // Sidebar management mode (club vs. national). Session state like the
+    // legacy 'management_mode'; pages shared between both modes scope their
+    // player pool with this.
+    bool nationalUiMode() const { return m_nationalUiMode; }
+    void setNationalUiMode(bool national) { m_nationalUiMode = national; }
+
+    // National team settings (same DB keys as legacy).
+    QString nationalTeamName() { return m_database->setting(QStringLiteral("national_team_name")); }
+    QString nationalTeamCode()
+    {
+        return m_database->setting(QStringLiteral("national_team_country_code"));
+    }
+    int nationalTeamAgeLimit()
+    {
+        const QString value =
+            m_database->setting(QStringLiteral("national_team_age_limit"));
+        return value.isEmpty() ? 0 : value.toInt();
+    }
+
     // Convenience settings accessors (stored in the DB settings table).
     QString userClub() { return m_database->setting(QStringLiteral("user_club")); }
     QString secondTeamClub() { return m_database->setting(QStringLiteral("second_team_club")); }
@@ -91,6 +110,7 @@ private:
     RoleRatings m_ratings;
     LatestRatings m_latestRatings;
     QString m_pendingProfileUid;
+    bool m_nationalUiMode = false;
 };
 
 } // namespace fm

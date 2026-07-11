@@ -73,6 +73,11 @@ private:
     QLineEdit *m_clubCountryEdit = nullptr;
     QComboBox *m_favTactic1Combo = nullptr;
     QComboBox *m_favTactic2Combo = nullptr;
+    QLineEdit *m_natNameEdit = nullptr;
+    QLineEdit *m_natCodeEdit = nullptr;
+    QSpinBox *m_natAgeSpin = nullptr;
+    QComboBox *m_natFav1Combo = nullptr;
+    QComboBox *m_natFav2Combo = nullptr;
 };
 
 } // namespace fm

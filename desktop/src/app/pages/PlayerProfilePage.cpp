@@ -32,7 +32,7 @@ namespace fm {
 
 namespace {
 
-enum Scope { MyClub = 0, SecondTeam = 1, Scouted = 2, All = 3 };
+enum Scope { MyClub = 0, SecondTeam = 1, Scouted = 2, All = 3, NationalSquad = 4 };
 
 QString pill(const QString &label, const QString &value, const QString &color,
              const QString &textColor = QStringLiteral("white"))
@@ -86,6 +86,7 @@ PlayerProfilePage::PlayerProfilePage(AppContext &context, ThemeManager &theme, Q
     addScope(tr("🏠 Mein Verein"), MyClub, true);
     addScope(tr("🔄 Zweitteam"), SecondTeam);
     addScope(tr("🔍 Gescoutete"), Scouted);
+    addScope(tr("🌟 Nationalkader"), NationalSquad);
     addScope(tr("🌍 Alle Spieler"), All);
     selectRow->addSpacing(12);
     m_playerCombo = new QComboBox(content);
@@ -255,6 +256,17 @@ void PlayerProfilePage::rebuildPlayerCombo()
     const QString userClub = m_context.userClub();
     const QString secondClub = m_context.secondTeamClub();
     m_scopeGroup->button(SecondTeam)->setVisible(!secondClub.isEmpty());
+
+    bool hasNationalSquad = false;
+    for (const Player &player : m_context.store().players()) {
+        if (player.inNationalSquad) {
+            hasNationalSquad = true;
+            break;
+        }
+    }
+    m_scopeGroup->button(NationalSquad)->setVisible(hasNationalSquad);
+    if (!hasNationalSquad && m_scopeGroup->checkedId() == NationalSquad)
+        m_scopeGroup->button(MyClub)->setChecked(true);
     const int scope = m_scopeGroup->checkedId();
 
     std::vector<const Player *> pool;
@@ -262,7 +274,8 @@ void PlayerProfilePage::rebuildPlayerCombo()
         const bool isMine = !userClub.isEmpty() && player.club == userClub;
         const bool isSecond = !secondClub.isEmpty() && player.club == secondClub;
         if ((scope == MyClub && !isMine) || (scope == SecondTeam && !isSecond)
-            || (scope == Scouted && (isMine || isSecond)))
+            || (scope == Scouted && (isMine || isSecond))
+            || (scope == NationalSquad && !player.inNationalSquad))
             continue;
         pool.push_back(&player);
     }

@@ -10,17 +10,32 @@ add_executable(fmplayeranalyzer WIN32
     MainWindow.cpp
     MigrationWizard.h
     MigrationWizard.cpp
+    ImportRunner.h
+    ImportRunner.cpp
     RecalcHelper.h
     RecalcHelper.cpp
     pages/AssignRolesPage.h
     pages/AssignRolesPage.cpp
+    pages/BestXiPage.h
+    pages/BestXiPage.cpp
     pages/DashboardPage.h
     pages/DashboardPage.cpp
     pages/DwrsProgressPage.h
     pages/DwrsProgressPage.cpp
     pages/EditPlayerPage.h
     pages/EditPlayerPage.cpp
+    pages/GapAnalysisPage.h
+    pages/GapAnalysisPage.cpp
+    pages/NationalBestXiPage.h
+    pages/NationalBestXiPage.cpp
+    pages/NationalDashboardPage.h
+    pages/NationalDashboardPage.cpp
+    pages/NationalSquadMatrixPage.h
+    pages/NationalSquadMatrixPage.cpp
+    pages/NationalSquadSelectionPage.h
+    pages/NationalSquadSelectionPage.cpp
     pages/PageBase.h
+    pages/PageHelpers.h
     pages/PlaceholderPage.h
     pages/PlayerComparisonPage.h
     pages/PlayerComparisonPage.cpp
@@ -32,6 +47,8 @@ add_executable(fmplayeranalyzer WIN32
     pages/SettingsPage.cpp
     pages/SquadMatrixPage.h
     pages/SquadMatrixPage.cpp
+    pages/TacticExplorerPage.h
+    pages/TacticExplorerPage.cpp
     pages/TransfersPage.h
     pages/TransfersPage.cpp
     theming/ThemeManager.h
@@ -44,6 +61,8 @@ add_executable(fmplayeranalyzer WIN32
     widgets/PlayerTableModel.cpp
     widgets/StrengthGridWidget.h
     widgets/StrengthGridWidget.cpp
+    widgets/TacticPitchWidget.h
+    widgets/TacticPitchWidget.cpp
     resources/app.qrc
 )
 

@@ -2,10 +2,8 @@
 
 #include "PageBase.h"
 
-#include "core/HtmlImporter.h"
-#include "core/RatingsUpdater.h"
+#include "../ImportRunner.h"
 
-#include <QFutureWatcher>
 #include <QSet>
 
 class QCheckBox;
@@ -24,17 +22,6 @@ namespace fm {
 
 class StrengthGridWidget;
 class ThemeManager;
-
-// Everything the background import pipeline produces (import + optional
-// auto-assign + DWRS recalculation for the affected players).
-struct ImportPipelineResult {
-    ImportResult import;
-    QString backupError;       // non-fatal
-    QStringList autoAssignedUids;
-    QString autoAssignError;   // non-fatal
-    bool recalcRan = false;
-    RatingsUpdater::Result recalc;
-};
 
 // Club-mode dashboard: HTML import, tactic-based squad KPIs, positional
 // strength grid, club roster and transfer-target suggestions.
@@ -57,7 +44,7 @@ private:
 
     void chooseImportFile();
     void startImport();
-    void importFinished();
+    void importFinished(const ImportPipelineResult &result);
     void resolveDepartures(const QSet<QString> &affectedUids);
 
     void refreshCombos();
@@ -77,8 +64,7 @@ private:
     QCheckBox *m_squadUpdateCheck = nullptr;
     QCheckBox *m_autoAssignCheck = nullptr;
     QPushButton *m_importButton = nullptr;
-    QFutureWatcher<ImportPipelineResult> m_importWatcher;
-    QProgressDialog *m_importDialog = nullptr;
+    bool m_importRunning = false;
     bool m_pendingSquadUpdate = false;
 
     // Analysis header

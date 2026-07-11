@@ -2,15 +2,22 @@
 
 #include "AppContext.h"
 #include "pages/AssignRolesPage.h"
+#include "pages/BestXiPage.h"
 #include "pages/DashboardPage.h"
 #include "pages/DwrsProgressPage.h"
 #include "pages/EditPlayerPage.h"
+#include "pages/GapAnalysisPage.h"
+#include "pages/NationalBestXiPage.h"
+#include "pages/NationalDashboardPage.h"
+#include "pages/NationalSquadMatrixPage.h"
+#include "pages/NationalSquadSelectionPage.h"
 #include "pages/PlaceholderPage.h"
 #include "pages/PlayerComparisonPage.h"
 #include "pages/PlayerProfilePage.h"
 #include "pages/RoleAnalysisPage.h"
 #include "pages/SettingsPage.h"
 #include "pages/SquadMatrixPage.h"
+#include "pages/TacticExplorerPage.h"
 #include "pages/TransfersPage.h"
 #include "theming/ThemeManager.h"
 #include "core/Database.h"
@@ -92,13 +99,6 @@ const QList<MenuEntry> &globalMenu()
 QString milestoneFor(const QString &pageId)
 {
     static const QHash<QString, QString> milestones = {
-        {QStringLiteral("best_xi"), QStringLiteral("M10")},
-        {QStringLiteral("gap_analysis"), QStringLiteral("M10")},
-        {QStringLiteral("tactic_explorer"), QStringLiteral("M10")},
-        {QStringLiteral("national_dashboard"), QStringLiteral("M10")},
-        {QStringLiteral("national_squad_selection"), QStringLiteral("M10")},
-        {QStringLiteral("national_squad_matrix"), QStringLiteral("M10")},
-        {QStringLiteral("national_best_xi"), QStringLiteral("M10")},
         {QStringLiteral("new_role"), QStringLiteral("M11")},
         {QStringLiteral("new_tactic"), QStringLiteral("M11")},
     };
@@ -189,7 +189,13 @@ void MainWindow::buildSidebar()
     m_modeCombo->addItem(tr("🏟 Vereins-Management"), QStringLiteral("club"));
     m_modeCombo->addItem(tr("🌍 National-Management"), QStringLiteral("national"));
     layout->addWidget(m_modeCombo);
-    connect(m_modeCombo, &QComboBox::currentIndexChanged, this, &MainWindow::rebuildMenu);
+    connect(m_modeCombo, &QComboBox::currentIndexChanged, this, [this] {
+        // Pages shared between both modes (Taktik-Explorer, Profil, …) scope
+        // their pools by this flag; the menu decides which pages are shown.
+        m_context.setNationalUiMode(m_modeCombo->currentData().toString()
+                                    == QLatin1String("national"));
+        rebuildMenu();
+    });
 
     m_searchEdit = new QLineEdit(sidebar);
     m_searchEdit->setPlaceholderText(tr("🔎 Spieler suchen…"));
@@ -291,6 +297,20 @@ PageBase *MainWindow::createPage(const QString &pageId)
         return new DwrsProgressPage(m_context, m_theme, this);
     if (pageId == QLatin1String("edit_player"))
         return new EditPlayerPage(m_context, this);
+    if (pageId == QLatin1String("best_xi"))
+        return new BestXiPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("gap_analysis"))
+        return new GapAnalysisPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("tactic_explorer"))
+        return new TacticExplorerPage(m_context, this);
+    if (pageId == QLatin1String("national_dashboard"))
+        return new NationalDashboardPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("national_squad_selection"))
+        return new NationalSquadSelectionPage(m_context, this);
+    if (pageId == QLatin1String("national_squad_matrix"))
+        return new NationalSquadMatrixPage(m_context, this);
+    if (pageId == QLatin1String("national_best_xi"))
+        return new NationalBestXiPage(m_context, m_theme, this);
     if (pageId == QLatin1String("settings")) {
         auto *page = new SettingsPage(m_context, m_theme, this);
         connect(page, &SettingsPage::recalcRequested, this, &MainWindow::startDwrsRecalc);

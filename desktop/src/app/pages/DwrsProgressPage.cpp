@@ -170,8 +170,16 @@ DwrsProgressPage::DwrsProgressPage(AppContext &context, ThemeManager &theme, QWi
 
 std::vector<const Player *> DwrsProgressPage::clubPlayers() const
 {
-    const QString userClub = m_context.userClub();
     std::vector<const Player *> players;
+    if (m_context.nationalUiMode()) {
+        // National mode: the analysis pool is the saved national squad.
+        for (const Player &player : m_context.store().players()) {
+            if (player.inNationalSquad)
+                players.push_back(&player);
+        }
+        return players;
+    }
+    const QString userClub = m_context.userClub();
     if (userClub.isEmpty())
         return players;
     for (const Player &player : m_context.store().players()) {

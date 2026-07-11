@@ -4,7 +4,6 @@
 #include "../theming/ThemeManager.h"
 #include "../widgets/StrengthGridWidget.h"
 #include "core/Database.h"
-#include "core/RoleAssignment.h"
 #include "core/Utils.h"
 
 #include <QCheckBox>
@@ -20,7 +19,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
-#include <QProgressDialog>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollArea>
@@ -28,10 +26,8 @@
 #include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QtConcurrentRun>
 
 #include <algorithm>
-#include <utility>
 
 namespace fm {
 
@@ -181,9 +177,6 @@ DashboardPage::DashboardPage(AppContext &context, ThemeManager &theme, QWidget *
 
     layout->addStretch(1);
     scroll->setWidget(content);
-
-    connect(&m_importWatcher, &QFutureWatcher<ImportPipelineResult>::finished, this,
-            &DashboardPage::importFinished);
 
     m_suggestionDebounce = new QTimer(this);
     m_suggestionDebounce->setSingleShot(true);
@@ -750,105 +743,24 @@ void DashboardPage::chooseImportFile()
 
 void DashboardPage::startImport()
 {
-    if (m_importWatcher.isRunning())
+    if (m_importRunning)
         return;
     const QString filePath = m_filePathEdit->text();
     if (filePath.isEmpty())
         return;
 
     m_pendingSquadUpdate = m_squadUpdateCheck->isChecked();
+    m_importRunning = true;
 
-    m_importDialog = new QProgressDialog(tr("Import wird vorbereitet…"), QString(), 0, 100,
-                                         this);
-    m_importDialog->setWindowModality(Qt::WindowModal);
-    m_importDialog->setMinimumDuration(0);
-    m_importDialog->setMinimumWidth(420);
-    m_importDialog->setValue(0);
-
-    // Snapshot everything the worker needs; it opens its own DB connection.
-    const QString dbFile = m_context.database().filePath();
-    const QString backupsDir = m_context.paths().backupsDir();
-    const bool autoAssign = m_autoAssignCheck->isChecked();
-    const QStringList validRoles = m_context.definitions().validRoles();
-    const Definitions *definitions = &m_context.definitions();
-    const DwrsEngine *engine = &m_context.dwrsEngine();
-    auto *dialog = m_importDialog;
-
-    const auto stage = [dialog](const QString &text, int percent) {
-        QMetaObject::invokeMethod(
-            dialog,
-            [dialog, text, percent] {
-                dialog->setLabelText(text);
-                dialog->setValue(percent);
-            },
-            Qt::QueuedConnection);
-    };
-
-    m_importWatcher.setFuture(QtConcurrent::run([filePath, dbFile, backupsDir, autoAssign,
-                                                 validRoles, definitions, engine, stage] {
-        ImportPipelineResult result;
-
-        stage(tr("Backup wird erstellt…"), 2);
-        QString backupError;
-        if (!Database::createBackup(dbFile, backupsDir, &backupError))
-            result.backupError = backupError;
-
-        Database db(QStringLiteral("import_worker"));
-        if (!db.open(dbFile)) {
-            result.import.error = db.errorString();
-            return result;
-        }
-
-        stage(tr("Datei wird gelesen und Spieler importiert…"), 5);
-        std::vector<Player> players = db.loadPlayers();
-        result.import = HtmlImporter::importFile(
-            filePath, db, players, [&stage](int done, int total) {
-                const int percent = 5 + (total > 0 ? done * 50 / total : 0);
-                stage(tr("Spieler werden importiert… (%1/%2)").arg(done).arg(total), percent);
-            });
-        if (!result.import.success)
-            return result;
-
-        players = db.loadPlayers();
-
-        if (autoAssign) {
-            stage(tr("Rollen werden automatisch zugewiesen…"), 58);
-            result.autoAssignedUids = RoleAssignment::autoAssignRolesToUnassigned(
-                db, players, *definitions, &result.autoAssignError);
-        }
-
-        // DWRS only for the players this import (or auto-assign) touched.
-        QSet<QString> affected(result.import.affectedUids.cbegin(),
-                               result.import.affectedUids.cend());
-        for (const QString &uid : std::as_const(result.autoAssignedUids))
-            affected.insert(uid);
-        std::vector<int> subset;
-        subset.reserve(affected.size());
-        for (size_t i = 0; i < players.size(); ++i) {
-            if (affected.contains(players[i].uid))
-                subset.push_back(static_cast<int>(i));
-        }
-
-        stage(tr("DWRS-Bewertungen werden berechnet…"), 62);
-        result.recalcRan = true;
-        result.recalc = RatingsUpdater::updateDwrsRatings(
-            db, players, *engine, validRoles, subset, [&stage](int current, int total) {
-                const int percent = 62 + (total > 0 ? current * 38 / total : 0);
-                stage(tr("DWRS-Bewertungen werden berechnet…"), percent);
-            });
-        return result;
-    }));
+    runImportPipeline(m_context, this, filePath, m_autoAssignCheck->isChecked(),
+                      [this](const ImportPipelineResult &result) {
+                          m_importRunning = false;
+                          importFinished(result);
+                      });
 }
 
-void DashboardPage::importFinished()
+void DashboardPage::importFinished(const ImportPipelineResult &result)
 {
-    const ImportPipelineResult result = m_importWatcher.result();
-    if (m_importDialog) {
-        m_importDialog->close();
-        m_importDialog->deleteLater();
-        m_importDialog = nullptr;
-    }
-
     if (!result.import.success) {
         QMessageBox::critical(
             this, tr("Import fehlgeschlagen"),
@@ -859,50 +771,8 @@ void DashboardPage::importFinished()
         return;
     }
 
-    m_context.reloadFromDatabase();
-
-    // --- Build the summary + warnings. ---
-    QStringList summary;
-    summary << tr("%1 Spieler importiert (davon %2 neu).")
-                   .arg(result.import.playersImported)
-                   .arg(result.import.newPlayers);
-    if (!result.autoAssignedUids.isEmpty())
-        summary << tr("%1 Spielern wurden automatisch Rollen zugewiesen.")
-                       .arg(result.autoAssignedUids.size());
-    if (result.recalcRan && result.recalc.success)
-        summary << tr("DWRS: %1 Bewertungen berechnet, %2 geänderte Einträge gespeichert.")
-                       .arg(result.recalc.computed)
-                       .arg(result.recalc.inserted);
-
-    QStringList warnings;
-    if (!result.backupError.isEmpty())
-        warnings << tr("Backup fehlgeschlagen: %1").arg(result.backupError);
-    if (result.import.malformedRows > 0)
-        warnings << tr("%1 fehlerhafte Zeile(n) übersprungen (Zellenzahl passte nicht zur "
-                       "Kopfzeile). Exportiere die Datei ggf. neu aus FM.")
-                        .arg(result.import.malformedRows);
-    if (result.import.emptyUidRows > 0)
-        warnings << tr("%1 Zeile(n) ohne UID übersprungen.").arg(result.import.emptyUidRows);
-    if (!result.import.duplicateUidNames.isEmpty())
-        warnings << tr("Doppelte UIDs in der Datei — nur die letzte Zeile wurde übernommen: %1")
-                        .arg(result.import.duplicateUidNames.mid(0, 10).join(QStringLiteral(", ")));
-    if (!result.import.unknownColumns.isEmpty())
-        warnings << tr("Unbekannte Spalten (werden ignoriert): %1")
-                        .arg(result.import.unknownColumns.join(QStringLiteral(", ")));
-    if (!result.import.idNameConflicts.isEmpty())
-        warnings << tr("ID/Namens-Konflikt übersprungen: %1. Eine numerische UID entspricht "
-                       "einer bekannten Newgen-ID, aber die Namen unterscheiden sich.")
-                        .arg(result.import.idNameConflicts.mid(0, 10).join(QStringLiteral("; ")));
-    if (!result.import.identityChanges.isEmpty())
-        warnings << tr("Name unter bekannter UID geändert: %1. FM hat die ID evtl. an einen "
-                       "neuen Newgen vergeben — zugewiesene Rollen und DWRS-Historie gehören "
-                       "ggf. noch zum alten Spieler.")
-                        .arg(result.import.identityChanges.mid(0, 10).join(QStringLiteral("; ")));
-    if (!result.autoAssignError.isEmpty())
-        warnings << tr("Automatische Rollen-Zuweisung fehlgeschlagen: %1")
-                        .arg(result.autoAssignError);
-    if (result.recalcRan && !result.recalc.success)
-        warnings << tr("DWRS-Berechnung fehlgeschlagen: %1").arg(result.recalc.error);
+    const QStringList summary = importSummaryLines(result);
+    const QStringList warnings = importWarningLines(result);
 
     QMessageBox box(this);
     box.setIcon(warnings.isEmpty() ? QMessageBox::Information : QMessageBox::Warning);
