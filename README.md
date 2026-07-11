@@ -1,41 +1,105 @@
 # FM24 Player Analyzer
 
-A Football Manager 2024 companion tool: import your scouted players from FM's
-HTML exports, rate every player against 65 tactical roles with the custom
-**DWRS** (role-fit) score, and analyze your squad — Best XI, gap analysis,
-tactic explorer, talent scouting, national team management and more.
+A native companion tool for **Football Manager 2024**: import your scouted
+players from FM's HTML exports, rate every player against 65 tactical roles
+with the custom **DWRS** role-fit score, and turn a raw 80,000-player scouting
+database into actionable squad decisions — Best XI, gap analysis, tactic
+explorer, talent scouting, transfer planning and full national-team
+management.
 
-This repository is a monorepo containing two implementations:
+Built as a fast, offline Windows desktop app (C++ / Qt 6). Your data never
+leaves your machine.
+
+---
+
+## Highlights
+
+- **DWRS role-fit rating** — every player scored 0–100 for each of 65 roles,
+  from fully configurable attribute weights, with a colour scale that makes
+  strengths and weaknesses obvious at a glance.
+- **Smart HTML import** — reads FM's standard export, unifies newgen IDs
+  across snapshots, detects players who left your club, and auto-assigns
+  roles to newcomers.
+- **Squad tools** — Best XI on a tactical pitch (starting XI, B-team, youth &
+  second team), gap analysis (obvious *and* hidden weaknesses), and a tactic
+  explorer that ranks every formation by how well it fits your squad.
+- **Player insight** — profiles with top roles, talent projection and DWRS
+  development charts; side-by-side comparison with attribute radars.
+- **Talent scouting** — talent score combining current ability, development
+  runway, mentality and personality, with domestic/foreign filtering.
+- **National-team mode** — build an eligible squad and get its own dashboard,
+  matrix, Best XI and call-up suggestions.
+- **Your own roles & tactics** — in-app editors write new roles and
+  formations that become available everywhere instantly.
+- **Modern, fast UX** — light/dark themes, right-click actions on any player
+  (open profile, compare, edit, toggle transfer/loan/shortlist), global
+  player search, DWRS history over time. Optimised for very large databases.
+
+---
+
+## Installation
+
+**Recommended:** download the latest installer from the
+[Releases](../../releases) page and run it. The app is self-contained; no Qt
+or other runtime needs to be installed separately.
+
+Your data (SQLite databases, configuration, role definitions and backups) is
+stored in `%LOCALAPPDATA%\FM24PlayerAnalyzer` by default. The location is
+chosen on first run and can be changed later in the settings — the installer
+never touches it, so updates and uninstalls leave your saves intact.
+
+Coming from the older Streamlit version? A one-time migration wizard
+(Settings → Datenbank → *Legacy-Datenbank importieren*) converts legacy
+databases and settings into the new format.
+
+## Quick start
+
+1. In FM, export your player view as an **HTML file** (the standard scouting
+   view with a `UID` column).
+2. Open the app and go to **Dashboard → Neue Spielerdaten importieren**;
+   select the HTML file and let it import and calculate DWRS.
+3. Set **Mein Verein** (and optionally a second team) under Settings or on the
+   dashboard.
+4. Explore: Squad Matrix, Best XI, Gap-Analyse and the Tactic Explorer.
+
+> The user interface is in German. If you would like an English localisation,
+> open an issue.
+
+---
+
+## Repository layout
+
+This is a monorepo with two implementations:
 
 | Directory | Implementation | Status |
 |---|---|---|
-| [`desktop/`](desktop/) | **C++ / Qt 6 Widgets** — native Windows desktop app, optimized for very large scouting databases (80k+ players) | In development (active) |
-| [`legacy/`](legacy/) | **Python / Streamlit** — the original web-UI implementation | Maintained as behavioral reference |
+| [`desktop/`](desktop/) | **C++ / Qt 6 Widgets** — the native Windows app described above | Feature-complete, active |
+| [`legacy/`](legacy/) | **Python / Streamlit** — the original web-UI implementation | Kept as behavioural reference / golden-master test data |
 
-## Desktop app (C++ / Qt)
+### Building from source
 
-The modern implementation. Stores its data (SQLite databases, configuration,
-role definitions, backups) in `%LOCALAPPDATA%\FM24PlayerAnalyzer` by default;
-the data directory is configurable on first run and in the settings page.
-Ships as a Windows installer built with Inno Setup.
+Requirements: Visual Studio 2022 (C++, x64), CMake ≥ 3.28, Ninja, and
+Qt 6.8 LTS with the Qt Charts add-on.
 
-Build requirements: MSVC 2022, CMake ≥ 3.28, Ninja, Qt 6.8 (with Qt Charts).
-See [`desktop/README.md`](desktop/README.md) for build instructions.
-
-## Legacy app (Python / Streamlit)
-
-The original implementation, kept runnable as the reference for feature
-parity and golden-master test data. See [`legacy/README.md`](legacy/README.md)
-for features and usage; launch with:
-
+```powershell
+cd desktop
+.\scripts\build.ps1 -Preset msvc-release -Test   # build + run tests
+.\scripts\package.ps1                             # windeployqt + installer
 ```
+
+See [`desktop/README.md`](desktop/README.md) for details.
+
+### Legacy app (reference)
+
+```powershell
 cd legacy
 streamlit run src/app.py
 ```
 
-Its data lives inside `legacy/` (`databases/`, `backups/`, `config/`). A
-one-time migration wizard in the desktop app imports legacy databases and
-settings into the new format.
+Its data lives inside `legacy/` (`databases/`, `backups/`, `config/`). See
+[`legacy/README.md`](legacy/README.md) for the original feature notes.
+
+---
 
 ## License
 
