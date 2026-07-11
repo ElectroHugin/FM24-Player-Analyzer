@@ -7,12 +7,14 @@
 #include "core/RatingsUpdater.h"
 
 class QComboBox;
+class QCompleter;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QProgressDialog;
 class QStackedWidget;
+class QStandardItemModel;
 
 namespace fm {
 
@@ -37,6 +39,7 @@ private:
     PageBase *createPage(const QString &pageId);
     void startDwrsRecalc();
     void updateDbLabel();
+    void rebuildSearchModel();
 
     AppContext &m_context;
     ThemeManager &m_theme;
@@ -50,6 +53,10 @@ private:
 
     QFutureWatcher<RatingsUpdater::Result> m_recalcWatcher;
     QProgressDialog *m_recalcDialog = nullptr;
+
+    QCompleter *m_searchCompleter = nullptr;
+    QStandardItemModel *m_searchModel = nullptr;
+    bool m_searchModelDirty = true;
 };
 
 } // namespace fm

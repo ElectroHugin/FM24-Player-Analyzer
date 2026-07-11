@@ -14,12 +14,16 @@
 #include <QGroupBox>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
+#include <QSet>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace fm {
 
@@ -62,6 +66,7 @@ SettingsPage::SettingsPage(AppContext &context, ThemeManager &theme, QWidget *pa
     layout->addWidget(heading);
 
     auto *tabs = new QTabWidget(this);
+    tabs->addTab(buildClubTab(), tr("Verein"));
     tabs->addTab(buildWeightsTab(), tr("DWRS-Gewichte"));
     tabs->addTab(buildThresholdsTab(), tr("Schwellenwerte"));
     tabs->addTab(buildThemeTab(), tr("Design"));
@@ -77,6 +82,48 @@ SettingsPage::SettingsPage(AppContext &context, ThemeManager &theme, QWidget *pa
     connect(saveButton, &QPushButton::clicked, this, &SettingsPage::saveAll);
 
     refresh();
+}
+
+QWidget *SettingsPage::buildClubTab()
+{
+    auto *content = new QWidget;
+    auto *layout = new QVBoxLayout(content);
+
+    auto *clubGroup = new QGroupBox(tr("Vereins-Zuordnung"), content);
+    auto *clubForm = new QFormLayout(clubGroup);
+    m_userClubCombo = new QComboBox;
+    m_userClubCombo->setMinimumWidth(260);
+    m_secondClubCombo = new QComboBox;
+    m_secondClubCombo->setMinimumWidth(260);
+    m_clubCountryEdit = new QLineEdit;
+    m_clubCountryEdit->setMaxLength(3);
+    m_clubCountryEdit->setMaximumWidth(80);
+    m_clubCountryEdit->setPlaceholderText(QStringLiteral("GER"));
+    clubForm->addRow(tr("Mein Verein:"), m_userClubCombo);
+    clubForm->addRow(tr("Zweitteam:"), m_secondClubCombo);
+    clubForm->addRow(tr("Vereins-Land (3-Buchstaben-Code):"), m_clubCountryEdit);
+    layout->addWidget(clubGroup);
+
+    auto *tacticGroup = new QGroupBox(tr("Lieblings-Taktiken"), content);
+    auto *tacticForm = new QFormLayout(tacticGroup);
+    m_favTactic1Combo = new QComboBox;
+    m_favTactic1Combo->setMinimumWidth(260);
+    m_favTactic2Combo = new QComboBox;
+    m_favTactic2Combo->setMinimumWidth(260);
+    tacticForm->addRow(tr("Primäre Taktik:"), m_favTactic1Combo);
+    tacticForm->addRow(tr("Sekundäre Taktik:"), m_favTactic2Combo);
+    layout->addWidget(tacticGroup);
+
+    auto *hint = new QLabel(
+        tr("Diese Einstellungen gelten pro Datenbank (Spielstand). Das Vereins-Land "
+           "steuert den Inland-Filter der Squad Matrix; die Lieblings-Taktiken werden "
+           "auf Dashboard, Squad Matrix und Transfers vorausgewählt."),
+        content);
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+    layout->addStretch(1);
+
+    return wrapScrollable(content);
 }
 
 QWidget *SettingsPage::buildWeightsTab()
@@ -309,6 +356,40 @@ void SettingsPage::refresh()
 {
     AppConfig &config = m_context.config();
 
+    // --- Club tab ---
+    QSet<QString> clubSet;
+    for (const Player &player : m_context.store().players()) {
+        if (!player.club.isEmpty())
+            clubSet.insert(player.club);
+    }
+    QStringList clubs(clubSet.cbegin(), clubSet.cend());
+    std::sort(clubs.begin(), clubs.end());
+    const auto fillClubCombo = [&clubs](QComboBox *combo, const QString &current) {
+        combo->clear();
+        combo->addItem(QString());
+        combo->addItems(clubs);
+        if (!current.isEmpty())
+            combo->setCurrentText(current);
+    };
+    fillClubCombo(m_userClubCombo, m_context.userClub());
+    fillClubCombo(m_secondClubCombo, m_context.secondTeamClub());
+    m_clubCountryEdit->setText(
+        m_context.database().setting(QStringLiteral("club_country_code")));
+
+    QStringList tactics = m_context.definitions().tacticNames();
+    std::sort(tactics.begin(), tactics.end());
+    const auto fillTacticCombo = [&tactics](QComboBox *combo, const QString &current) {
+        combo->clear();
+        combo->addItem(QString());
+        combo->addItems(tactics);
+        if (!current.isEmpty())
+            combo->setCurrentText(current);
+    };
+    fillTacticCombo(m_favTactic1Combo,
+                    m_context.database().setting(QStringLiteral("favorite_tactic_1")));
+    fillTacticCombo(m_favTactic2Combo,
+                    m_context.database().setting(QStringLiteral("favorite_tactic_2")));
+
     for (auto it = m_weightSpins.begin(); it != m_weightSpins.end(); ++it)
         it.value()->setValue(config.weight(it.key()));
     for (auto it = m_gkWeightSpins.begin(); it != m_gkWeightSpins.end(); ++it)
@@ -369,6 +450,21 @@ void SettingsPage::updateContrastWarning()
 void SettingsPage::saveAll()
 {
     AppConfig &config = m_context.config();
+
+    // --- Club tab (per-database settings) ---
+    Database &db = m_context.database();
+    const auto saveSetting = [&db](const QString &key, const QString &value) {
+        if (value.isEmpty())
+            db.removeSetting(key);
+        else
+            db.setSetting(key, value);
+    };
+    saveSetting(QStringLiteral("user_club"), m_userClubCombo->currentText());
+    saveSetting(QStringLiteral("second_team_club"), m_secondClubCombo->currentText());
+    saveSetting(QStringLiteral("club_country_code"),
+                m_clubCountryEdit->text().trimmed().toUpper());
+    saveSetting(QStringLiteral("favorite_tactic_1"), m_favTactic1Combo->currentText());
+    saveSetting(QStringLiteral("favorite_tactic_2"), m_favTactic2Combo->currentText());
 
     // Detect whether any DWRS-relevant weight actually changed.
     bool weightsChanged = false;

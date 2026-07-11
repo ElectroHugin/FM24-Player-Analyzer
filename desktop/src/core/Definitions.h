@@ -80,6 +80,14 @@ public:
     // Role abbr -> full display name (across all categories).
     QHash<QString, QString> roleDisplayMap() const;
 
+    // Natural on-pitch role order (port of legacy get_natural_role_sorter):
+    // GK roles first, then by stratum (Defense .. Strikers) and column L-R.
+    // Returns (stratumScore, column) per role; unknown roles sort last.
+    QHash<QString, QPair<int, int>> naturalRoleSorter() const;
+
+    // Sorts the given role abbreviations naturally (stable within equal keys).
+    QStringList sortRolesNaturally(QStringList roles) const;
+
     // Raw access for editing (New Role / New Tactic pages).
     QJsonObject root() const { return m_root; }
     void setRoot(const QJsonObject &root) { m_root = root; }

@@ -60,6 +60,11 @@ public:
     // wizard replaced them) and refreshes the engines.
     void reloadConfigAndDefinitions();
 
+    // Player the profile page should show on next activation (sidebar search,
+    // "open profile" actions). Consumed by the Player Profile page (M9).
+    QString pendingProfileUid() const { return m_pendingProfileUid; }
+    void setPendingProfileUid(const QString &uid) { m_pendingProfileUid = uid; }
+
     // Convenience settings accessors (stored in the DB settings table).
     QString userClub() { return m_database->setting(QStringLiteral("user_club")); }
     QString secondTeamClub() { return m_database->setting(QStringLiteral("second_team_club")); }
@@ -85,6 +90,7 @@ private:
     std::unique_ptr<TacticExplorer> m_tacticExplorer;
     RoleRatings m_ratings;
     LatestRatings m_latestRatings;
+    QString m_pendingProfileUid;
 };
 
 } // namespace fm

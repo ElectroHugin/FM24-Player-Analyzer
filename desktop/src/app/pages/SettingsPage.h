@@ -7,6 +7,7 @@
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QSpinBox;
 
@@ -30,6 +31,7 @@ signals:
     void recalcRequested(); // weights changed -> MainWindow runs the recalc
 
 private:
+    QWidget *buildClubTab();
     QWidget *buildWeightsTab();
     QWidget *buildThresholdsTab();
     QWidget *buildThemeTab();
@@ -64,6 +66,13 @@ private:
 
     // Database tab.
     QComboBox *m_dbCombo = nullptr;
+
+    // Club tab (settings table keys, same as legacy).
+    QComboBox *m_userClubCombo = nullptr;
+    QComboBox *m_secondClubCombo = nullptr;
+    QLineEdit *m_clubCountryEdit = nullptr;
+    QComboBox *m_favTactic1Combo = nullptr;
+    QComboBox *m_favTactic2Combo = nullptr;
 };
 
 } // namespace fm

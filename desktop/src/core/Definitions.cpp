@@ -318,4 +318,63 @@ QHash<QString, QString> Definitions::roleDisplayMap() const
     return result;
 }
 
+QHash<QString, QPair<int, int>> Definitions::naturalRoleSorter() const
+{
+    // role -> game positions it can play (reverse of position_to_role_mapping).
+    QHash<QString, QStringList> roleToPositions;
+    const auto posMap = positionToRoleMapping();
+    for (auto it = posMap.constBegin(); it != posMap.constEnd(); ++it) {
+        for (const QString &role : it.value())
+            roleToPositions[role].append(it.key());
+    }
+
+    QHash<QString, QPair<int, int>> sorter;
+    const auto &slotMap = masterPositionMap();
+    const auto &slotPositions = tacticalSlotToGamePositions();
+    const auto &strata = stratumOrder();
+
+    for (const QString &role : validRoles()) {
+        if (role.contains(QLatin1String("GK")) || role.contains(QLatin1String("SK"))) {
+            sorter.insert(role, {0, 0});
+            continue;
+        }
+        const QStringList positions = roleToPositions.value(role);
+        if (positions.isEmpty()) {
+            sorter.insert(role, {99, 99});
+            continue;
+        }
+        // Highest (most attacking) slot the role can occupy; ties break left.
+        QPair<int, int> best(-1, -1);
+        for (auto slotIt = slotMap.constBegin(); slotIt != slotMap.constEnd(); ++slotIt) {
+            const QStringList validGamePositions = slotPositions.value(slotIt.key());
+            bool matches = false;
+            for (const QString &position : positions) {
+                if (validGamePositions.contains(position)) {
+                    matches = true;
+                    break;
+                }
+            }
+            if (!matches)
+                continue;
+            const int stratumScore = strata.value(slotIt.value().stratum, 99);
+            const QPair<int, int> current(stratumScore, slotIt.value().column);
+            if (current.first > best.first
+                || (current.first == best.first && current.second < best.second)) {
+                best = current;
+            }
+        }
+        sorter.insert(role, best.first < 0 ? QPair<int, int>(99, 99) : best);
+    }
+    return sorter;
+}
+
+QStringList Definitions::sortRolesNaturally(QStringList roles) const
+{
+    const auto sorter = naturalRoleSorter();
+    std::stable_sort(roles.begin(), roles.end(), [&sorter](const QString &a, const QString &b) {
+        return sorter.value(a, {99, 99}) < sorter.value(b, {99, 99});
+    });
+    return roles;
+}
+
 } // namespace fm

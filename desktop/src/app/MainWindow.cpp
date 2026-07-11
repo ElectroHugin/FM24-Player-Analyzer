@@ -1,15 +1,21 @@
 #include "MainWindow.h"
 
 #include "AppContext.h"
+#include "pages/AssignRolesPage.h"
 #include "pages/DashboardPage.h"
 #include "pages/PlaceholderPage.h"
+#include "pages/RoleAnalysisPage.h"
 #include "pages/SettingsPage.h"
+#include "pages/SquadMatrixPage.h"
+#include "pages/TransfersPage.h"
 #include "theming/ThemeManager.h"
 #include "core/Database.h"
 #include "core/Version.h"
 
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QCompleter>
+#include <QStandardItemModel>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -82,10 +88,6 @@ const QList<MenuEntry> &globalMenu()
 QString milestoneFor(const QString &pageId)
 {
     static const QHash<QString, QString> milestones = {
-        {QStringLiteral("assign_roles"), QStringLiteral("M8")},
-        {QStringLiteral("role_analysis"), QStringLiteral("M8")},
-        {QStringLiteral("squad_matrix"), QStringLiteral("M8")},
-        {QStringLiteral("transfers"), QStringLiteral("M8")},
         {QStringLiteral("player_profile"), QStringLiteral("M9")},
         {QStringLiteral("player_comparison"), QStringLiteral("M9")},
         {QStringLiteral("dwrs_development"), QStringLiteral("M9")},
@@ -133,10 +135,13 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
 
     connect(&m_context, &AppContext::databaseChanged, this, [this](const QString &) {
         updateDbLabel();
+        m_searchModelDirty = true;
         for (PageBase *page : std::as_const(m_pages))
             page->refresh();
     });
     connect(&m_context, &AppContext::dataChanged, this, [this] {
+        m_searchModelDirty = true;
+        updateDbLabel();
         if (auto *page = qobject_cast<PageBase *>(m_stack->currentWidget()))
             page->refresh();
     });
@@ -187,9 +192,33 @@ void MainWindow::buildSidebar()
     connect(m_modeCombo, &QComboBox::currentIndexChanged, this, &MainWindow::rebuildMenu);
 
     m_searchEdit = new QLineEdit(sidebar);
-    m_searchEdit->setPlaceholderText(tr("Spieler suchen… (ab M8)"));
-    m_searchEdit->setEnabled(false); // completer arrives with the table model in M8
+    m_searchEdit->setPlaceholderText(tr("🔎 Spieler suchen…"));
+    m_searchEdit->setClearButtonEnabled(true);
     layout->addWidget(m_searchEdit);
+
+    m_searchModel = new QStandardItemModel(this);
+    m_searchCompleter = new QCompleter(m_searchModel, this);
+    m_searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);
+    m_searchCompleter->setFilterMode(Qt::MatchContains);
+    m_searchCompleter->setCompletionMode(QCompleter::PopupCompletion);
+    m_searchCompleter->setMaxVisibleItems(12);
+    m_searchEdit->setCompleter(m_searchCompleter);
+
+    // The model over 80k players is built lazily on first keystroke and
+    // invalidated whenever the store reloads.
+    connect(m_searchEdit, &QLineEdit::textEdited, this, [this] {
+        if (m_searchModelDirty)
+            rebuildSearchModel();
+    });
+    connect(m_searchCompleter, QOverload<const QModelIndex &>::of(&QCompleter::activated),
+            this, [this](const QModelIndex &index) {
+                const QString uid = index.data(Qt::UserRole).toString();
+                if (uid.isEmpty())
+                    return;
+                m_context.setPendingProfileUid(uid);
+                m_searchEdit->clear();
+                navigateTo(QStringLiteral("player_profile"));
+            });
 
     m_menu = new QListWidget(sidebar);
     layout->addWidget(m_menu, 1);
@@ -246,6 +275,14 @@ PageBase *MainWindow::createPage(const QString &pageId)
 {
     if (pageId == QLatin1String("dashboard"))
         return new DashboardPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("assign_roles"))
+        return new AssignRolesPage(m_context, this);
+    if (pageId == QLatin1String("role_analysis"))
+        return new RoleAnalysisPage(m_context, this);
+    if (pageId == QLatin1String("squad_matrix"))
+        return new SquadMatrixPage(m_context, this);
+    if (pageId == QLatin1String("transfers"))
+        return new TransfersPage(m_context, this);
     if (pageId == QLatin1String("settings")) {
         auto *page = new SettingsPage(m_context, m_theme, this);
         connect(page, &SettingsPage::recalcRequested, this, &MainWindow::startDwrsRecalc);
@@ -311,6 +348,21 @@ void MainWindow::startDwrsRecalc()
                         Qt::QueuedConnection);
                 });
         }));
+}
+
+void MainWindow::rebuildSearchModel()
+{
+    m_searchModel->clear();
+    const auto &players = m_context.store().players();
+    m_searchModel->setRowCount(static_cast<int>(players.size()));
+    int row = 0;
+    for (const Player &player : players) {
+        auto *item = new QStandardItem(QStringLiteral("%1 — %2 · %3")
+                                           .arg(player.name, player.club, player.positionRaw));
+        item->setData(player.uid, Qt::UserRole);
+        m_searchModel->setItem(row++, 0, item);
+    }
+    m_searchModelDirty = false;
 }
 
 void MainWindow::updateDbLabel()
