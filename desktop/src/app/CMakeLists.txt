@@ -34,6 +34,10 @@ add_executable(fmplayeranalyzer WIN32
     pages/NationalSquadMatrixPage.cpp
     pages/NationalSquadSelectionPage.h
     pages/NationalSquadSelectionPage.cpp
+    pages/NewRolePage.h
+    pages/NewRolePage.cpp
+    pages/NewTacticPage.h
+    pages/NewTacticPage.cpp
     pages/PageBase.h
     pages/PageHelpers.h
     pages/PlaceholderPage.h

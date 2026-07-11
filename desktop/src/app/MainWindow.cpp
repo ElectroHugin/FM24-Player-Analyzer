@@ -11,6 +11,8 @@
 #include "pages/NationalDashboardPage.h"
 #include "pages/NationalSquadMatrixPage.h"
 #include "pages/NationalSquadSelectionPage.h"
+#include "pages/NewRolePage.h"
+#include "pages/NewTacticPage.h"
 #include "pages/PlaceholderPage.h"
 #include "pages/PlayerComparisonPage.h"
 #include "pages/PlayerProfilePage.h"
@@ -95,14 +97,11 @@ const QList<MenuEntry> &globalMenu()
     return entries;
 }
 
-// Which milestone delivers each placeholder page (shown on the placeholder).
-QString milestoneFor(const QString &pageId)
+// Every menu page is implemented; unknown ids fall back to a placeholder
+// that names the milestone (only reachable for future/unwired page ids).
+QString milestoneFor(const QString &)
 {
-    static const QHash<QString, QString> milestones = {
-        {QStringLiteral("new_role"), QStringLiteral("M11")},
-        {QStringLiteral("new_tactic"), QStringLiteral("M11")},
-    };
-    return milestones.value(pageId, QStringLiteral("M12"));
+    return QStringLiteral("M12");
 }
 
 } // namespace
@@ -311,13 +310,17 @@ PageBase *MainWindow::createPage(const QString &pageId)
         return new NationalSquadMatrixPage(m_context, this);
     if (pageId == QLatin1String("national_best_xi"))
         return new NationalBestXiPage(m_context, m_theme, this);
+    if (pageId == QLatin1String("new_role"))
+        return new NewRolePage(m_context, this);
+    if (pageId == QLatin1String("new_tactic"))
+        return new NewTacticPage(m_context, this);
     if (pageId == QLatin1String("settings")) {
         auto *page = new SettingsPage(m_context, m_theme, this);
         connect(page, &SettingsPage::recalcRequested, this, &MainWindow::startDwrsRecalc);
         return page;
     }
 
-    // Everything else arrives in M8-M11.
+    // Fallback for unwired page ids (should not occur in normal use).
     QString label = pageId;
     for (const auto &entry : clubMenu() + nationalMenu() + globalMenu()) {
         if (entry.pageId == pageId) {
