@@ -22,6 +22,37 @@ int rowForStratum(const QString &stratum)
     return rows.value(stratum, -1);
 }
 
+// "Kylian Mbappé Lottin" -> "K. Lottin" (football-style short form).
+QString initialAndLastName(const QString &fullName)
+{
+    const QStringList words = fullName.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (words.size() < 2)
+        return fullName;
+    return QStringLiteral("%1. %2").arg(words.first().at(0)).arg(words.last());
+}
+
+// Draws text centered in rect, degrading gracefully instead of cutting the
+// name off: full name -> "K. Mbappé" -> smaller font -> elide as last resort.
+void drawFittedName(QPainter &painter, const QRectF &rect, const QString &fullName,
+                    const QFont &baseFont)
+{
+    const int width = static_cast<int>(rect.width());
+    QFont font = baseFont;
+    painter.setFont(font);
+    QString text = fullName;
+    if (painter.fontMetrics().horizontalAdvance(text) > width) {
+        text = initialAndLastName(fullName);
+        while (painter.fontMetrics().horizontalAdvance(text) > width
+               && font.pointSizeF() > baseFont.pointSizeF() * 0.72) {
+            font.setPointSizeF(font.pointSizeF() - 0.5);
+            painter.setFont(font);
+        }
+        if (painter.fontMetrics().horizontalAdvance(text) > width)
+            text = painter.fontMetrics().elidedText(text, Qt::ElideRight, width);
+    }
+    painter.drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, text);
+}
+
 } // namespace
 
 TacticPitchWidget::TacticPitchWidget(ThemeManager &theme, QWidget *parent)
@@ -146,11 +177,8 @@ void TacticPitchWidget::paintEvent(QPaintEvent *)
         const double lineH = box.height() / 4.2;
         QRectF line(box.left() + 2, box.top() + box.height() * 0.06, box.width() - 4, lineH);
         painter.setPen(textColor);
-        painter.setFont(nameFont);
-        const QString name = cell.isFilled() ? cell.name : QStringLiteral("–");
-        painter.drawText(line, Qt::AlignHCenter | Qt::AlignVCenter,
-                         painter.fontMetrics().elidedText(name, Qt::ElideRight,
-                                                          static_cast<int>(line.width())));
+        drawFittedName(painter, line, cell.isFilled() ? cell.name : QStringLiteral("–"),
+                       nameFont);
         line.translate(0, lineH);
         painter.setFont(ratingFont);
         painter.drawText(line, Qt::AlignHCenter | Qt::AlignVCenter,

@@ -39,6 +39,7 @@ private:
     PageBase *createPage(const QString &pageId);
     void startDwrsRecalc();
     void updateDbLabel();
+    void updateHeader();
     void rebuildSearchModel();
 
     AppContext &m_context;
@@ -48,6 +49,8 @@ private:
     QComboBox *m_modeCombo = nullptr; // Club / National
     QLineEdit *m_searchEdit = nullptr;
     QLabel *m_dbLabel = nullptr;
+    QLabel *m_headerIdentity = nullptr; // club/national name + stadium
+    QLabel *m_headerSave = nullptr;     // active save file
     QStackedWidget *m_stack = nullptr;
     QHash<QString, PageBase *> m_pages; // lazily created
 

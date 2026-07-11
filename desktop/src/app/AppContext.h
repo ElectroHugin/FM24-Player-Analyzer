@@ -56,6 +56,10 @@ public:
     // Re-reads config-dependent engine state (after settings changes).
     void reloadEngines();
 
+    // Lets the settings page announce changed DB settings (club identity,
+    // favorites, …) so header and pages refresh without a full reload.
+    void notifySettingsChanged() { emit dataChanged(); }
+
     // Re-reads config.ini and definitions.json from disk (after the migration
     // wizard replaced them) and refreshes the engines.
     void reloadConfigAndDefinitions();

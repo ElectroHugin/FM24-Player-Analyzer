@@ -34,6 +34,8 @@ env/
 # ============================================
 desktop/build*/
 desktop/installer/Output/
+desktop/installer/output/
+desktop/installer/staging/
 desktop/src/tests/golden/local/
 CMakeUserPresets.json
 CMakeLists.txt.user*

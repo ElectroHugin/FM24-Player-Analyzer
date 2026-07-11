@@ -102,6 +102,7 @@ QScrollBar::handle:vertical { background: %6; border-radius: 5px; min-height: 24
 QScrollBar:horizontal { background: %1; height: 12px; }
 QScrollBar::handle:horizontal { background: %6; border-radius: 5px; min-width: 24px; }
 QToolTip { background-color: %2; color: %3; border: 1px solid %6; }
+QFrame#headerBar { background-color: %2; border-bottom: 1px solid %6; }
 QFrame#kpiTile { background-color: %2; border: 1px solid %6; border-radius: 8px; }
 QLabel#kpiValue { font-size: 20pt; font-weight: 600; color: %4; }
 QLabel#kpiCaption { color: %8; }

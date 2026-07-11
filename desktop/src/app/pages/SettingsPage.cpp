@@ -99,8 +99,16 @@ QWidget *SettingsPage::buildClubTab()
     m_clubCountryEdit->setMaxLength(3);
     m_clubCountryEdit->setMaximumWidth(80);
     m_clubCountryEdit->setPlaceholderText(QStringLiteral("GER"));
+    m_fullClubNameEdit = new QLineEdit;
+    m_fullClubNameEdit->setMinimumWidth(260);
+    m_fullClubNameEdit->setPlaceholderText(tr("z. B. 'FC Bayern München' (für den Header)"));
+    m_stadiumEdit = new QLineEdit;
+    m_stadiumEdit->setMinimumWidth(260);
+    m_stadiumEdit->setPlaceholderText(tr("z. B. 'Allianz Arena'"));
     clubForm->addRow(tr("Mein Verein:"), m_userClubCombo);
     clubForm->addRow(tr("Zweitteam:"), m_secondClubCombo);
+    clubForm->addRow(tr("Voller Vereinsname (Anzeige):"), m_fullClubNameEdit);
+    clubForm->addRow(tr("Stadion:"), m_stadiumEdit);
     clubForm->addRow(tr("Vereins-Land (3-Buchstaben-Code):"), m_clubCountryEdit);
     layout->addWidget(clubGroup);
 
@@ -401,6 +409,9 @@ void SettingsPage::refresh()
     fillClubCombo(m_secondClubCombo, m_context.secondTeamClub());
     m_clubCountryEdit->setText(
         m_context.database().setting(QStringLiteral("club_country_code")));
+    m_fullClubNameEdit->setText(
+        m_context.database().setting(QStringLiteral("full_club_name")));
+    m_stadiumEdit->setText(m_context.database().setting(QStringLiteral("stadium_name")));
 
     QStringList tactics = m_context.definitions().tacticNames();
     std::sort(tactics.begin(), tactics.end());
@@ -498,6 +509,8 @@ void SettingsPage::saveAll()
     saveSetting(QStringLiteral("second_team_club"), m_secondClubCombo->currentText());
     saveSetting(QStringLiteral("club_country_code"),
                 m_clubCountryEdit->text().trimmed().toUpper());
+    saveSetting(QStringLiteral("full_club_name"), m_fullClubNameEdit->text().trimmed());
+    saveSetting(QStringLiteral("stadium_name"), m_stadiumEdit->text().trimmed());
     saveSetting(QStringLiteral("favorite_tactic_1"), m_favTactic1Combo->currentText());
     saveSetting(QStringLiteral("favorite_tactic_2"), m_favTactic2Combo->currentText());
     saveSetting(QStringLiteral("national_team_name"), m_natNameEdit->text().trimmed());
@@ -552,6 +565,7 @@ void SettingsPage::saveAll()
     m_context.reloadEngines();
     m_theme.setMode(m_modeCombo->currentData().toString());
     m_theme.apply();
+    m_context.notifySettingsChanged();
 
     if (weightsChanged) {
         emit recalcRequested();

@@ -71,6 +71,8 @@ private:
     QComboBox *m_userClubCombo = nullptr;
     QComboBox *m_secondClubCombo = nullptr;
     QLineEdit *m_clubCountryEdit = nullptr;
+    QLineEdit *m_fullClubNameEdit = nullptr;
+    QLineEdit *m_stadiumEdit = nullptr;
     QComboBox *m_favTactic1Combo = nullptr;
     QComboBox *m_favTactic2Combo = nullptr;
     QLineEdit *m_natNameEdit = nullptr;

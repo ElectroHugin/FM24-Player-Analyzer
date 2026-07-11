@@ -39,6 +39,7 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth(int width) const override { return width * 105 / 68; }
+    QSize sizeHint() const override { return {480, 480 * 105 / 68}; }
 
 private:
     ThemeManager &m_theme;

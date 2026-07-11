@@ -125,15 +125,34 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
     buildSidebar();
     rootLayout->addWidget(findChild<QFrame *>(QStringLiteral("sidebar")));
 
+    // Header bar (club/national identity + active save) above the pages —
+    // the port of legacy display_custom_header.
+    auto *contentColumn = new QVBoxLayout;
+    contentColumn->setContentsMargins(0, 0, 0, 0);
+    contentColumn->setSpacing(0);
+    auto *headerBar = new QFrame(central);
+    headerBar->setObjectName(QStringLiteral("headerBar"));
+    auto *headerLayout = new QHBoxLayout(headerBar);
+    headerLayout->setContentsMargins(18, 8, 18, 8);
+    m_headerIdentity = new QLabel(headerBar);
+    m_headerSave = new QLabel(headerBar);
+    m_headerSave->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    headerLayout->addWidget(m_headerIdentity, 1);
+    headerLayout->addWidget(m_headerSave);
+    contentColumn->addWidget(headerBar);
+
     m_stack = new QStackedWidget(central);
-    rootLayout->addWidget(m_stack, 1);
+    contentColumn->addWidget(m_stack, 1);
+    rootLayout->addLayout(contentColumn, 1);
     setCentralWidget(central);
 
     statusBar()->showMessage(tr("Bereit"));
     updateDbLabel();
+    updateHeader();
 
     connect(&m_context, &AppContext::databaseChanged, this, [this](const QString &) {
         updateDbLabel();
+        updateHeader();
         m_searchModelDirty = true;
         for (PageBase *page : std::as_const(m_pages))
             page->refresh();
@@ -141,6 +160,7 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
     connect(&m_context, &AppContext::dataChanged, this, [this] {
         m_searchModelDirty = true;
         updateDbLabel();
+        updateHeader();
         if (auto *page = qobject_cast<PageBase *>(m_stack->currentWidget()))
             page->refresh();
     });
@@ -194,6 +214,7 @@ void MainWindow::buildSidebar()
         m_context.setNationalUiMode(m_modeCombo->currentData().toString()
                                     == QLatin1String("national"));
         rebuildMenu();
+        updateHeader();
     });
 
     m_searchEdit = new QLineEdit(sidebar);
@@ -393,6 +414,35 @@ void MainWindow::startDwrsRecalc()
                         Qt::QueuedConnection);
                 });
         }));
+}
+
+void MainWindow::updateHeader()
+{
+    QString identity;
+    if (m_context.nationalUiMode()) {
+        const QString name = m_context.nationalTeamName();
+        const QString code = m_context.nationalTeamCode();
+        identity = QStringLiteral("<b style='font-size:13pt;'>%1</b>")
+                       .arg((name.isEmpty() ? tr("Nationalteam") : name).toHtmlEscaped());
+        if (!code.isEmpty())
+            identity += QStringLiteral(" &nbsp;<span>(%1)</span>").arg(code.toHtmlEscaped());
+    } else {
+        const QString fullName =
+            m_context.database().setting(QStringLiteral("full_club_name"));
+        const QString stadium = m_context.database().setting(QStringLiteral("stadium_name"));
+        const QString display = !fullName.isEmpty()
+                                    ? fullName
+                                    : (!m_context.userClub().isEmpty() ? m_context.userClub()
+                                                                       : tr("FM Dashboard"));
+        identity = QStringLiteral("<b style='font-size:13pt;'>%1</b>")
+                       .arg(display.toHtmlEscaped());
+        if (!stadium.isEmpty())
+            identity += QStringLiteral(" &nbsp;<span>🏟️ %1</span>").arg(stadium.toHtmlEscaped());
+    }
+    m_headerIdentity->setText(identity);
+    m_headerSave->setText(tr("Aktiver Spielstand: <b>%1.db</b> · %2 Spieler")
+                              .arg(m_context.currentDbName())
+                              .arg(m_context.store().size()));
 }
 
 void MainWindow::rebuildSearchModel()
