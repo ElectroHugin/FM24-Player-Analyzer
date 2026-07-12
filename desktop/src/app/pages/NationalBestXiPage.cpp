@@ -4,18 +4,45 @@
 #include "../PlayerActions.h"
 #include "../widgets/TacticPitchWidget.h"
 #include "PageHelpers.h"
+#include "core/Utils.h"
 
 #include <QComboBox>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QScrollArea>
+#include <QTableWidget>
 #include <QVBoxLayout>
 
 #include <algorithm>
 
 namespace fm {
+
+namespace {
+
+// Table item that displays text but sorts by a numeric key.
+class NumericItem : public QTableWidgetItem
+{
+public:
+    NumericItem(const QString &text, double sortKey)
+        : QTableWidgetItem(text)
+        , m_key(sortKey)
+    {
+    }
+    bool operator<(const QTableWidgetItem &other) const override
+    {
+        if (const auto *numeric = dynamic_cast<const NumericItem *>(&other))
+            return m_key < numeric->m_key;
+        return QTableWidgetItem::operator<(other);
+    }
+
+private:
+    double m_key;
+};
+
+} // namespace
 
 NationalBestXiPage::NationalBestXiPage(AppContext &context, ThemeManager &theme,
                                        QWidget *parent)
@@ -71,7 +98,6 @@ NationalBestXiPage::NationalBestXiPage(AppContext &context, ThemeManager &theme,
     m_xiPitch = new TacticPitchWidget(m_theme, m_content);
     xiColumn->addWidget(xiTitle);
     xiColumn->addWidget(m_xiPitch, 0, Qt::AlignTop | Qt::AlignHCenter);
-    xiColumn->addStretch(1);
     auto *bColumn = new QVBoxLayout;
     auto *bTitle = new QLabel(tr("B-Team"), m_content);
     bTitle->setObjectName(QStringLiteral("sectionTitle"));
@@ -79,21 +105,35 @@ NationalBestXiPage::NationalBestXiPage(AppContext &context, ThemeManager &theme,
     m_bTeamPitch = new TacticPitchWidget(m_theme, m_content);
     bColumn->addWidget(bTitle);
     bColumn->addWidget(m_bTeamPitch, 0, Qt::AlignTop | Qt::AlignHCenter);
-    bColumn->addStretch(1);
     pitchRow->addLayout(xiColumn, 1);
     pitchRow->addLayout(bColumn, 1);
     contentLayout->addLayout(pitchRow);
 
-    auto *depthBox = new QGroupBox(tr("Weitere Kader-Tiefe"), m_content);
-    auto *depthLayout = new QVBoxLayout(depthBox);
-    m_depthLabel = new QLabel(depthBox);
-    m_depthLabel->setWordWrap(true);
-    m_depthLabel->setTextFormat(Qt::RichText);
-    depthLayout->addWidget(m_depthLabel);
-    contentLayout->addWidget(depthBox);
+    m_depthBox = new QGroupBox(tr("Weitere Kader-Tiefe"), m_content);
+    auto *depthLayout = new QVBoxLayout(m_depthBox);
+    m_depthEmpty = new QLabel(m_depthBox);
+    m_depthEmpty->setWordWrap(true);
+    m_depthEmpty->setObjectName(QStringLiteral("kpiCaption"));
+    depthLayout->addWidget(m_depthEmpty);
+    m_depthTable = new QTableWidget(m_depthBox);
+    m_depthTable->setColumnCount(4);
+    m_depthTable->setHorizontalHeaderLabels(
+        {tr("Rolle"), tr("Name"), tr("Alter"), tr("DWRS")});
+    m_depthTable->verticalHeader()->setVisible(false);
+    m_depthTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_depthTable->setAlternatingRowColors(true);
+    m_depthTable->setSortingEnabled(true);
+    m_depthTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_depthTable->horizontalHeader()->setStretchLastSection(true);
+    m_depthTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_depthTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    depthLayout->addWidget(m_depthTable);
+    contentLayout->addWidget(m_depthBox);
 
     layout->addWidget(m_content, 1);
     layout->addStretch(1);
+
+    PlayerActions::attachToTableWidget(m_context, m_depthTable, 1);
 
     connect(m_tacticCombo, &QComboBox::currentIndexChanged, this, [this] {
         if (!m_updating)
@@ -152,30 +192,71 @@ void NationalBestXiPage::rebuild()
     m_xiPitch->setTeam(squad.startingXi, positions, layout, roleNames, false);
     m_bTeamPitch->setTeam(squad.bTeam, positions, layout, roleNames, false);
 
-    if (squad.bestDepthOptions.isEmpty()) {
-        m_depthLabel->setText(tr("Keine weiteren Spieler im Kader als Tiefen-Optionen für "
+    fillDepthTable(squad.bestDepthOptions);
+}
+
+void NationalBestXiPage::fillDepthTable(const QHash<QString, QList<DepthOption>> &options)
+{
+    const auto roleNames = m_context.definitions().roleDisplayMap();
+
+    if (options.isEmpty()) {
+        m_depthEmpty->setText(tr("Keine weiteren Spieler im Kader als Tiefen-Optionen für "
                                  "diese Taktik geeignet."));
+        m_depthEmpty->setVisible(true);
+        m_depthTable->setVisible(false);
+        m_depthTable->setRowCount(0);
         return;
     }
-    QStringList roles = squad.bestDepthOptions.keys();
+    m_depthEmpty->setVisible(false);
+    m_depthTable->setVisible(true);
+
+    // One row per (role, player) option, roles in natural pitch order.
+    QStringList roles = options.keys();
     roles = m_context.definitions().sortRolesNaturally(roles);
-    QString html;
+    int rowCount = 0;
+    for (const QString &role : roles)
+        rowCount += options.value(role).size();
+
+    m_depthTable->setSortingEnabled(false);
+    m_depthTable->clearContents();
+    m_depthTable->setRowCount(rowCount);
+    int row = 0;
     for (const QString &role : roles) {
-        const auto options = squad.bestDepthOptions.value(role);
-        if (options.isEmpty())
-            continue;
-        QStringList entries;
-        for (const DepthOption &option : options) {
-            entries << tr("%1 (%2) – %3%")
-                           .arg(option.name.toHtmlEscaped())
-                           .arg(option.age)
-                           .arg(qRound(option.rating));
+        for (const DepthOption &option : options.value(role)) {
+            int column = 0;
+            m_depthTable->setItem(row, column++,
+                                  new QTableWidgetItem(roleNames.value(role, role)));
+
+            auto *nameItem = new QTableWidgetItem(option.name);
+            nameItem->setData(Qt::UserRole, option.playerUid);
+            m_depthTable->setItem(row, column++, nameItem);
+
+            m_depthTable->setItem(row, column++,
+                                  new NumericItem(QString::number(option.age), option.age));
+
+            auto *dwrsItem =
+                new NumericItem(QStringLiteral("%1%").arg(qRound(option.rating)), option.rating);
+            dwrsItem->setTextAlignment(Qt::AlignCenter);
+            const CellStyle style = dwrsCellStyle(option.rating);
+            if (style.isValid()) {
+                dwrsItem->setBackground(style.background);
+                dwrsItem->setForeground(style.text);
+            }
+            m_depthTable->setItem(row, column++, dwrsItem);
+            ++row;
         }
-        html += QStringLiteral("<p><b>%1</b>: %2</p>")
-                    .arg(roleNames.value(role, role).toHtmlEscaped(),
-                         entries.join(QStringLiteral(", ")));
     }
-    m_depthLabel->setText(html);
+    m_depthTable->setSortingEnabled(true);
+    m_depthTable->resizeColumnsToContents();
+    m_depthTable->horizontalHeader()->setStretchLastSection(true);
+
+    // Size the table to its content so no inner scrollbar and no dead space
+    // appears between it and the pitches above.
+    m_depthTable->resizeRowsToContents();
+    int height = m_depthTable->horizontalHeader()->height() + 2 * m_depthTable->frameWidth();
+    for (int r = 0; r < rowCount; ++r)
+        height += m_depthTable->rowHeight(r);
+    m_depthTable->setFixedHeight(height);
 }
 
 } // namespace fm

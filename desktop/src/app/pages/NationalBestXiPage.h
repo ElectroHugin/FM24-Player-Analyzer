@@ -2,13 +2,19 @@
 
 #include "PageBase.h"
 
+#include <QHash>
+#include <QList>
+
 class QComboBox;
+class QGroupBox;
 class QLabel;
+class QTableWidget;
 
 namespace fm {
 
 class TacticPitchWidget;
 class ThemeManager;
+struct DepthOption;
 
 // Best XI, B-team and depth options for the national squad (no APT
 // weighting). Port of legacy national_best_xi.py.
@@ -23,6 +29,7 @@ public:
 
 private:
     void rebuild();
+    void fillDepthTable(const QHash<QString, QList<DepthOption>> &options);
 
     ThemeManager &m_theme;
     QComboBox *m_tacticCombo = nullptr;
@@ -30,7 +37,9 @@ private:
     QWidget *m_content = nullptr;
     TacticPitchWidget *m_xiPitch = nullptr;
     TacticPitchWidget *m_bTeamPitch = nullptr;
-    QLabel *m_depthLabel = nullptr;
+    QGroupBox *m_depthBox = nullptr;
+    QTableWidget *m_depthTable = nullptr;
+    QLabel *m_depthEmpty = nullptr;
     bool m_updating = false;
 };
 

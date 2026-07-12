@@ -2,6 +2,9 @@
 
 #include "PageBase.h"
 
+#include <QHash>
+#include <QList>
+
 #include <vector>
 
 class QComboBox;
@@ -17,6 +20,7 @@ class TacticPitchWidget;
 class ThemeManager;
 struct SquadResult;
 struct DevelopmentSquads;
+struct DepthOption;
 
 // Best XI calculator: starting XI, B-team, depth options plus the youth /
 // second-team development squads and surplus lists.
@@ -34,6 +38,7 @@ private:
     void rebuild();
     void fillSurplusTable(QTableWidget *table, const std::vector<const Player *> &players,
                           bool includeTalent);
+    void fillDepthTable(const QHash<QString, QList<DepthOption>> &options);
 
     ThemeManager &m_theme;
 
@@ -43,7 +48,9 @@ private:
 
     TacticPitchWidget *m_xiPitch = nullptr;
     TacticPitchWidget *m_bTeamPitch = nullptr;
-    QLabel *m_depthLabel = nullptr;
+    QGroupBox *m_depthBox = nullptr;
+    QTableWidget *m_depthTable = nullptr;
+    QLabel *m_depthEmpty = nullptr;
 
     QLabel *m_secondXiTitle = nullptr;
     TacticPitchWidget *m_secondXiPitch = nullptr;

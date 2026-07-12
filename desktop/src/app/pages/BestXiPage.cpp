@@ -96,7 +96,6 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
         m_xiPitch = new TacticPitchWidget(m_theme, tab);
         xiColumn->addWidget(xiTitle);
         xiColumn->addWidget(m_xiPitch, 0, Qt::AlignTop | Qt::AlignHCenter);
-        xiColumn->addStretch(1);
         auto *bColumn = new QVBoxLayout;
         auto *bTitle = new QLabel(tr("B-Team"), tab);
         bTitle->setObjectName(QStringLiteral("sectionTitle"));
@@ -104,18 +103,32 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
         m_bTeamPitch = new TacticPitchWidget(m_theme, tab);
         bColumn->addWidget(bTitle);
         bColumn->addWidget(m_bTeamPitch, 0, Qt::AlignTop | Qt::AlignHCenter);
-        bColumn->addStretch(1);
         pitchRow->addLayout(xiColumn, 1);
         pitchRow->addLayout(bColumn, 1);
         tabLayout->addLayout(pitchRow);
 
-        auto *depthBox = new QGroupBox(tr("Weitere Kader-Tiefe"), tab);
-        auto *depthLayout = new QVBoxLayout(depthBox);
-        m_depthLabel = new QLabel(depthBox);
-        m_depthLabel->setWordWrap(true);
-        m_depthLabel->setTextFormat(Qt::RichText);
-        depthLayout->addWidget(m_depthLabel);
-        tabLayout->addWidget(depthBox);
+        m_depthBox = new QGroupBox(tr("Weitere Kader-Tiefe"), tab);
+        auto *depthLayout = new QVBoxLayout(m_depthBox);
+        m_depthEmpty = new QLabel(m_depthBox);
+        m_depthEmpty->setWordWrap(true);
+        m_depthEmpty->setObjectName(QStringLiteral("kpiCaption"));
+        depthLayout->addWidget(m_depthEmpty);
+        m_depthTable = new QTableWidget(m_depthBox);
+        m_depthTable->setColumnCount(5);
+        m_depthTable->setHorizontalHeaderLabels(
+            {tr("Rolle"), tr("Name"), tr("Alter"), tr("DWRS"), tr("Eignung")});
+        m_depthTable->verticalHeader()->setVisible(false);
+        m_depthTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        m_depthTable->setAlternatingRowColors(true);
+        m_depthTable->setSortingEnabled(true);
+        m_depthTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        m_depthTable->horizontalHeader()->setStretchLastSection(true);
+        m_depthTable->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
+        m_depthTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_depthTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        depthLayout->addWidget(m_depthTable);
+        tabLayout->addWidget(m_depthBox);
+        tabLayout->addStretch(1);
         m_tabs->addTab(tab, tr("Erste Mannschaft"));
     }
 
@@ -131,7 +144,6 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
         m_secondXiPitch = new TacticPitchWidget(m_theme, tab);
         secondColumn->addWidget(m_secondXiTitle);
         secondColumn->addWidget(m_secondXiPitch, 0, Qt::AlignTop | Qt::AlignHCenter);
-        secondColumn->addStretch(1);
         auto *youthColumn = new QVBoxLayout;
         auto *youthTitle = new QLabel(tr("Jugend-XI"), tab);
         youthTitle->setObjectName(QStringLiteral("sectionTitle"));
@@ -139,7 +151,6 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
         m_youthXiPitch = new TacticPitchWidget(m_theme, tab);
         youthColumn->addWidget(youthTitle);
         youthColumn->addWidget(m_youthXiPitch, 0, Qt::AlignTop | Qt::AlignHCenter);
-        youthColumn->addStretch(1);
         pitchRow->addLayout(secondColumn, 1);
         pitchRow->addLayout(youthColumn, 1);
         tabLayout->addLayout(pitchRow);
@@ -177,6 +188,7 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
                                  tr("Leihe")});
         sellLayout->addWidget(m_sellTable);
         tabLayout->addWidget(m_sellBox);
+        tabLayout->addStretch(1);
 
         m_tabs->addTab(tab, tr("Jugend && Zweitteam"));
     }
@@ -200,6 +212,8 @@ BestXiPage::BestXiPage(AppContext &context, ThemeManager &theme, QWidget *parent
     }
     PlayerActions::attachToTableWidget(m_context, m_loanTable);
     PlayerActions::attachToTableWidget(m_context, m_sellTable);
+    // The depth options carry a player uid in column 1 (Name).
+    PlayerActions::attachToTableWidget(m_context, m_depthTable, 1);
 }
 
 void BestXiPage::refresh()
@@ -257,33 +271,7 @@ void BestXiPage::rebuild()
     m_youthXiPitch->setTeam(dev.youthXi, positions, layout, roleNames);
 
     // --- Depth options grouped by role, naturally sorted ---
-    if (first.bestDepthOptions.isEmpty()) {
-        m_depthLabel->setText(
-            tr("Keine weiteren Spieler als Tiefen-Optionen für diese Taktik geeignet."));
-    } else {
-        QStringList roles = first.bestDepthOptions.keys();
-        roles = m_context.definitions().sortRolesNaturally(roles);
-        QString html;
-        for (const QString &role : roles) {
-            const auto options = first.bestDepthOptions.value(role);
-            if (options.isEmpty())
-                continue;
-            QStringList entries;
-            for (const DepthOption &option : options) {
-                QString entry = tr("%1 (%2) – %3%")
-                                    .arg(option.name.toHtmlEscaped())
-                                    .arg(option.age)
-                                    .arg(qRound(option.rating));
-                if (!option.apt.isEmpty())
-                    entry += QStringLiteral(" – %1").arg(option.apt.toHtmlEscaped());
-                entries << entry;
-            }
-            html += QStringLiteral("<p><b>%1</b>: %2</p>")
-                        .arg(roleNames.value(role, role).toHtmlEscaped(),
-                             entries.join(QStringLiteral(", ")));
-        }
-        m_depthLabel->setText(html);
-    }
+    fillDepthTable(first.bestDepthOptions);
 
     fillSurplusTable(m_loanTable, dev.loanCandidates, true);
     fillSurplusTable(m_sellTable, dev.sellCandidates, false);
@@ -369,6 +357,75 @@ void BestXiPage::fillSurplusTable(QTableWidget *table,
     }
     table->setSortingEnabled(true);
     table->resizeColumnsToContents();
+}
+
+void BestXiPage::fillDepthTable(const QHash<QString, QList<DepthOption>> &options)
+{
+    const auto roleNames = m_context.definitions().roleDisplayMap();
+
+    if (options.isEmpty()) {
+        m_depthEmpty->setText(
+            tr("Keine weiteren Spieler als Tiefen-Optionen für diese Taktik geeignet."));
+        m_depthEmpty->setVisible(true);
+        m_depthTable->setVisible(false);
+        m_depthTable->setRowCount(0);
+        return;
+    }
+    m_depthEmpty->setVisible(false);
+    m_depthTable->setVisible(true);
+
+    // One row per (role, player) option, roles in natural pitch order.
+    QStringList roles = options.keys();
+    roles = m_context.definitions().sortRolesNaturally(roles);
+    int rowCount = 0;
+    for (const QString &role : roles)
+        rowCount += options.value(role).size();
+
+    m_depthTable->setSortingEnabled(false);
+    m_depthTable->clearContents();
+    m_depthTable->setRowCount(rowCount);
+    int row = 0;
+    for (const QString &role : roles) {
+        for (const DepthOption &option : options.value(role)) {
+            int column = 0;
+            m_depthTable->setItem(row, column++,
+                                  new QTableWidgetItem(roleNames.value(role, role)));
+
+            auto *nameItem = new QTableWidgetItem(option.name);
+            nameItem->setData(Qt::UserRole, option.playerUid);
+            m_depthTable->setItem(row, column++, nameItem);
+
+            m_depthTable->setItem(row, column++,
+                                  new NumericItem(QString::number(option.age), option.age));
+
+            auto *dwrsItem =
+                new NumericItem(QStringLiteral("%1%").arg(qRound(option.rating)), option.rating);
+            dwrsItem->setTextAlignment(Qt::AlignCenter);
+            const CellStyle style = dwrsCellStyle(option.rating);
+            if (style.isValid()) {
+                dwrsItem->setBackground(style.background);
+                dwrsItem->setForeground(style.text);
+            }
+            m_depthTable->setItem(row, column++, dwrsItem);
+
+            m_depthTable->setItem(row, column++,
+                                  new QTableWidgetItem(option.apt.isEmpty()
+                                                           ? QStringLiteral("–")
+                                                           : option.apt));
+            ++row;
+        }
+    }
+    m_depthTable->setSortingEnabled(true);
+    m_depthTable->resizeColumnsToContents();
+    m_depthTable->horizontalHeader()->setStretchLastSection(true);
+
+    // Size the table to its content so no inner scrollbar and no dead space
+    // appears between it and the pitches above.
+    m_depthTable->resizeRowsToContents();
+    int height = m_depthTable->horizontalHeader()->height() + 2 * m_depthTable->frameWidth();
+    for (int r = 0; r < rowCount; ++r)
+        height += m_depthTable->rowHeight(r);
+    m_depthTable->setFixedHeight(height);
 }
 
 } // namespace fm
