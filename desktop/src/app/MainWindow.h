@@ -49,6 +49,7 @@ private:
     QComboBox *m_modeCombo = nullptr; // Club / National
     QLineEdit *m_searchEdit = nullptr;
     QLabel *m_dbLabel = nullptr;
+    QLabel *m_headerLogo = nullptr;     // optional club logo (user PNG)
     QLabel *m_headerIdentity = nullptr; // club/national name + stadium
     QLabel *m_headerSave = nullptr;     // active save file
     QStackedWidget *m_stack = nullptr;

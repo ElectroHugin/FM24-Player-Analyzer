@@ -3,6 +3,7 @@
 #include "../AppContext.h"
 #include "../MigrationWizard.h"
 #include "../theming/ThemeManager.h"
+#include "../theming/ThemePresets.h"
 #include "core/Constants.h"
 #include "core/Utils.h"
 
@@ -10,15 +11,20 @@
 #include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QFile>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QSet>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -44,6 +50,17 @@ const QStringList &gkWeightCategoryOrder()
         QStringLiteral("Medium Importance"), QStringLiteral("Key"),
         QStringLiteral("Preferable"), QStringLiteral("Other")};
     return order;
+}
+
+// Color swatch button style with a readable label on top of the color.
+QString colorButtonStyle(const QColor &color)
+{
+    const QString textColor =
+        contrastRatio(color, QColorConstants::White) >= 3.0 ? QStringLiteral("#ffffff")
+                                                            : QStringLiteral("#000000");
+    return QStringLiteral("background-color:%1; color:%2; border:1px solid rgba(128,128,128,0.5);"
+                          " border-radius:6px; padding:5px;")
+        .arg(color.name(), textColor);
 }
 
 QWidget *wrapScrollable(QWidget *content)
@@ -135,6 +152,22 @@ QWidget *SettingsPage::buildClubTab()
     clubForm->addRow(tr("Voller Vereinsname (Anzeige):"), m_fullClubNameEdit);
     clubForm->addRow(tr("Stadion:"), m_stadiumEdit);
     clubForm->addRow(tr("Vereins-Land (3-Buchstaben-Code):"), m_clubCountryEdit);
+
+    // Logo (PNG) shown in the header — applied immediately, per database.
+    m_logoPreview = new QLabel;
+    m_logoPreview->setFixedSize(120, 48);
+    m_logoPreview->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    auto *logoButtons = new QHBoxLayout;
+    auto *chooseLogoButton = new QPushButton(tr("Logo wählen (PNG)…"));
+    m_logoRemoveButton = new QPushButton(tr("Entfernen"));
+    logoButtons->addWidget(m_logoPreview, 1);
+    logoButtons->addWidget(chooseLogoButton);
+    logoButtons->addWidget(m_logoRemoveButton);
+    auto *logoRow = new QWidget;
+    logoRow->setLayout(logoButtons);
+    clubForm->addRow(tr("Vereinslogo:"), logoRow);
+    connect(chooseLogoButton, &QPushButton::clicked, this, &SettingsPage::chooseLogo);
+    connect(m_logoRemoveButton, &QPushButton::clicked, this, &SettingsPage::removeLogo);
     layout->addWidget(clubGroup);
 
     auto *tacticGroup = new QGroupBox(tr("Lieblings-Taktiken"), content);
@@ -183,6 +216,65 @@ QWidget *SettingsPage::buildClubTab()
     layout->addStretch(1);
 
     return wrapScrollable(content);
+}
+
+void SettingsPage::chooseLogo()
+{
+    const QString source = QFileDialog::getOpenFileName(
+        this, tr("Vereinslogo wählen"), QString(),
+        tr("Bilder (*.png *.jpg *.jpeg *.bmp);;Alle Dateien (*)"));
+    if (source.isEmpty())
+        return;
+
+    QPixmap pixmap;
+    if (!pixmap.load(source)) {
+        QMessageBox::warning(this, tr("Vereinslogo"),
+                             tr("Die Datei konnte nicht als Bild geladen werden."));
+        return;
+    }
+
+    // Copy into the data folder's assets dir under a database-specific name so
+    // each save keeps its own logo and the original file can move freely.
+    const QString assetsDir = m_context.paths().assetsDir();
+    QDir().mkpath(assetsDir);
+    const QString dest = QDir(assetsDir).filePath(
+        QStringLiteral("logo_%1.png").arg(m_context.currentDbName()));
+    QFile::remove(dest);
+    if (!pixmap.save(dest, "PNG")) {
+        QMessageBox::warning(this, tr("Vereinslogo"),
+                             tr("Das Logo konnte nicht gespeichert werden."));
+        return;
+    }
+
+    m_context.database().setSetting(QStringLiteral("club_logo_path"), dest);
+    updateLogoPreview();
+    m_context.notifySettingsChanged(); // refreshes the header
+}
+
+void SettingsPage::removeLogo()
+{
+    const QString path = m_context.database().setting(QStringLiteral("club_logo_path"));
+    if (!path.isEmpty())
+        QFile::remove(path);
+    m_context.database().removeSetting(QStringLiteral("club_logo_path"));
+    updateLogoPreview();
+    m_context.notifySettingsChanged();
+}
+
+void SettingsPage::updateLogoPreview()
+{
+    const QString path = m_context.database().setting(QStringLiteral("club_logo_path"));
+    QPixmap pixmap;
+    if (!path.isEmpty() && pixmap.load(path)) {
+        m_logoPreview->setPixmap(
+            pixmap.scaled(m_logoPreview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        m_logoRemoveButton->setEnabled(true);
+    } else {
+        m_logoPreview->setPixmap(QPixmap());
+        m_logoPreview->setText(tr("(kein Logo)"));
+        m_logoPreview->setStyleSheet(QStringLiteral("color: rgba(128,128,128,0.8);"));
+        m_logoRemoveButton->setEnabled(false);
+    }
 }
 
 QWidget *SettingsPage::buildWeightsTab()
@@ -296,18 +388,46 @@ QWidget *SettingsPage::buildThemeTab()
     auto *content = new QWidget;
     auto *layout = new QVBoxLayout(content);
 
-    auto *modeForm = new QFormLayout;
+    // --- Preset + mode ---
+    auto *topGroup = new QGroupBox(tr("Farbschema"), content);
+    auto *topForm = new QFormLayout(topGroup);
+    m_presetCombo = new QComboBox;
+    m_presetCombo->setMinimumWidth(280);
+    m_presetCombo->setMaxVisibleItems(20);
+    for (const ClubTheme &preset : clubThemes())
+        m_presetCombo->addItem(preset.displayName, preset.id);
+    m_presetCombo->addItem(tr("Benutzerdefiniert"), QStringLiteral("custom"));
     m_modeCombo = new QComboBox;
     m_modeCombo->addItem(tr("Nacht (dunkel)"), QStringLiteral("night"));
     m_modeCombo->addItem(tr("Tag (hell)"), QStringLiteral("day"));
-    modeForm->addRow(tr("Aktiver Modus:"), m_modeCombo);
-    layout->addLayout(modeForm);
+    topForm->addRow(tr("Vereins-/Farbvorlage:"), m_presetCombo);
+    topForm->addRow(tr("Aktiver Modus:"), m_modeCombo);
+    auto *presetHint = new QLabel(
+        tr("Eine Vorlage setzt eine ruhige Anthrazit-Basis und nur die Vereinsfarben als "
+           "Akzent (Kopfzeile, Buttons, Interaktion). Farben unten lassen sich danach frei "
+           "anpassen — das schaltet auf 'Benutzerdefiniert'."),
+        topGroup);
+    presetHint->setWordWrap(true);
+    presetHint->setObjectName(QStringLiteral("kpiCaption"));
+    topForm->addRow(presetHint);
+    layout->addWidget(topGroup);
 
+    connect(m_presetCombo, &QComboBox::activated, this, [this] {
+        const QString id = m_presetCombo->currentData().toString();
+        if (id == QLatin1String("custom"))
+            return;
+        applyPresetToPending(id);
+    });
+
+    // --- Per-mode color roles ---
     const QList<QPair<QString, QString>> colorKeys = {
-        {QStringLiteral("primary_color"), tr("Akzentfarbe")},
-        {QStringLiteral("text_color"), tr("Textfarbe")},
         {QStringLiteral("background_color"), tr("Hintergrund")},
-        {QStringLiteral("secondary_background_color"), tr("Sekundärer Hintergrund")},
+        {QStringLiteral("surface_color"), tr("Panel / Karten")},
+        {QStringLiteral("sidebar_color"), tr("Sidebar")},
+        {QStringLiteral("header_color"), tr("Kopfzeile")},
+        {QStringLiteral("primary_color"), tr("Primär / Buttons")},
+        {QStringLiteral("interactive_color"), tr("Interaktion (Tabs, Slider)")},
+        {QStringLiteral("text_color"), tr("Text")},
     };
 
     for (const QString &mode : {QStringLiteral("night"), QStringLiteral("day")}) {
@@ -318,7 +438,7 @@ QWidget *SettingsPage::buildThemeTab()
         for (const auto &[key, label] : colorKeys) {
             const QString fullKey = mode + QLatin1Char('_') + key;
             auto *button = new QPushButton;
-            button->setFixedWidth(140);
+            button->setFixedWidth(150);
             m_colorButtons.insert(fullKey, button);
             connect(button, &QPushButton::clicked, this, [this, fullKey, button] {
                 const QColor initial(m_pendingColors.value(fullKey));
@@ -328,7 +448,8 @@ QWidget *SettingsPage::buildThemeTab()
                     return;
                 m_pendingColors.insert(fullKey, picked.name());
                 button->setText(picked.name());
-                button->setStyleSheet(QStringLiteral("background-color:%1").arg(picked.name()));
+                button->setStyleSheet(colorButtonStyle(picked));
+                markCustomPreset();
                 updateContrastWarning();
             });
             form->addRow(label + QStringLiteral(":"), button);
@@ -342,6 +463,31 @@ QWidget *SettingsPage::buildThemeTab()
     layout->addStretch(1);
 
     return wrapScrollable(content);
+}
+
+void SettingsPage::applyPresetToPending(const QString &presetId)
+{
+    const QHash<QString, QString> preset = presetThemeSettings(presetId);
+    for (auto it = m_colorButtons.begin(); it != m_colorButtons.end(); ++it) {
+        const QString value = preset.value(it.key());
+        if (value.isEmpty())
+            continue;
+        m_pendingColors.insert(it.key(), value);
+        it.value()->setText(value);
+        it.value()->setStyleSheet(colorButtonStyle(QColor(value)));
+    }
+    m_pendingPreset = presetId;
+    updateContrastWarning();
+}
+
+void SettingsPage::markCustomPreset()
+{
+    m_pendingPreset = QStringLiteral("custom");
+    const int index = m_presetCombo->findData(QStringLiteral("custom"));
+    if (index >= 0) {
+        QSignalBlocker blocker(m_presetCombo);
+        m_presetCombo->setCurrentIndex(index);
+    }
 }
 
 QWidget *SettingsPage::buildDatabaseTab()
@@ -440,6 +586,7 @@ void SettingsPage::refresh()
     m_fullClubNameEdit->setText(
         m_context.database().setting(QStringLiteral("full_club_name")));
     m_stadiumEdit->setText(m_context.database().setting(QStringLiteral("stadium_name")));
+    updateLogoPreview();
 
     QStringList tactics = m_context.definitions().tacticNames();
     std::sort(tactics.begin(), tactics.end());
@@ -488,12 +635,21 @@ void SettingsPage::refresh()
     const auto themeSettings = config.themeSettings();
     m_modeCombo->setCurrentIndex(
         themeSettings.value(QStringLiteral("current_mode")) == QLatin1String("day") ? 1 : 0);
+    m_pendingPreset = themeSettings.value(QStringLiteral("theme_preset"),
+                                          QStringLiteral("custom"));
+    {
+        QSignalBlocker blocker(m_presetCombo);
+        const int presetIndex = m_presetCombo->findData(m_pendingPreset);
+        m_presetCombo->setCurrentIndex(
+            presetIndex >= 0 ? presetIndex
+                             : m_presetCombo->findData(QStringLiteral("custom")));
+    }
     m_pendingColors.clear();
     for (auto it = m_colorButtons.begin(); it != m_colorButtons.end(); ++it) {
         const QString value = themeSettings.value(it.key());
         m_pendingColors.insert(it.key(), value);
         it.value()->setText(value);
-        it.value()->setStyleSheet(QStringLiteral("background-color:%1").arg(value));
+        it.value()->setStyleSheet(colorButtonStyle(QColor(value)));
     }
     updateContrastWarning();
 
@@ -587,6 +743,9 @@ void SettingsPage::saveAll()
     auto themeSettings = config.themeSettings();
     themeSettings.insert(QStringLiteral("current_mode"),
                          m_modeCombo->currentData().toString());
+    themeSettings.insert(QStringLiteral("theme_preset"),
+                         m_pendingPreset.isEmpty() ? QStringLiteral("custom")
+                                                   : m_pendingPreset);
     for (auto it = m_pendingColors.constBegin(); it != m_pendingColors.constEnd(); ++it)
         themeSettings.insert(it.key(), it.value());
     config.saveThemeSettings(themeSettings);

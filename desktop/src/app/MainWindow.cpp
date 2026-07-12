@@ -28,6 +28,7 @@
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QCompleter>
+#include <QPixmap>
 #include <QStandardItemModel>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -134,9 +135,14 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
     headerBar->setObjectName(QStringLiteral("headerBar"));
     auto *headerLayout = new QHBoxLayout(headerBar);
     headerLayout->setContentsMargins(18, 8, 18, 8);
+    headerLayout->setSpacing(12);
+    m_headerLogo = new QLabel(headerBar);
+    m_headerLogo->setFixedHeight(34);
+    m_headerLogo->hide();
     m_headerIdentity = new QLabel(headerBar);
     m_headerSave = new QLabel(headerBar);
     m_headerSave->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    headerLayout->addWidget(m_headerLogo);
     headerLayout->addWidget(m_headerIdentity, 1);
     headerLayout->addWidget(m_headerSave);
     contentColumn->addWidget(headerBar);
@@ -428,6 +434,18 @@ void MainWindow::startDwrsRecalc()
 
 void MainWindow::updateHeader()
 {
+    // Optional club logo (user-provided PNG, per database).
+    const QString logoPath = m_context.database().setting(QStringLiteral("club_logo_path"));
+    QPixmap logo;
+    if (!logoPath.isEmpty() && logo.load(logoPath)) {
+        m_headerLogo->setPixmap(logo.scaledToHeight(
+            34, Qt::SmoothTransformation));
+        m_headerLogo->show();
+    } else {
+        m_headerLogo->clear();
+        m_headerLogo->hide();
+    }
+
     QString identity;
     if (m_context.nationalUiMode()) {
         const QString name = m_context.nationalTeamName();

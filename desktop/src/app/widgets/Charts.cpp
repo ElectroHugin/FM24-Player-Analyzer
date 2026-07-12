@@ -33,12 +33,13 @@ void swapChart(QChartView *view, QChart *chart)
 
 QList<QColor> chartTracePalette(const ThemeManager &theme)
 {
-    if (theme.mode() == QLatin1String("day")) {
-        return {theme.primary(), QColor(0xD3, 0x2F, 0x2F), QColor(0x7B, 0x1F, 0xA2),
-                QColor(0x02, 0x88, 0xD1), QColor(0xFF, 0xA0, 0x00)};
-    }
-    return {theme.primary(), QColor(0xF5, 0x00, 0x57), QColor(0x00, 0xE5, 0xFF),
-            QColor(0xFF, 0xDE, 0x03), QColor(0x76, 0xFF, 0x03)};
+    // Lead with the theme's interactive (accent) and primary colors, then
+    // neutral/distinct tones — so the top role uses the club accent, the next
+    // the club's main color, and further series stay readable.
+    const QColor neutral = theme.mode() == QLatin1String("day") ? QColor(0x6B, 0x6B, 0x6B)
+                                                                : QColor(0xCF, 0xCF, 0xCF);
+    return {theme.interactive(), theme.primary(), neutral, QColor(0xFF, 0xA0, 0x00),
+            QColor(0x4C, 0xAF, 0x50)};
 }
 
 namespace {

@@ -31,16 +31,27 @@ const QHash<QString, int> &squadManagementDefaults()
 
 const QHash<QString, QString> &themeDefaults()
 {
+    // Club-neutral, professional dark/light base (seven color roles per mode).
+    // Club presets override primary/interactive/header on top of this.
     static const QHash<QString, QString> defaults = {
         {QStringLiteral("current_mode"), QStringLiteral("night")},
-        {QStringLiteral("night_primary_color"), QStringLiteral("#0055a4")},
-        {QStringLiteral("night_text_color"), QStringLiteral("#FFFFFF")},
-        {QStringLiteral("night_background_color"), QStringLiteral("#0E1117")},
-        {QStringLiteral("night_secondary_background_color"), QStringLiteral("#262730")},
-        {QStringLiteral("day_primary_color"), QStringLiteral("#0055a4")},
-        {QStringLiteral("day_text_color"), QStringLiteral("#31333F")},
+        {QStringLiteral("theme_preset"), QStringLiteral("neutral")},
+        // --- Night ---
+        {QStringLiteral("night_background_color"), QStringLiteral("#262626")},
+        {QStringLiteral("night_surface_color"), QStringLiteral("#343434")},
+        {QStringLiteral("night_sidebar_color"), QStringLiteral("#1f1f1f")},
+        {QStringLiteral("night_header_color"), QStringLiteral("#2d2d2d")},
+        {QStringLiteral("night_primary_color"), QStringLiteral("#3d7dff")},
+        {QStringLiteral("night_interactive_color"), QStringLiteral("#3d7dff")},
+        {QStringLiteral("night_text_color"), QStringLiteral("#F5F5F5")},
+        // --- Day ---
         {QStringLiteral("day_background_color"), QStringLiteral("#F0F2F6")},
-        {QStringLiteral("day_secondary_background_color"), QStringLiteral("#FFFFFF")},
+        {QStringLiteral("day_surface_color"), QStringLiteral("#FFFFFF")},
+        {QStringLiteral("day_sidebar_color"), QStringLiteral("#E7E9ED")},
+        {QStringLiteral("day_header_color"), QStringLiteral("#FFFFFF")},
+        {QStringLiteral("day_primary_color"), QStringLiteral("#0069b3")},
+        {QStringLiteral("day_interactive_color"), QStringLiteral("#0069b3")},
+        {QStringLiteral("day_text_color"), QStringLiteral("#31333F")},
     };
     return defaults;
 }

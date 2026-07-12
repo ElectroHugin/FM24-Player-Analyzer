@@ -58,11 +58,16 @@ private:
     QDoubleSpinBox *m_dropoffSpin = nullptr;
     QDoubleSpinBox *m_wrongSideSpin = nullptr;
 
-    // Theme tab: color buttons per mode+key.
+    // Theme tab: preset picker + color buttons per mode+role.
     QComboBox *m_modeCombo = nullptr;
+    QComboBox *m_presetCombo = nullptr;
     QHash<QString, QPushButton *> m_colorButtons; // "night_primary_color" etc.
     QHash<QString, QString> m_pendingColors;
+    QString m_pendingPreset;
     QLabel *m_contrastLabel = nullptr;
+
+    void applyPresetToPending(const QString &presetId);
+    void markCustomPreset();
 
     // Database tab.
     QComboBox *m_dbCombo = nullptr;
@@ -74,6 +79,11 @@ private:
     QLineEdit *m_clubCountryEdit = nullptr;
     QLineEdit *m_fullClubNameEdit = nullptr;
     QLineEdit *m_stadiumEdit = nullptr;
+    QLabel *m_logoPreview = nullptr;
+    QPushButton *m_logoRemoveButton = nullptr;
+    void chooseLogo();
+    void removeLogo();
+    void updateLogoPreview();
     QComboBox *m_favTactic1Combo = nullptr;
     QComboBox *m_favTactic2Combo = nullptr;
     QLineEdit *m_natNameEdit = nullptr;
