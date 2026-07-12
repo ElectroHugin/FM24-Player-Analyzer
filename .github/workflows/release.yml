@@ -56,8 +56,13 @@ jobs:
           }
           $version = $matches[1]
           "version=$version" >> $env:GITHUB_OUTPUT
-          # Release already published for this version?
-          gh release view "v$version" --repo $env:GITHUB_REPOSITORY 2>$null | Out-Null
+          # Release already published for this version? gh exits non-zero when
+          # the release does not exist (the NEW-version case). On PowerShell 7.3+
+          # a native non-zero exit throws under $ErrorActionPreference='Stop'
+          # (GitHub's pwsh default), which would abort this step exactly when a
+          # new release is due — so the native-error mapping is disabled here.
+          $PSNativeCommandUseErrorActionPreference = $false
+          gh release view "v$version" --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -eq 0) {
             "is_new=false" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version existiert bereits - kein neuer Release."
