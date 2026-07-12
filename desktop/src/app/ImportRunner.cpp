@@ -37,6 +37,7 @@ void runImportPipeline(AppContext &context, QWidget *parent, const QString &file
     const QStringList validRoles = context.definitions().validRoles();
     const Definitions *definitions = &context.definitions();
     const DwrsEngine *engine = &context.dwrsEngine();
+    const QString fmVersion = context.fmVersionId();
 
     const auto stage = [dialog](const QString &text, int percent) {
         QMetaObject::invokeMethod(
@@ -62,7 +63,7 @@ void runImportPipeline(AppContext &context, QWidget *parent, const QString &file
                      });
 
     watcher->setFuture(QtConcurrent::run([filePath, dbFile, backupsDir, autoAssign, validRoles,
-                                          definitions, engine, stage] {
+                                          definitions, engine, fmVersion, stage] {
         ImportPipelineResult result;
 
         stage(trRunner("Backup wird erstellt…"), 2);
@@ -79,13 +80,15 @@ void runImportPipeline(AppContext &context, QWidget *parent, const QString &file
         stage(trRunner("Datei wird gelesen und Spieler importiert…"), 5);
         std::vector<Player> players = db.loadPlayers();
         result.import = HtmlImporter::importFile(
-            filePath, db, players, [&stage](int done, int total) {
+            filePath, db, players,
+            [&stage](int done, int total) {
                 const int percent = 5 + (total > 0 ? done * 50 / total : 0);
                 stage(trRunner("Spieler werden importiert… (%1/%2)")
                           .arg(done)
                           .arg(total),
                       percent);
-            });
+            },
+            fmVersion);
         if (!result.import.success)
             return result;
 

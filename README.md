@@ -65,6 +65,37 @@ databases and settings into the new format.
 > The user interface is in German. If you would like an English localisation,
 > open an issue.
 
+## FM export: required columns
+
+The app reads Football Manager's standard **HTML export** (Squad view →
+right-click → *Print/Export* → Web page). Set up an FM view containing the
+columns below, then reuse it for every export. Only **UID** and **Name** are
+strictly required; every other column improves the ratings, and any missing
+attribute is simply treated as unknown.
+
+Which columns map to which data is defined per FM release, so future FM
+versions can be supported by adding a new mapping — see
+[`desktop/src/core/Constants.cpp`](desktop/src/core/Constants.cpp)
+(`fm24AttributeMapping`). The version you import with is selected under
+**Settings → Football-Manager-Version** (currently *Football Manager 2024*).
+
+**Football Manager 2024** uses these export column headers:
+
+- **Identity & info:** `UID` (required), `Name` (required), `Age`, `Nat`,
+  `2nd Nat`, `Club`, `Position`, `Personality`, `Media Handling`,
+  `Preferred Foot`, `Left Foot`, `Right Foot`, `Height`, `Wage`,
+  `Transfer Value`, `Av Rat`, `Agreed Playing Time`
+- **Technical:** `Cor`, `Cro`, `Dri`, `Fin`, `Fir`, `Hea`, `Lon`, `Mar`,
+  `Pas`, `Tck`, `Tec`
+- **Mental:** `Agg`, `Ant`, `Bra`, `Cmp`, `Cnt`, `Dec`, `Det`, `Fla`, `Ldr`,
+  `OtB`, `Pos`, `Tea`, `Vis`, `Wor`
+- **Physical:** `Acc`, `Agi`, `Bal`, `Jum`, `Pac`, `Sta`, `Str`
+- **Goalkeeping:** `1v1`, `Aer`, `Cmd`, `Han`, `Kic`, `Ref`, `TRO`, `Thr`
+
+For newgens FM must have *"Use UIDs"* enabled so players keep a stable ID
+across exports — the import unifies IDs, but a consistent UID is what lets it
+track the same player over time.
+
 ---
 
 ## Repository layout

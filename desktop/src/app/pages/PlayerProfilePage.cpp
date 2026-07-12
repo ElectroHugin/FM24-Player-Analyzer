@@ -498,7 +498,8 @@ void PlayerProfilePage::runManualUpdate()
 
     QString error;
     const QString fileName = HtmlImporter::forceUpdateSinglePlayer(
-        html, m_context.database(), m_context.store().players(), uid, &error);
+        html, m_context.database(), m_context.store().players(), uid, &error,
+        m_context.fmVersionId());
     if (!error.isEmpty()) {
         QMessageBox::critical(this, tr("Spieler aktualisieren"), error);
         return;

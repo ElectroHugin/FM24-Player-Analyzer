@@ -89,6 +89,31 @@ QWidget *SettingsPage::buildClubTab()
     auto *content = new QWidget;
     auto *layout = new QVBoxLayout(content);
 
+    auto *versionGroup = new QGroupBox(tr("Football-Manager-Version"), content);
+    auto *versionForm = new QFormLayout(versionGroup);
+    m_fmVersionCombo = new QComboBox;
+    m_fmVersionCombo->setMinimumWidth(260);
+    for (const FmDataVersion &version : fmDataVersions()) {
+        m_fmVersionCombo->addItem(version.supported
+                                      ? version.displayName
+                                      : tr("%1 (noch nicht unterstützt)")
+                                            .arg(version.displayName),
+                                  version.id);
+        if (!version.supported)
+            m_fmVersionCombo->setItemData(m_fmVersionCombo->count() - 1, false,
+                                          Qt::UserRole - 1); // disable row
+    }
+    versionForm->addRow(tr("Version für den Import:"), m_fmVersionCombo);
+    auto *versionHint = new QLabel(
+        tr("Bestimmt, wie die Spielerattribute aus dem HTML-Export gelesen werden. "
+           "Aktuell wird Football Manager 2024 unterstützt; weitere Versionen können "
+           "später ergänzt werden."),
+        versionGroup);
+    versionHint->setWordWrap(true);
+    versionHint->setObjectName(QStringLiteral("kpiCaption"));
+    versionForm->addRow(versionHint);
+    layout->addWidget(versionGroup);
+
     auto *clubGroup = new QGroupBox(tr("Vereins-Zuordnung"), content);
     auto *clubForm = new QFormLayout(clubGroup);
     m_userClubCombo = new QComboBox;
@@ -391,6 +416,9 @@ void SettingsPage::refresh()
     AppConfig &config = m_context.config();
 
     // --- Club tab ---
+    const int versionIndex = m_fmVersionCombo->findData(m_context.fmVersionId());
+    m_fmVersionCombo->setCurrentIndex(versionIndex >= 0 ? versionIndex : 0);
+
     QSet<QString> clubSet;
     for (const Player &player : m_context.store().players()) {
         if (!player.club.isEmpty())
@@ -505,6 +533,7 @@ void SettingsPage::saveAll()
         else
             db.setSetting(key, value);
     };
+    saveSetting(QStringLiteral("fm_version"), m_fmVersionCombo->currentData().toString());
     saveSetting(QStringLiteral("user_club"), m_userClubCombo->currentText());
     saveSetting(QStringLiteral("second_team_club"), m_secondClubCombo->currentText());
     saveSetting(QStringLiteral("club_country_code"),

@@ -270,9 +270,11 @@ void HtmlImporter::applyColumn(Player &player, const QString &fullColumnName, co
 
 ImportResult HtmlImporter::importHtml(const QString &html, Database &db,
                                       const std::vector<Player> &existingPlayers,
-                                      std::function<void(int, int)> progress)
+                                      std::function<void(int, int)> progress,
+                                      const QString &fmVersionId)
 {
     ImportResult result;
+    const QHash<QString, QString> &mapping = attributeMapping(fmVersionId);
 
     HtmlTable table;
     QString parseError;
@@ -314,7 +316,7 @@ ImportResult HtmlImporter::importHtml(const QString &html, Database &db,
 
     // Unknown-column warning (legacy: not in attribute_mapping ∪ {UID} ∪ ignored).
     for (const QString &header : table.headers) {
-        if (!attributeMapping().contains(header) && header != QLatin1String("UID")
+        if (!mapping.contains(header) && header != QLatin1String("UID")
             && !ignoredExportColumns().contains(header)) {
             if (!result.unknownColumns.contains(header))
                 result.unknownColumns << header;
@@ -468,8 +470,8 @@ ImportResult HtmlImporter::importHtml(const QString &html, Database &db,
     for (int c = 0; c < table.headers.size(); ++c) {
         if (!useColumn[static_cast<size_t>(c)] || c == uidCol)
             continue;
-        const auto it = attributeMapping().constFind(table.headers.at(c));
-        if (it != attributeMapping().constEnd())
+        const auto it = mapping.constFind(table.headers.at(c));
+        if (it != mapping.constEnd())
             columnTargets.append({c, it.value()});
     }
 
@@ -528,7 +530,8 @@ ImportResult HtmlImporter::importHtml(const QString &html, Database &db,
 
 ImportResult HtmlImporter::importFile(const QString &filePath, Database &db,
                                       const std::vector<Player> &existingPlayers,
-                                      std::function<void(int, int)> progress)
+                                      std::function<void(int, int)> progress,
+                                      const QString &fmVersionId)
 {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -537,13 +540,15 @@ ImportResult HtmlImporter::importFile(const QString &filePath, Database &db,
         return result;
     }
     const QString html = QString::fromUtf8(file.readAll());
-    return importHtml(html, db, existingPlayers, std::move(progress));
+    return importHtml(html, db, existingPlayers, std::move(progress), fmVersionId);
 }
 
 QString HtmlImporter::forceUpdateSinglePlayer(const QString &html, Database &db,
                                               const std::vector<Player> &existingPlayers,
-                                              const QString &targetUid, QString *errorOut)
+                                              const QString &targetUid, QString *errorOut,
+                                              const QString &fmVersionId)
 {
+    const QHash<QString, QString> &mapping = attributeMapping(fmVersionId);
     const auto fail = [&](const QString &message) {
         if (errorOut)
             *errorOut = message;
@@ -577,8 +582,8 @@ QString HtmlImporter::forceUpdateSinglePlayer(const QString &html, Database &db,
         if (seenHeaders.contains(header))
             continue;
         seenHeaders.insert(header);
-        const auto it = attributeMapping().constFind(header);
-        if (it == attributeMapping().constEnd())
+        const auto it = mapping.constFind(header);
+        if (it == mapping.constEnd())
             continue;
         const QString value = table.rows.at(0).at(c).trimmed();
         if (it.value() == QLatin1String("Name"))

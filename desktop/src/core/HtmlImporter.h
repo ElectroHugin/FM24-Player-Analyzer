@@ -57,15 +57,18 @@ public:
 
     // Full import into db. existingPlayers must reflect the current DB state
     // (ids matching); the caller reloads its stores afterwards.
-    // progress(done, total) is called per processed row batch.
+    // progress(done, total) is called per processed row batch. fmVersionId
+    // selects the export layout (empty = default version).
     static ImportResult importHtml(const QString &html, Database &db,
                                    const std::vector<Player> &existingPlayers,
-                                   std::function<void(int, int)> progress = {});
+                                   std::function<void(int, int)> progress = {},
+                                   const QString &fmVersionId = QString());
 
     // Convenience: reads the file (UTF-8, lenient) and calls importHtml.
     static ImportResult importFile(const QString &filePath, Database &db,
                                    const std::vector<Player> &existingPlayers,
-                                   std::function<void(int, int)> progress = {});
+                                   std::function<void(int, int)> progress = {},
+                                   const QString &fmVersionId = QString());
 
     // Manual, user-confirmed update of ONE player from an HTML export that
     // contains exactly one row. Writes the file's data onto targetUid
@@ -73,7 +76,8 @@ public:
     // Returns the player name found in the file; error set on failure.
     static QString forceUpdateSinglePlayer(const QString &html, Database &db,
                                            const std::vector<Player> &existingPlayers,
-                                           const QString &targetUid, QString *errorOut);
+                                           const QString &targetUid, QString *errorOut,
+                                           const QString &fmVersionId = QString());
 
     // Applies one HTML column value (full column name, e.g. "Acceleration",
     // "Transfer Value") to a player. Unknown columns are ignored.

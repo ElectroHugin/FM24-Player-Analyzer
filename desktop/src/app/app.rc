@@ -1,0 +1,3 @@
+// Windows executable icon (shown in Explorer, taskbar, Alt-Tab). The same
+// icon is used as the Qt window icon (see main.cpp) and by the installer.
+IDI_ICON1 ICON "resources/favicon.ico"

@@ -10,7 +10,7 @@ private slots:
     void version()
     {
         QVERIFY(!fm::appVersion().isEmpty());
-        QCOMPARE(fm::appName(), QStringLiteral("FM24 Player Analyzer"));
+        QCOMPARE(fm::appName(), QStringLiteral("FM Player Analyzer"));
     }
 };
 

@@ -198,8 +198,8 @@ void MainWindow::buildSidebar()
     layout->setSpacing(8);
 
     auto *title = new QLabel(
-        QStringLiteral("<span style='font-size:12pt; font-weight:600;'>⚽ FM24 Player "
-                       "Analyzer</span>"),
+        QStringLiteral("<span style='font-size:12pt; font-weight:600;'>⚽ %1</span>")
+            .arg(appName()),
         sidebar);
     title->setAlignment(Qt::AlignCenter);
     layout->addWidget(title);

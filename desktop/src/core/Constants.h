@@ -11,8 +11,24 @@ namespace fm {
 // --- Static domain constants ported 1:1 from legacy/src/constants.py ---
 // Dynamic definition accessors (roles, tactics, ...) live in Definitions.
 
-// FM HTML export header abbreviation -> full column name (~59 entries).
-// The schema contract between HTML exports and the database.
+// A supported Football Manager release, identified by a stable id stored in
+// the per-database settings ("fm_version").
+struct FmDataVersion {
+    QString id;          // stable settings key, e.g. "fm24"
+    QString displayName; // e.g. "Football Manager 2024"
+    bool supported;      // false = shown in the picker but not yet importable
+};
+
+// All FM releases the app knows how to import (newest handling first). Add a
+// version here plus its mapping in attributeMapping() to support a new game.
+const QList<FmDataVersion> &fmDataVersions();
+QString defaultFmVersionId();
+
+// FM HTML export header abbreviation -> full column name (~59 entries) for the
+// given FM version; the schema contract between HTML exports and the database.
+// Unknown/empty ids fall back to the default version.
+const QHash<QString, QString> &attributeMapping(const QString &versionId);
+// Convenience overload for the default version.
 const QHash<QString, QString> &attributeMapping();
 
 // DWRS importance category per attribute (field players / goalkeepers).

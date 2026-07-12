@@ -1,4 +1,5 @@
 add_executable(fmplayeranalyzer WIN32
+    app.rc
     main.cpp
     AppContext.h
     AppContext.cpp

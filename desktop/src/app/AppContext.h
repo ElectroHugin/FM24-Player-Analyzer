@@ -2,6 +2,7 @@
 
 #include "AppPaths.h"
 #include "core/AppConfig.h"
+#include "core/Constants.h"
 #include "core/Database.h"
 #include "core/Definitions.h"
 #include "core/DwrsEngine.h"
@@ -115,6 +116,11 @@ public:
     // Convenience settings accessors (stored in the DB settings table).
     QString userClub() { return m_database->setting(QStringLiteral("user_club")); }
     QString secondTeamClub() { return m_database->setting(QStringLiteral("second_team_club")); }
+    // FM release whose export layout this database was imported with.
+    QString fmVersionId()
+    {
+        return m_database->setting(QStringLiteral("fm_version"), defaultFmVersionId());
+    }
     bool nationalModeEnabled()
     {
         return m_database->setting(QStringLiteral("national_mode_enabled")) == QLatin1String("true");

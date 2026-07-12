@@ -68,6 +68,7 @@ private:
     QComboBox *m_dbCombo = nullptr;
 
     // Club tab (settings table keys, same as legacy).
+    QComboBox *m_fmVersionCombo = nullptr;
     QComboBox *m_userClubCombo = nullptr;
     QComboBox *m_secondClubCombo = nullptr;
     QLineEdit *m_clubCountryEdit = nullptr;

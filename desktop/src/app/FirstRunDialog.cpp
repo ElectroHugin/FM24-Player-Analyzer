@@ -1,5 +1,7 @@
 #include "FirstRunDialog.h"
 
+#include "core/Version.h"
+
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -14,7 +16,7 @@ namespace fm {
 FirstRunDialog::FirstRunDialog(const QString &defaultDir, QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle(tr("FM24 Player Analyzer — Ersteinrichtung"));
+    setWindowTitle(tr("%1 — Ersteinrichtung").arg(appName()));
     setMinimumWidth(560);
 
     auto *layout = new QVBoxLayout(this);

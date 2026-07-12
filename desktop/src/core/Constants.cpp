@@ -63,7 +63,27 @@ int attrIndexByName(const QString &fullName)
     return index.value(fullName, -1);
 }
 
-const QHash<QString, QString> &attributeMapping()
+const QList<FmDataVersion> &fmDataVersions()
+{
+    // Registry of Football Manager releases whose HTML export layout the app
+    // understands. To add a new release: add an entry here (supported = true)
+    // and a matching branch in attributeMapping() below. Nothing else in the
+    // app needs to change — every screen is version-agnostic.
+    static const QList<FmDataVersion> versions = {
+        {QStringLiteral("fm24"), QStringLiteral("Football Manager 2024"), true},
+    };
+    return versions;
+}
+
+QString defaultFmVersionId()
+{
+    return QStringLiteral("fm24");
+}
+
+// FM24 export-header -> internal-column mapping. The internal names on the
+// right are the app's canonical attribute/column names and never change; a
+// future FM release only needs its own header->internal map.
+static const QHash<QString, QString> &fm24AttributeMapping()
 {
     static const QHash<QString, QString> mapping = {
         {QStringLiteral("Reg"), QStringLiteral("Registration")},
@@ -127,6 +147,19 @@ const QHash<QString, QString> &attributeMapping()
         {QStringLiteral("Preferred Foot"), QStringLiteral("Preferred Foot")},
     };
     return mapping;
+}
+
+const QHash<QString, QString> &attributeMapping(const QString &versionId)
+{
+    // Dispatch on the FM version. New releases get another branch here; unknown
+    // or empty ids fall back to the default version.
+    Q_UNUSED(versionId); // only FM24 exists today
+    return fm24AttributeMapping();
+}
+
+const QHash<QString, QString> &attributeMapping()
+{
+    return attributeMapping(defaultFmVersionId());
 }
 
 const QHash<QString, QString> &globalStatCategories()
