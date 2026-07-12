@@ -1,5 +1,7 @@
 #include <QtTest>
 
+#include <QElapsedTimer>
+
 #include "core/Database.h"
 #include "core/Definitions.h"
 #include "core/HtmlImporter.h"
@@ -75,6 +77,51 @@ private slots:
                            "<TR><TD><b>K&#246;ln</b> &quot;X&quot;</TD></TR></TABLE>"),
             &table));
         QCOMPARE(table.rows.at(0).at(0), QStringLiteral("Köln \"X\""));
+    }
+
+    // Regression guard for the O(n²) parser blow-up: a real FM "all players"
+    // export has one <th> header row followed by tens of thousands of <td>-only
+    // rows. When the tag search was not bounded to the current row, every data
+    // cell scanned to end-of-file looking for the next <th> (which never comes
+    // again), turning a large export into a parse that never appears to finish.
+    // With the row-bounded search this stays linear and returns in well under
+    // the (deliberately generous) time budget below.
+    void extractTableLargeExportIsLinear()
+    {
+        const int rows = 20000;
+        const int cols = 12;
+
+        QString html;
+        html.reserve(rows * cols * 8);
+        html += QStringLiteral("<html><body><table border=\"1\">\n<tr>");
+        html += QStringLiteral("<th>UID</th>");
+        for (int c = 1; c < cols; ++c)
+            html += QStringLiteral("<th>C%1</th>").arg(c);
+        html += QStringLiteral("</tr>\n");
+        for (int r = 0; r < rows; ++r) {
+            html += QStringLiteral("<tr>");
+            html += QStringLiteral("<td>%1</td>").arg(r + 1);
+            for (int c = 1; c < cols; ++c)
+                html += QStringLiteral("<td>%1</td>").arg(c);
+            html += QStringLiteral("</tr>\n");
+        }
+        html += QStringLiteral("</table></body></html>");
+
+        HtmlTable table;
+        QString error;
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY2(HtmlImporter::extractTable(html, &table, &error), qPrintable(error));
+        const qint64 elapsedMs = timer.elapsed();
+
+        QCOMPARE(table.headers.size(), cols);
+        QCOMPARE(table.rows.size(), rows);
+        QCOMPARE(table.malformedRows, 0);
+        QCOMPARE(table.rows.last().at(0), QString::number(rows));
+        // The bounded parser handles this in a few milliseconds; the unbounded
+        // version took minutes. 10 s leaves ample slack for slow CI runners.
+        QVERIFY2(elapsedMs < 10000,
+                 qPrintable(QStringLiteral("parse took %1 ms").arg(elapsedMs)));
     }
 
     void importNewAndUpdate()

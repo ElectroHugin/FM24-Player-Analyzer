@@ -103,22 +103,27 @@ QString cellText(const QString &html, int from, int to)
     return decodeEntities(out).trimmed();
 }
 
-// Finds the next "<tag" (case-insensitive) at a tag boundary from pos.
-// Returns the index of '<', or -1.
-int findTag(const QString &html, const QString &tag, int pos)
+// Finds the next "<tag" (case-insensitive) at a tag boundary within [pos, end).
+// Returns the index of '<', or -1. Bounding the search to `end` is essential
+// for performance: without it, searching for a tag that does not recur — e.g.
+// <th> once the header row is past — scans to end-of-file on EVERY cell, which
+// on a large export (tens of thousands of rows) turns parsing into an O(n²)
+// crawl that never appears to finish.
+int findTag(const QString &html, const QString &tag, int pos, int end)
 {
     const QString needle = QLatin1Char('<') + tag;
+    const QStringView haystack = QStringView(html).left(end);
     while (true) {
-        const int at = html.indexOf(needle, pos, Qt::CaseInsensitive);
+        const qsizetype at = haystack.indexOf(needle, pos, Qt::CaseInsensitive);
         if (at < 0)
             return -1;
-        const int after = at + needle.size();
-        if (after >= html.size())
+        const qsizetype after = at + needle.size();
+        if (after >= end)
             return -1;
         const QChar next = html.at(after);
         if (next == QLatin1Char('>') || next.isSpace() || next == QLatin1Char('/'))
-            return at;
-        pos = at + 1;
+            return static_cast<int>(at);
+        pos = static_cast<int>(at) + 1;
     }
 }
 
@@ -130,7 +135,8 @@ bool isNewgenUid(const QString &uid)
 
 } // namespace
 
-bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *errorOut)
+bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *errorOut,
+                                const std::function<void(int, int)> &progress)
 {
     const auto fail = [&](const QString &message) {
         if (errorOut)
@@ -138,12 +144,13 @@ bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *er
         return false;
     };
 
-    const int tableStart = findTag(html, QStringLiteral("table"), 0);
+    const int htmlSize = html.size();
+    const int tableStart = findTag(html, QStringLiteral("table"), 0, htmlSize);
     if (tableStart < 0)
         return fail(QStringLiteral("No <table> element found in file."));
     int tableEnd = html.indexOf(QLatin1String("</table"), tableStart, Qt::CaseInsensitive);
     if (tableEnd < 0)
-        tableEnd = html.size();
+        tableEnd = htmlSize;
 
     out->headers.clear();
     out->rows.clear();
@@ -151,8 +158,9 @@ bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *er
 
     int pos = tableStart;
     bool haveHeader = false;
+    int rowCounter = 0;
     while (true) {
-        const int rowStart = findTag(html, QStringLiteral("tr"), pos);
+        const int rowStart = findTag(html, QStringLiteral("tr"), pos, tableEnd);
         if (rowStart < 0 || rowStart >= tableEnd)
             break;
         int rowEnd = html.indexOf(QLatin1String("</tr"), rowStart, Qt::CaseInsensitive);
@@ -163,14 +171,14 @@ bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *er
         int cellPos = rowStart;
         bool headerRow = false;
         while (true) {
-            const int th = findTag(html, QStringLiteral("th"), cellPos);
-            const int td = findTag(html, QStringLiteral("td"), cellPos);
+            const int th = findTag(html, QStringLiteral("th"), cellPos, rowEnd);
+            const int td = findTag(html, QStringLiteral("td"), cellPos, rowEnd);
             int cellStart = -1;
             bool isTh = false;
-            if (th >= 0 && th < rowEnd && (td < 0 || th < td)) {
+            if (th >= 0 && (td < 0 || th < td)) {
                 cellStart = th;
                 isTh = true;
-            } else if (td >= 0 && td < rowEnd) {
+            } else if (td >= 0) {
                 cellStart = td;
             }
             if (cellStart < 0)
@@ -183,8 +191,8 @@ bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *er
             int contentEnd = html.indexOf(closeTag, contentStart, Qt::CaseInsensitive);
             if (contentEnd < 0 || contentEnd > rowEnd) {
                 // Unclosed cell: ends at the next cell or the row end.
-                const int nextTh = findTag(html, QStringLiteral("th"), contentStart + 1);
-                const int nextTd = findTag(html, QStringLiteral("td"), contentStart + 1);
+                const int nextTh = findTag(html, QStringLiteral("th"), contentStart + 1, rowEnd);
+                const int nextTd = findTag(html, QStringLiteral("td"), contentStart + 1, rowEnd);
                 contentEnd = rowEnd;
                 if (nextTh >= 0 && nextTh < contentEnd)
                     contentEnd = nextTh;
@@ -196,6 +204,11 @@ bool HtmlImporter::extractTable(const QString &html, HtmlTable *out, QString *er
                 headerRow = true;
             cellPos = contentEnd;
         }
+
+        // Report parse progress by byte position every few thousand rows so a
+        // very large export does not look frozen while it is being scanned.
+        if (progress && (++rowCounter & 0x1FFF) == 0)
+            progress(rowEnd, tableEnd);
 
         if (!haveHeader) {
             // The first row must be the header row (legacy takes trs[0] <th>s).
@@ -271,14 +284,15 @@ void HtmlImporter::applyColumn(Player &player, const QString &fullColumnName, co
 ImportResult HtmlImporter::importHtml(const QString &html, Database &db,
                                       const std::vector<Player> &existingPlayers,
                                       std::function<void(int, int)> progress,
-                                      const QString &fmVersionId)
+                                      const QString &fmVersionId,
+                                      const std::function<void(int, int)> &parseProgress)
 {
     ImportResult result;
     const QHash<QString, QString> &mapping = attributeMapping(fmVersionId);
 
     HtmlTable table;
     QString parseError;
-    if (!extractTable(html, &table, &parseError)) {
+    if (!extractTable(html, &table, &parseError, parseProgress)) {
         result.error = parseError;
         return result;
     }
@@ -531,7 +545,8 @@ ImportResult HtmlImporter::importHtml(const QString &html, Database &db,
 ImportResult HtmlImporter::importFile(const QString &filePath, Database &db,
                                       const std::vector<Player> &existingPlayers,
                                       std::function<void(int, int)> progress,
-                                      const QString &fmVersionId)
+                                      const QString &fmVersionId,
+                                      const std::function<void(int, int)> &parseProgress)
 {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -540,7 +555,7 @@ ImportResult HtmlImporter::importFile(const QString &filePath, Database &db,
         return result;
     }
     const QString html = QString::fromUtf8(file.readAll());
-    return importHtml(html, db, existingPlayers, std::move(progress), fmVersionId);
+    return importHtml(html, db, existingPlayers, std::move(progress), fmVersionId, parseProgress);
 }
 
 QString HtmlImporter::forceUpdateSinglePlayer(const QString &html, Database &db,

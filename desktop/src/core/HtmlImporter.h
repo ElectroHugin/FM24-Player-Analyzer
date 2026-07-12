@@ -52,8 +52,11 @@ class HtmlImporter
 {
 public:
     // Extracts the first <table> from the HTML. Returns false with errorOut
-    // set if no usable table/header was found.
-    static bool extractTable(const QString &html, HtmlTable *out, QString *errorOut = nullptr);
+    // set if no usable table/header was found. progress(bytesDone, bytesTotal)
+    // is called periodically while scanning so callers can show parse progress
+    // on very large exports.
+    static bool extractTable(const QString &html, HtmlTable *out, QString *errorOut = nullptr,
+                             const std::function<void(int, int)> &progress = {});
 
     // Full import into db. existingPlayers must reflect the current DB state
     // (ids matching); the caller reloads its stores afterwards.
@@ -62,13 +65,15 @@ public:
     static ImportResult importHtml(const QString &html, Database &db,
                                    const std::vector<Player> &existingPlayers,
                                    std::function<void(int, int)> progress = {},
-                                   const QString &fmVersionId = QString());
+                                   const QString &fmVersionId = QString(),
+                                   const std::function<void(int, int)> &parseProgress = {});
 
     // Convenience: reads the file (UTF-8, lenient) and calls importHtml.
     static ImportResult importFile(const QString &filePath, Database &db,
                                    const std::vector<Player> &existingPlayers,
                                    std::function<void(int, int)> progress = {},
-                                   const QString &fmVersionId = QString());
+                                   const QString &fmVersionId = QString(),
+                                   const std::function<void(int, int)> &parseProgress = {});
 
     // Manual, user-confirmed update of ONE player from an HTML export that
     // contains exactly one row. Writes the file's data onto targetUid

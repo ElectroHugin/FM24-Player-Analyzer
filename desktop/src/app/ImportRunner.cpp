@@ -77,18 +77,25 @@ void runImportPipeline(AppContext &context, QWidget *parent, const QString &file
             return result;
         }
 
-        stage(trRunner("Datei wird gelesen und Spieler importiert…"), 5);
+        stage(trRunner("Datei wird analysiert…"), 5);
         std::vector<Player> players = db.loadPlayers();
         result.import = HtmlImporter::importFile(
             filePath, db, players,
             [&stage](int done, int total) {
-                const int percent = 5 + (total > 0 ? done * 50 / total : 0);
+                // 64-bit math: byte offsets on a large export overflow int.
+                const int percent =
+                    15 + (total > 0 ? static_cast<int>(qint64(done) * 40 / total) : 0);
                 stage(trRunner("Spieler werden importiert… (%1/%2)")
                           .arg(done)
                           .arg(total),
                       percent);
             },
-            fmVersion);
+            fmVersion,
+            [&stage](int done, int total) {
+                const int percent =
+                    5 + (total > 0 ? static_cast<int>(qint64(done) * 10 / total) : 0);
+                stage(trRunner("Datei wird analysiert…"), percent);
+            });
         if (!result.import.success)
             return result;
 
