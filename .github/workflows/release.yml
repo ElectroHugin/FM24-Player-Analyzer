@@ -1,0 +1,101 @@
+name: Release
+
+# On every push to main: build + test. If the version in Version.cpp is new
+# (no release/tag for it yet), build the installer and publish a GitHub release
+# automatically. Bump the number in desktop/src/core/Version.cpp and push —
+# that's it.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtcharts
+          cache: true
+
+      - name: Setup MSVC (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Configure
+        run: cmake -S desktop -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $src = Get-Content desktop/src/core/Version.cpp -Raw
+          if ($src -notmatch 'appVersion[\s\S]*?QStringLiteral\("(\d+\.\d+\.\d+)"\)') {
+            throw "Version aus Version.cpp konnte nicht gelesen werden."
+          }
+          $version = $matches[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          # Release already published for this version?
+          gh release view "v$version" --repo $env:GITHUB_REPOSITORY 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            "is_new=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Release v$version existiert bereits - kein neuer Release."
+          } else {
+            "is_new=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Neue Version v$version - Release wird erstellt."
+          }
+
+      - name: Stage app with windeployqt
+        if: steps.version.outputs.is_new == 'true'
+        shell: pwsh
+        run: |
+          $staging = "desktop/installer/staging"
+          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          Copy-Item build/src/app/fmplayeranalyzer.exe $staging
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --no-translations `
+            --no-system-d3d-compiler --no-opengl-sw "$staging/fmplayeranalyzer.exe"
+
+      - name: Build installer (Inno Setup)
+        if: steps.version.outputs.is_new == 'true'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.version }}" "desktop\installer\setup.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC fehlgeschlagen." }
+
+      - name: Publish release
+        if: steps.version.outputs.is_new == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $asset = "desktop/installer/output/FMPlayerAnalyzer-$version-Windows-x64-Setup.exe"
+          gh release create "v$version" $asset `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "FM Player Analyzer $version (Windows 64-bit)" `
+            --generate-notes
