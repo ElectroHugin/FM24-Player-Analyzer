@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(fm24analyzer
-    VERSION 1.1.0
+    VERSION 1.2.0
     DESCRIPTION "FM24 Player Analyzer - native desktop app"
     LANGUAGES CXX
 )
@@ -13,7 +13,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Sql Widgets Charts Concurrent Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Sql Widgets Charts Concurrent Test LinguistTools)
 
 enable_testing()
 

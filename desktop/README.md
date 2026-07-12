@@ -9,7 +9,10 @@ squad matrix with talent filter, role assignment/analysis, player profile /
 comparison (radar charts) / development charts, Best XI + gap analysis +
 tactic explorer, full national-team mode, transfer/loan management, and the
 role/tactic editors. Legacy databases are migrated via
-Einstellungen → Datenbank → "Legacy-Datenbank importieren".
+Settings → Database → "Import legacy database".
+
+The interface is in English by default; a German translation is available under
+the **Language** menu (applied after a restart).
 
 ## Build requirements
 

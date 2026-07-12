@@ -36,6 +36,7 @@ desktop/build*/
 desktop/installer/Output/
 desktop/installer/output/
 desktop/installer/staging/
+desktop/translations/*.qm
 desktop/src/tests/golden/local/
 CMakeUserPresets.json
 CMakeLists.txt.user*

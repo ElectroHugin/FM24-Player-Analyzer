@@ -34,6 +34,8 @@ protected:
 
 private:
     void buildSidebar();
+    void buildMenuBar();
+    void changeLanguage(const QString &language);
     void rebuildMenu();
     void navigateTo(const QString &pageId);
     PageBase *createPage(const QString &pageId);

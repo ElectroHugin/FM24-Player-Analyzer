@@ -84,3 +84,24 @@ target_link_libraries(fmplayeranalyzer PRIVATE
     Qt6::Widgets
     Qt6::Charts
 )
+
+# --- Translations -----------------------------------------------------------
+# The source strings are German; English is shipped as a compiled .qm loaded by
+# default (German = source fallback, no translator). lrelease compiles the
+# hand-maintained .ts at build time and the result is embedded under
+# :/i18n/fmplayeranalyzer_en.qm. Regenerate the .ts after adding tr() strings:
+#   lupdate src -ts translations/fmplayeranalyzer_en.ts -no-obsolete
+set(FM_TS_FILE ${CMAKE_SOURCE_DIR}/translations/fmplayeranalyzer_en.ts)
+set(FM_QM_FILE ${CMAKE_CURRENT_BINARY_DIR}/fmplayeranalyzer_en.qm)
+add_custom_command(
+    OUTPUT ${FM_QM_FILE}
+    COMMAND Qt6::lrelease ${FM_TS_FILE} -qm ${FM_QM_FILE}
+    DEPENDS ${FM_TS_FILE}
+    VERBATIM
+    COMMENT "Compiling translations (lrelease)"
+)
+set_source_files_properties(${FM_QM_FILE} PROPERTIES QT_RESOURCE_ALIAS fmplayeranalyzer_en.qm)
+qt_add_resources(fmplayeranalyzer "translations"
+    PREFIX "/i18n"
+    FILES ${FM_QM_FILE}
+)

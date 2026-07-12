@@ -1,5 +1,7 @@
 # FM24 Player Analyzer
 
+*🇬🇧 English · [🇩🇪 Deutsch](README.de.md)*
+
 A native companion tool for **Football Manager 2024**: import your scouted
 players from FM's HTML exports, rate every player against 65 tactical roles
 with the custom **DWRS** role-fit score, and turn a raw 80,000-player scouting
@@ -49,21 +51,24 @@ chosen on first run and can be changed later in the settings — the installer
 never touches it, so updates and uninstalls leave your saves intact.
 
 Coming from the older Streamlit version? A one-time migration wizard
-(Settings → Datenbank → *Legacy-Datenbank importieren*) converts legacy
-databases and settings into the new format.
+(Settings → Database → *Import legacy database*) converts legacy databases and
+settings into the new format.
 
 ## Quick start
 
 1. In FM, export your player view as an **HTML file** (the standard scouting
    view with a `UID` column).
-2. Open the app and go to **Dashboard → Neue Spielerdaten importieren**;
-   select the HTML file and let it import and calculate DWRS.
-3. Set **Mein Verein** (and optionally a second team) under Settings or on the
+2. Open the app and go to **Dashboard → Import new player data**; select the
+   HTML file and let it import and calculate DWRS.
+3. Set **My Club** (and optionally a second team) under Settings or on the
    dashboard.
-4. Explore: Squad Matrix, Best XI, Gap-Analyse and the Tactic Explorer.
+4. Explore: Squad Matrix, Best XI, Gap Analysis and the Tactic Explorer.
 
-> The user interface is in German. If you would like an English localisation,
-> open an issue.
+## Language
+
+The interface is in **English by default**. A **German** translation is
+available under the **Language** menu; switching language applies after a quick
+restart (your choice is remembered).
 
 ## FM export: required columns
 
@@ -77,7 +82,7 @@ Which columns map to which data is defined per FM release, so future FM
 versions can be supported by adding a new mapping — see
 [`desktop/src/core/Constants.cpp`](desktop/src/core/Constants.cpp)
 (`fm24AttributeMapping`). The version you import with is selected under
-**Settings → Football-Manager-Version** (currently *Football Manager 2024*).
+**Settings → Football Manager Version** (currently *Football Manager 2024*).
 
 **Football Manager 2024** uses these export column headers:
 

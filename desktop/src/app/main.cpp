@@ -3,6 +3,7 @@
 #include <QIcon>
 #include <QMessageBox>
 #include <QTimer>
+#include <QTranslator>
 
 #include "AppContext.h"
 #include "FirstRunDialog.h"
@@ -26,6 +27,15 @@ int main(int argc, char *argv[])
     app.setFont(appFont);
 
     fm::AppContext context;
+
+    // Language must be installed before any widgets are built (including the
+    // first-run dialog and the statically initialized navigation labels).
+    // Default English via the bundled .qm; "de" keeps the German source text.
+    QTranslator appTranslator;
+    if (context.paths().language() != QLatin1String("de")
+        && appTranslator.load(QStringLiteral(":/i18n/fmplayeranalyzer_en.qm"))) {
+        QApplication::installTranslator(&appTranslator);
+    }
 
     if (context.paths().isFirstRun()) {
         fm::FirstRunDialog dialog(fm::AppPaths::defaultDataDir());

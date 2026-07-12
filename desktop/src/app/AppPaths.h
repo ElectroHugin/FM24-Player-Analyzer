@@ -40,6 +40,11 @@ public:
     QByteArray windowGeometry() const;
     void setWindowGeometry(const QByteArray &geometry);
 
+    // UI language, app-global (host-level). "en" (default) loads the bundled
+    // English translation; "de" uses the untranslated German source strings.
+    QString language() const;
+    void setLanguage(const QString &language);
+
 private:
     std::unique_ptr<QSettings> m_settings;
 };

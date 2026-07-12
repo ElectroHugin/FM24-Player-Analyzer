@@ -109,4 +109,15 @@ void AppPaths::setWindowGeometry(const QByteArray &geometry)
     m_settings->sync();
 }
 
+QString AppPaths::language() const
+{
+    return m_settings->value(QStringLiteral("language"), QStringLiteral("en")).toString();
+}
+
+void AppPaths::setLanguage(const QString &language)
+{
+    m_settings->setValue(QStringLiteral("language"), language);
+    m_settings->sync();
+}
+
 } // namespace fm

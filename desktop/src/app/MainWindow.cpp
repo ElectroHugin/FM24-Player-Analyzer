@@ -25,10 +25,16 @@
 #include "core/Database.h"
 #include "core/Version.h"
 
+#include <QAction>
+#include <QActionGroup>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QCompleter>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPixmap>
+#include <QProcess>
 #include <QStandardItemModel>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -122,6 +128,8 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
     auto *rootLayout = new QHBoxLayout(central);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
+
+    buildMenuBar();
 
     buildSidebar();
     rootLayout->addWidget(findChild<QFrame *>(QStringLiteral("sidebar")));
@@ -311,6 +319,56 @@ void MainWindow::rebuildMenu()
 
     m_menu->blockSignals(false);
     m_menu->setCurrentRow(1); // first real entry below the section header
+}
+
+void MainWindow::buildMenuBar()
+{
+    // The only menu today is language selection ("optional im Menü auf Deutsch").
+    // Switching is restart-based: the whole UI (including statically initialized
+    // navigation labels) is built once with the translator already installed.
+    auto *languageMenu = menuBar()->addMenu(tr("&Sprache"));
+    auto *group = new QActionGroup(this);
+    group->setExclusive(true);
+
+    const QString current = m_context.paths().language();
+    struct LangOption {
+        QString code;
+        QString label; // endonym — shown the same regardless of UI language
+    };
+    for (const LangOption &option :
+         {LangOption{QStringLiteral("en"), QStringLiteral("English")},
+          LangOption{QStringLiteral("de"), QStringLiteral("Deutsch")}}) {
+        auto *action = languageMenu->addAction(option.label);
+        action->setCheckable(true);
+        action->setChecked(option.code == current
+                           || (option.code == QLatin1String("en") && current.isEmpty()));
+        group->addAction(action);
+        connect(action, &QAction::triggered, this,
+                [this, code = option.code] { changeLanguage(code); });
+    }
+}
+
+void MainWindow::changeLanguage(const QString &language)
+{
+    if (language == m_context.paths().language())
+        return;
+    m_context.paths().setLanguage(language);
+
+    const auto answer = QMessageBox::question(
+        this, tr("Sprache"),
+        tr("Die Sprache wird nach einem Neustart geändert. Jetzt neu starten?"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (answer != QMessageBox::Yes)
+        return;
+
+    // Relaunch this executable, then quit the current instance. The window
+    // geometry is persisted in closeEvent so the new instance restores it.
+    QStringList args = QApplication::arguments();
+    if (!args.isEmpty())
+        args.removeFirst(); // drop the program path itself
+    args.removeAll(QStringLiteral("--smoke"));
+    QProcess::startDetached(QApplication::applicationFilePath(), args);
+    QApplication::quit();
 }
 
 PageBase *MainWindow::createPage(const QString &pageId)
