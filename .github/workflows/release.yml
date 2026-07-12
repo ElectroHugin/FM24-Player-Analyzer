@@ -63,13 +63,18 @@ jobs:
           # new release is due — so the native-error mapping is disabled here.
           $PSNativeCommandUseErrorActionPreference = $false
           gh release view "v$version" --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $exists = ($LASTEXITCODE -eq 0)
+          if ($exists) {
             "is_new=false" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version existiert bereits - kein neuer Release."
           } else {
             "is_new=true" >> $env:GITHUB_OUTPUT
             Write-Host "Neue Version v$version - Release wird erstellt."
           }
+          # gh set $LASTEXITCODE=1 in the new-version case; GitHub's pwsh wrapper
+          # ends with `exit $LASTEXITCODE`, so without this the step would fail
+          # with the leftover code even though everything succeeded.
+          exit 0
 
       - name: Stage app with windeployqt
         if: steps.version.outputs.is_new == 'true'
