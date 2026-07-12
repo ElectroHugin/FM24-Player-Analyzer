@@ -35,17 +35,46 @@ if (-not (Test-Path $windeployqt)) { throw "windeployqt nicht gefunden: $windepl
     (Join-Path $stagingDir "fmplayeranalyzer.exe")
 if ($LASTEXITCODE -ne 0) { throw "windeployqt fehlgeschlagen." }
 
-# --- 4. Installer bauen (Inno Setup 6) ---
-$isccCandidates = @(
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe"
-)
-$iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+# --- 4. Installer bauen (Inno Setup, versionsunabhaengig gesucht) ---
+function Find-Iscc {
+    # 1. Auf dem PATH?
+    $cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    # 2. Registry: alle installierten Inno-Setup-Versionen (beliebiger Ort).
+    #    Neueste Version zuerst.
+    $regRoots = @(
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    $fromReg = Get-ItemProperty $regRoots -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like "*Inno Setup*" -and $_.InstallLocation } |
+        Sort-Object DisplayVersion -Descending |
+        ForEach-Object { Join-Path $_.InstallLocation "ISCC.exe" }
+
+    # 3. Uebliche Installationspfade als Fallback.
+    $fallback = @(
+        "$env:ProgramFiles\Inno Setup 7\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 7\ISCC.exe",
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+    )
+    foreach ($candidate in @($fromReg) + $fallback) {
+        if ($candidate -and (Test-Path $candidate)) { return $candidate }
+    }
+    return $null
+}
+
+$iscc = Find-Iscc
 if (-not $iscc) {
-    Write-Warning "Inno Setup 6 (ISCC.exe) nicht gefunden - Staging liegt unter installer\staging."
+    Write-Warning "Inno Setup (ISCC.exe) nicht gefunden - Staging liegt unter installer\staging."
     Write-Host "Portable Nutzung: den Inhalt von installer\staging einfach kopieren." -ForegroundColor Yellow
     exit 0
 }
+Write-Host "Inno Setup: $iscc" -ForegroundColor Cyan
 & $iscc "/DMyAppVersion=$version" (Join-Path $desktopDir "installer\setup.iss")
 if ($LASTEXITCODE -ne 0) { throw "ISCC fehlgeschlagen." }
 Write-Host "Installer liegt unter installer\output\" -ForegroundColor Green
