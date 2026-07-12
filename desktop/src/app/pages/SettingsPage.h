@@ -54,6 +54,8 @@ private:
     QDoubleSpinBox *m_naturalPosSpin = nullptr;
     QSpinBox *m_maxDepthRolesSpin = nullptr;
     QSpinBox *m_minLoanTalentSpin = nullptr;
+    QSpinBox *m_minLoanAgeSpin = nullptr;
+    QSpinBox *m_youthLoanOverAgeSpin = nullptr;
     QDoubleSpinBox *m_displacementSpin = nullptr;
     QDoubleSpinBox *m_dropoffSpin = nullptr;
     QDoubleSpinBox *m_wrongSideSpin = nullptr;

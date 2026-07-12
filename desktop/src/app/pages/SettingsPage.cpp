@@ -358,9 +358,15 @@ QWidget *SettingsPage::buildThresholdsTab()
     m_maxDepthRolesSpin->setRange(1, 10);
     m_minLoanTalentSpin = new QSpinBox;
     m_minLoanTalentSpin->setRange(0, 200);
+    m_minLoanAgeSpin = new QSpinBox;
+    m_minLoanAgeSpin->setRange(14, 25);
+    m_youthLoanOverAgeSpin = new QSpinBox;
+    m_youthLoanOverAgeSpin->setRange(14, 25);
     squadForm->addRow(tr("Bonus natürliche Position:"), m_naturalPosSpin);
     squadForm->addRow(tr("Max. Rollen pro Depth-Spieler:"), m_maxDepthRolesSpin);
     squadForm->addRow(tr("Min. Talent-Score für Leihe:"), m_minLoanTalentSpin);
+    squadForm->addRow(tr("Mindestalter für Leihe:"), m_minLoanAgeSpin);
+    squadForm->addRow(tr("Jugendelf-Leihe erst über Alter:"), m_youthLoanOverAgeSpin);
     layout->addWidget(squadGroup);
 
     auto *gapGroup = new QGroupBox(tr("Gap-Analyse"), content);
@@ -627,6 +633,9 @@ void SettingsPage::refresh()
         config.squadManagementSetting(QStringLiteral("max_roles_per_depth_player")));
     m_minLoanTalentSpin->setValue(
         config.squadManagementSetting(QStringLiteral("min_loan_talent_score")));
+    m_minLoanAgeSpin->setValue(config.squadManagementSetting(QStringLiteral("min_loan_age")));
+    m_youthLoanOverAgeSpin->setValue(
+        config.squadManagementSetting(QStringLiteral("youth_loan_over_age")));
     m_displacementSpin->setValue(
         config.gapAnalysisSetting(QStringLiteral("displacement_threshold")));
     m_dropoffSpin->setValue(config.gapAnalysisSetting(QStringLiteral("dropoff_threshold")));
@@ -735,6 +744,9 @@ void SettingsPage::saveAll()
                                      m_maxDepthRolesSpin->value());
     config.setSquadManagementSetting(QStringLiteral("min_loan_talent_score"),
                                      m_minLoanTalentSpin->value());
+    config.setSquadManagementSetting(QStringLiteral("min_loan_age"), m_minLoanAgeSpin->value());
+    config.setSquadManagementSetting(QStringLiteral("youth_loan_over_age"),
+                                     m_youthLoanOverAgeSpin->value());
     config.setGapAnalysisSetting(QStringLiteral("displacement_threshold"),
                                  m_displacementSpin->value());
     config.setGapAnalysisSetting(QStringLiteral("dropoff_threshold"), m_dropoffSpin->value());

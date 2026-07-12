@@ -25,6 +25,12 @@ const QHash<QString, int> &squadManagementDefaults()
     static const QHash<QString, int> defaults = {
         {QStringLiteral("max_roles_per_depth_player"), 2},
         {QStringLiteral("min_loan_talent_score"), 45},
+        // Hard floor: no loan suggestion below this age (age >= value).
+        {QStringLiteral("min_loan_age"), 17},
+        // Youth-XI regulars are additionally proposed for loan once they are
+        // strictly older than this (age > value), so they get real minutes
+        // instead of stagnating in the youth setup.
+        {QStringLiteral("youth_loan_over_age"), 18},
     };
     return defaults;
 }

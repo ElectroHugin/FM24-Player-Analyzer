@@ -45,6 +45,8 @@ void SquadBuilder::reloadConfig()
 {
     m_maxDepthRoles = m_config.squadManagementSetting(QStringLiteral("max_roles_per_depth_player"));
     m_minLoanTalent = m_config.squadManagementSetting(QStringLiteral("min_loan_talent_score"));
+    m_minLoanAge = m_config.squadManagementSetting(QStringLiteral("min_loan_age"));
+    m_youthLoanOverAge = m_config.squadManagementSetting(QStringLiteral("youth_loan_over_age"));
     m_outfielderCap = m_config.ageThreshold(QStringLiteral("outfielder"));
     m_goalkeeperCap = m_config.ageThreshold(QStringLiteral("goalkeeper"));
     m_naturalPosMultiplier = m_config.selectionBonus(QStringLiteral("natural_position"));
@@ -367,7 +369,10 @@ DevelopmentSquads SquadBuilder::calculateDevelopmentSquads(
             surplus.push_back(p);
     }
 
-    // 4. Categorize: young + promising -> loan, everyone else -> sell.
+    // 4. Categorize surplus: young + promising -> loan, everyone else -> sell.
+    //    A hard age floor applies: players below m_minLoanAge are never loaned
+    //    out. Promising ones below it are simply kept without a suggestion;
+    //    only genuinely unremarkable players are put up for sale.
     std::vector<std::pair<double, const Player *>> loanWithTalent;
     for (const Player *p : surplus) {
         const int age = effectiveAge(*p);
@@ -380,10 +385,31 @@ DevelopmentSquads SquadBuilder::calculateDevelopmentSquads(
         }
         const double bestDwrs = bestDwrsForPlayer(*p, ratings);
         const double talent = TalentEngine::talentForPlayer(m_definitions, *p, bestDwrs, cap);
+        if (talent >= m_minLoanTalent) {
+            if (age >= m_minLoanAge)
+                loanWithTalent.push_back({talent, p});
+            // else: promising but too young to loan -> keep, no suggestion.
+        } else {
+            result.sellCandidates.push_back(p);
+        }
+    }
+
+    // 4b. Youth-XI regulars older than m_youthLoanOverAge who are not kept as
+    //     first-team depth should not stagnate without minutes: propose the
+    //     promising ones for loan too. This extends the loan list — the surplus
+    //     loan candidates above stay in place, no one is removed.
+    for (const Player *p : firstTeamRemnants) {
+        if (!youthUids.contains(p->uid) || depthPlayerUids.contains(p->uid))
+            continue;
+        const int age = effectiveAge(*p);
+        if (age <= m_youthLoanOverAge) // strictly older ("über 18")
+            continue;
+        const bool gk = isGoalkeeper(*p);
+        const int cap = gk ? m_goalkeeperCap : m_outfielderCap;
+        const double bestDwrs = bestDwrsForPlayer(*p, ratings);
+        const double talent = TalentEngine::talentForPlayer(m_definitions, *p, bestDwrs, cap);
         if (talent >= m_minLoanTalent)
             loanWithTalent.push_back({talent, p});
-        else
-            result.sellCandidates.push_back(p);
     }
 
     std::stable_sort(loanWithTalent.begin(), loanWithTalent.end(),

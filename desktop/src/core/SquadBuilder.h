@@ -87,6 +87,8 @@ private:
 
     int m_maxDepthRoles = 2;
     int m_minLoanTalent = 45;
+    int m_minLoanAge = 17;
+    int m_youthLoanOverAge = 18;
     int m_outfielderCap = 20;
     int m_goalkeeperCap = 25;
     double m_naturalPosMultiplier = 1.0;
