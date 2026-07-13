@@ -3,13 +3,14 @@
 #include "PageBase.h"
 
 class QButtonGroup;
-class QComboBox;
+class QCompleter;
 class QGroupBox;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QCheckBox;
+class QStandardItemModel;
 class QWidget;
 
 namespace fm {
@@ -31,14 +32,21 @@ public:
     void refresh() override;
 
 private:
-    void rebuildPlayerCombo();
+    void updateScopeAvailability();
+    void rebuildSearchModel();
+    void onScopeChanged();
+    void selectPlayer(const QString &uid);
     void showPlayer();
     void runManualUpdate();
 
     ThemeManager &m_theme;
 
     QButtonGroup *m_scopeGroup = nullptr;
-    QComboBox *m_playerCombo = nullptr;
+    QLineEdit *m_searchEdit = nullptr;
+    QCompleter *m_searchCompleter = nullptr;
+    QStandardItemModel *m_searchModel = nullptr;
+    QString m_currentUid;
+    bool m_searchModelDirty = true;
 
     QLabel *m_nameLabel = nullptr;
     QLabel *m_vitalsLabel = nullptr;

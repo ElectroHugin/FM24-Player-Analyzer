@@ -18,6 +18,10 @@ double valueToFloat(const QString &valueStr);
 // "Erling Braut Haaland" -> "Haaland"
 QString getLastName(const QString &fullName);
 
+// Accent-/umlaut-insensitive, lowercased search key for fuzzy name matching:
+// "Müller"/"Muller" -> "muller", "Håland" -> "haland", "Gießen" -> "giessen".
+QString foldForSearch(const QString &text);
+
 // 'AM (RL), ST (C)' -> {"AM (R)", "AM (L)", "ST (C)"}. Handles "D/WB (R)"
 // and side-less bases ("DM" stays "DM", bare "ST" becomes "ST (C)").
 QSet<QString> parsePositionString(const QString &posStr);

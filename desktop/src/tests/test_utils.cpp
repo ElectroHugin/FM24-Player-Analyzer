@@ -73,6 +73,20 @@ private slots:
         QCOMPARE(fm::getLastName(QString()), QString());
     }
 
+    void foldForSearch()
+    {
+        // Diacritics fold to their base letter, both directions match.
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Müller")), QStringLiteral("muller"));
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Muller")), QStringLiteral("muller"));
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Håland")), QStringLiteral("haland"));
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Pelé")), QStringLiteral("pele"));
+        // Non-decomposing Latin letters and the ß ligature.
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Gießen")), QStringLiteral("giessen"));
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Łukasz")), QStringLiteral("lukasz"));
+        QCOMPARE(fm::foldForSearch(QStringLiteral("Ødegaard")), QStringLiteral("odegaard"));
+        QCOMPARE(fm::foldForSearch(QString()), QString());
+    }
+
     void contrastRatio()
     {
         // Black on white is the WCAG maximum, 21:1.

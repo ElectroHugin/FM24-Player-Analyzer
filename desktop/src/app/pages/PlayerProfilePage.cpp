@@ -11,7 +11,7 @@
 
 #include <QButtonGroup>
 #include <QCheckBox>
-#include <QComboBox>
+#include <QCompleter>
 #include <QDateTime>
 #include <QFile>
 #include <QFileDialog>
@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollArea>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -33,6 +34,22 @@ namespace fm {
 namespace {
 
 enum Scope { MyClub = 0, SecondTeam = 1, Scouted = 2, All = 3, NationalSquad = 4 };
+
+// Matching is done against a folded (accent-/umlaut-insensitive) key stored in
+// this role; the popup still shows the pretty DisplayRole name.
+constexpr int SearchKeyRole = Qt::UserRole + 1;
+
+// A completer whose typed query is folded the same way as the model keys, so
+// "Muller" matches "Müller" and vice versa.
+class FoldingCompleter : public QCompleter
+{
+public:
+    using QCompleter::QCompleter;
+    QStringList splitPath(const QString &path) const override
+    {
+        return {foldForSearch(path)};
+    }
+};
 
 QString pill(const QString &label, const QString &value, const QString &color,
              const QString &textColor = QStringLiteral("white"))
@@ -83,15 +100,29 @@ PlayerProfilePage::PlayerProfilePage(AppContext &context, ThemeManager &theme, Q
         m_scopeGroup->addButton(radio, id);
         selectRow->addWidget(radio);
     };
-    addScope(tr("🏠 Mein Verein"), MyClub, true);
+    addScope(tr("🏠 Mein Verein"), MyClub);
     addScope(tr("🔄 Zweitteam"), SecondTeam);
     addScope(tr("🔍 Gescoutete"), Scouted);
     addScope(tr("🌟 Nationalkader"), NationalSquad);
-    addScope(tr("🌍 Alle Spieler"), All);
+    addScope(tr("🌍 Alle Spieler"), All, true);
     selectRow->addSpacing(12);
-    m_playerCombo = new QComboBox(content);
-    m_playerCombo->setMinimumWidth(340);
-    selectRow->addWidget(m_playerCombo, 1);
+
+    // Type-to-search instead of a giant dropdown: fast even with 80k players
+    // (the completer model is built lazily on the first keystroke) and matches
+    // accent-/umlaut-insensitively.
+    m_searchEdit = new QLineEdit(content);
+    m_searchEdit->setMinimumWidth(340);
+    m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->setPlaceholderText(tr("🔎 Spieler suchen (Name eintippen)…"));
+    m_searchModel = new QStandardItemModel(this);
+    m_searchCompleter = new FoldingCompleter(m_searchModel, this);
+    m_searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);
+    m_searchCompleter->setFilterMode(Qt::MatchContains);
+    m_searchCompleter->setCompletionMode(QCompleter::PopupCompletion);
+    m_searchCompleter->setCompletionRole(SearchKeyRole);
+    m_searchCompleter->setMaxVisibleItems(12);
+    m_searchEdit->setCompleter(m_searchCompleter);
+    selectRow->addWidget(m_searchEdit, 1);
     layout->addLayout(selectRow);
 
     auto *divider = new QFrame(content);
@@ -221,16 +252,26 @@ PlayerProfilePage::PlayerProfilePage(AppContext &context, ThemeManager &theme, Q
 
     connect(m_scopeGroup, &QButtonGroup::idClicked, this, [this] {
         if (!m_updating)
-            rebuildPlayerCombo();
+            onScopeChanged();
     });
-    connect(m_playerCombo, &QComboBox::currentIndexChanged, this, [this] {
-        if (!m_updating)
-            showPlayer();
+    // Build the (potentially huge) completer model only once the user starts
+    // typing, then reuse it until the scope or the store changes.
+    connect(m_searchEdit, &QLineEdit::textEdited, this, [this] {
+        if (m_searchModelDirty)
+            rebuildSearchModel();
     });
+    connect(m_searchCompleter, QOverload<const QModelIndex &>::of(&QCompleter::activated), this,
+            [this](const QModelIndex &index) {
+                selectPlayer(index.data(Qt::UserRole).toString());
+            });
 }
 
 void PlayerProfilePage::refresh()
 {
+    // The store may have changed underneath us; the completer model is rebuilt
+    // lazily on the next keystroke.
+    m_searchModelDirty = true;
+
     // One-shot navigation from the global player search.
     const QString target = m_context.pendingProfileUid();
     if (!target.isEmpty()) {
@@ -238,22 +279,22 @@ void PlayerProfilePage::refresh()
         m_updating = true;
         m_scopeGroup->button(All)->setChecked(true);
         m_updating = false;
-        rebuildPlayerCombo();
-        const int index = m_playerCombo->findData(target);
-        if (index >= 0)
-            m_playerCombo->setCurrentIndex(index); // triggers showPlayer()
+        updateScopeAvailability();
+        if (const Player *player = m_context.store().findByUid(target))
+            m_searchEdit->setText(QStringLiteral("%1 (%2)").arg(player->name, player->club));
+        selectPlayer(target);
         return;
     }
-    rebuildPlayerCombo();
+
+    updateScopeAvailability();
+    // Keep showing the current player across data refreshes if it still exists.
+    if (m_currentUid.isEmpty() || !m_context.store().findByUid(m_currentUid))
+        m_currentUid.clear();
+    showPlayer();
 }
 
-void PlayerProfilePage::rebuildPlayerCombo()
+void PlayerProfilePage::updateScopeAvailability()
 {
-    m_updating = true;
-    const QString previous = m_playerCombo->currentData().toString();
-    m_playerCombo->clear();
-
-    const QString userClub = m_context.userClub();
     const QString secondClub = m_context.secondTeamClub();
     m_scopeGroup->button(SecondTeam)->setVisible(!secondClub.isEmpty());
 
@@ -265,8 +306,27 @@ void PlayerProfilePage::rebuildPlayerCombo()
         }
     }
     m_scopeGroup->button(NationalSquad)->setVisible(hasNationalSquad);
-    if (!hasNationalSquad && m_scopeGroup->checkedId() == NationalSquad)
-        m_scopeGroup->button(MyClub)->setChecked(true);
+    if (!hasNationalSquad && m_scopeGroup->checkedId() == NationalSquad) {
+        m_updating = true;
+        m_scopeGroup->button(All)->setChecked(true);
+        m_updating = false;
+        m_searchModelDirty = true;
+    }
+}
+
+void PlayerProfilePage::onScopeChanged()
+{
+    updateScopeAvailability();
+    m_searchModelDirty = true;
+    m_searchEdit->clear();
+    m_currentUid.clear();
+    showPlayer();
+}
+
+void PlayerProfilePage::rebuildSearchModel()
+{
+    const QString userClub = m_context.userClub();
+    const QString secondClub = m_context.secondTeamClub();
     const int scope = m_scopeGroup->checkedId();
 
     std::vector<const Player *> pool;
@@ -282,23 +342,28 @@ void PlayerProfilePage::rebuildPlayerCombo()
     std::sort(pool.begin(), pool.end(), [](const Player *a, const Player *b) {
         return getLastName(a->name).localeAwareCompare(getLastName(b->name)) < 0;
     });
+
+    m_searchModel->clear();
+    m_searchModel->setRowCount(static_cast<int>(pool.size()));
+    int row = 0;
     for (const Player *player : pool) {
-        m_playerCombo->addItem(QStringLiteral("%1 (%2)").arg(player->name, player->club),
-                               player->uid);
+        auto *item = new QStandardItem(QStringLiteral("%1 (%2)").arg(player->name, player->club));
+        item->setData(player->uid, Qt::UserRole);
+        item->setData(foldForSearch(player->name + QLatin1Char(' ') + player->club), SearchKeyRole);
+        m_searchModel->setItem(row++, 0, item);
     }
-    if (!previous.isEmpty()) {
-        const int index = m_playerCombo->findData(previous);
-        if (index >= 0)
-            m_playerCombo->setCurrentIndex(index);
-    }
-    m_updating = false;
+    m_searchModelDirty = false;
+}
+
+void PlayerProfilePage::selectPlayer(const QString &uid)
+{
+    m_currentUid = uid;
     showPlayer();
 }
 
 void PlayerProfilePage::showPlayer()
 {
-    const QString uid = m_playerCombo->currentData().toString();
-    const Player *player = m_context.store().findByUid(uid);
+    const Player *player = m_context.store().findByUid(m_currentUid);
 
     const bool hasPlayer = player != nullptr;
     m_updateBox->setVisible(hasPlayer);
@@ -483,7 +548,7 @@ void PlayerProfilePage::showPlayer()
 
 void PlayerProfilePage::runManualUpdate()
 {
-    const QString uid = m_playerCombo->currentData().toString();
+    const QString uid = m_currentUid;
     const Player *player = m_context.store().findByUid(uid);
     const QString filePath = m_updateFileEdit->text();
     if (!player || filePath.isEmpty())

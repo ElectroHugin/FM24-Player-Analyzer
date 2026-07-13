@@ -51,6 +51,30 @@ QString getLastName(const QString &fullName)
     return lastSpace < 0 ? fullName : fullName.mid(lastSpace + 1);
 }
 
+QString foldForSearch(const QString &text)
+{
+    // Accent-/umlaut-insensitive search key: decompose (NFD) so diacritics
+    // become separate combining marks, drop those marks, lowercase, and map the
+    // few Latin letters that do not decompose. "Müller"/"Muller" -> "muller",
+    // "Håland" -> "haland", "Gießen" -> "giessen".
+    const QString decomposed = text.normalized(QString::NormalizationForm_D);
+    QString out;
+    out.reserve(decomposed.size());
+    for (const QChar ch : decomposed) {
+        if (ch.category() == QChar::Mark_NonSpacing)
+            continue; // combining accent
+        out.append(ch);
+    }
+    out = out.toLower();
+    out.replace(QChar(0x00DF), QStringLiteral("ss")); // ß
+    out.replace(QChar(0x00F8), QLatin1Char('o'));     // ø
+    out.replace(QChar(0x0142), QLatin1Char('l'));     // ł
+    out.replace(QChar(0x0111), QLatin1Char('d'));     // đ
+    out.replace(QChar(0x00E6), QStringLiteral("ae")); // æ
+    out.replace(QChar(0x0153), QStringLiteral("oe")); // œ
+    return out;
+}
+
 QSet<QString> parsePositionString(const QString &posStr)
 {
     QSet<QString> result;
