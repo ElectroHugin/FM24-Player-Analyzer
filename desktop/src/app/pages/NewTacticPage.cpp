@@ -319,7 +319,13 @@ void NewTacticPage::createTactic()
                               m_context.definitions().errorString());
         return;
     }
-    m_context.reloadConfigAndDefinitions();
+    if (!m_context.reloadConfigAndDefinitions()) {
+        QMessageBox::warning(this, tr("Neue Taktik"),
+                             tr("Die Taktik wurde gespeichert, aber die Definitionen konnten "
+                                "nicht neu geladen werden: %1")
+                                 .arg(m_context.definitions().errorString()));
+        return;
+    }
 
     QMessageBox::information(this, tr("Neue Taktik"),
                              tr("Taktik '%1' wurde erstellt und ist jetzt überall "

@@ -278,30 +278,32 @@ void EditPlayerPage::save()
     const bool isClubPlayer = !m_context.userClub().isEmpty()
                               && player->club == m_context.userClub();
 
-    Player &mutablePlayer = m_context.store().at(row);
+    // Work on a copy: the in-memory store must not diverge from the database if
+    // the write fails. On success reloadFromDatabase() refreshes it.
+    Player updated = m_context.store().at(row);
     const QString newClub = m_clubEdit->text().trimmed();
     if (!newClub.isEmpty())
-        mutablePlayer.club = newClub;
+        updated.club = newClub;
     if (isClubPlayer) {
-        mutablePlayer.agreedPlayingTime = m_aptCombo->currentData().toString();
+        updated.agreedPlayingTime = m_aptCombo->currentData().toString();
         QStringList naturalPositions;
         for (int i = 0; i < m_naturalPositionsList->count(); ++i) {
             const QListWidgetItem *item = m_naturalPositionsList->item(i);
             if (item->checkState() == Qt::Checked)
                 naturalPositions << item->text();
         }
-        mutablePlayer.naturalPositions = naturalPositions;
-        mutablePlayer.primaryRole = m_primaryRoleCombo->currentData().toString();
-        mutablePlayer.preferredSide = m_preferredSideCombo->currentData().toString();
+        updated.naturalPositions = naturalPositions;
+        updated.primaryRole = m_primaryRoleCombo->currentData().toString();
+        updated.preferredSide = m_preferredSideCombo->currentData().toString();
     }
 
-    std::vector<Player> batch{mutablePlayer};
+    std::vector<Player> batch{updated};
     if (!m_context.database().upsertPlayers(batch)) {
         QMessageBox::critical(this, tr("Spieler bearbeiten"),
                               m_context.database().errorString());
         return;
     }
-    const QString name = mutablePlayer.name;
+    const QString name = updated.name;
     m_context.reloadFromDatabase();
     QMessageBox::information(this, tr("Spieler bearbeiten"),
                              tr("Änderungen für %1 gespeichert.").arg(name));

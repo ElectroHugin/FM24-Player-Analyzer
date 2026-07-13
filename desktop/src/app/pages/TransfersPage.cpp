@@ -265,7 +265,7 @@ void TransfersPage::saveSection(const Section &section)
         if (storeRow < 0)
             continue;
 
-        Player &player = m_context.store().at(storeRow);
+        const Player &current = m_context.store().at(storeRow);
         const bool transfer =
             section.table->item(row, transferColumn(youth))->checkState() == Qt::Checked;
         const bool loan =
@@ -274,17 +274,20 @@ void TransfersPage::saveSection(const Section &section)
             section.table->item(row, newClubColumn(youth))->text().trimmed();
 
         // Legacy behavior: a non-empty "new club" moves the player immediately.
-        const bool clubChanges = !newClub.isEmpty() && newClub != player.club;
-        if (transfer == player.transferStatus && loan == player.loanStatus && !clubChanges
-            && newClub == player.newClub)
+        const bool clubChanges = !newClub.isEmpty() && newClub != current.club;
+        if (transfer == current.transferStatus && loan == current.loanStatus && !clubChanges
+            && newClub == current.newClub)
             continue;
 
-        player.transferStatus = transfer;
-        player.loanStatus = loan;
-        player.newClub = newClub;
+        // Mutate a copy so the store stays in sync with the DB even if the
+        // write below fails; reloadFromDatabase() refreshes it on success.
+        Player updated = current;
+        updated.transferStatus = transfer;
+        updated.loanStatus = loan;
+        updated.newClub = newClub;
         if (clubChanges)
-            player.club = newClub;
-        batch.push_back(player);
+            updated.club = newClub;
+        batch.push_back(std::move(updated));
     }
 
     if (batch.empty()) {

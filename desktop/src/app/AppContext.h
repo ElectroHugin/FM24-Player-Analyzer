@@ -62,8 +62,10 @@ public:
     void notifySettingsChanged() { emit dataChanged(); }
 
     // Re-reads config.ini and definitions.json from disk (after the migration
-    // wizard replaced them) and refreshes the engines.
-    void reloadConfigAndDefinitions();
+    // wizard replaced them) and refreshes the engines. Returns false if the
+    // definitions failed to reload; the previously loaded definitions are kept
+    // intact in that case (errorString via definitions()).
+    bool reloadConfigAndDefinitions();
 
     // Player the profile page should show on next activation (sidebar search,
     // "open profile" actions). Consumed by the Player Profile page (M9).

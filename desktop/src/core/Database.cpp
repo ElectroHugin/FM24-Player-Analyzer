@@ -381,17 +381,28 @@ bool Database::upsertPlayers(std::vector<Player> &players)
 
         if (p.id == 0) {
             idQuery.bindValue(0, p.uid);
-            idQuery.exec();
-            if (idQuery.next())
-                p.id = idQuery.value(0).toInt();
+            if (!idQuery.exec() || !idQuery.next()) {
+                m_error = idQuery.lastError().text();
+                m_db.rollback();
+                return false;
+            }
+            p.id = idQuery.value(0).toInt();
         }
 
         deleteRoles.bindValue(0, p.id);
-        deleteRoles.exec();
+        if (!deleteRoles.exec()) {
+            m_error = deleteRoles.lastError().text();
+            m_db.rollback();
+            return false;
+        }
         for (const QString &role : p.assignedRoles) {
             insertRole.bindValue(0, p.id);
             insertRole.bindValue(1, role);
-            insertRole.exec();
+            if (!insertRole.exec()) {
+                m_error = insertRole.lastError().text();
+                m_db.rollback();
+                return false;
+            }
         }
     }
 
@@ -587,14 +598,24 @@ QList<int> Database::nationalSquadIds()
 
 bool Database::setNationalSquadIds(const QList<int> &ids)
 {
-    if (!m_db.transaction())
+    if (!m_db.transaction()) {
+        m_error = m_db.lastError().text();
         return false;
+    }
     QSqlQuery query(m_db);
-    query.exec(QStringLiteral("DELETE FROM national_squad"));
+    if (!query.exec(QStringLiteral("DELETE FROM national_squad"))) {
+        m_error = query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
     query.prepare(QStringLiteral("INSERT OR IGNORE INTO national_squad (player_id) VALUES (?)"));
     for (const int id : ids) {
         query.bindValue(0, id);
-        query.exec();
+        if (!query.exec()) {
+            m_error = query.lastError().text();
+            m_db.rollback();
+            return false;
+        }
     }
     return m_db.commit();
 }
@@ -611,14 +632,24 @@ QList<int> Database::shortlistIds()
 
 bool Database::setShortlistIds(const QList<int> &ids)
 {
-    if (!m_db.transaction())
+    if (!m_db.transaction()) {
+        m_error = m_db.lastError().text();
         return false;
+    }
     QSqlQuery query(m_db);
-    query.exec(QStringLiteral("DELETE FROM shortlist"));
+    if (!query.exec(QStringLiteral("DELETE FROM shortlist"))) {
+        m_error = query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
     query.prepare(QStringLiteral("INSERT OR IGNORE INTO shortlist (player_id) VALUES (?)"));
     for (const int id : ids) {
         query.bindValue(0, id);
-        query.exec();
+        if (!query.exec()) {
+            m_error = query.lastError().text();
+            m_db.rollback();
+            return false;
+        }
     }
     return m_db.commit();
 }
@@ -636,9 +667,33 @@ bool Database::createBackup(const QString &dbFilePath, const QString &backupsDir
         QStringLiteral("%1_backup_%2.db").arg(baseName, timestamp);
     const QString backupPath = QDir(backupsDir).filePath(backupName);
 
-    if (!QFile::copy(dbFilePath, backupPath)) {
+    // VACUUM INTO writes a transactionally consistent snapshot that already
+    // folds in any committed WAL frames. A plain file copy would miss data
+    // still living in the -wal sidecar (the DB runs in WAL mode), so a
+    // pre-import backup could silently lose the latest changes.
+    bool ok = false;
+    QString error;
+    const QString connName = QStringLiteral("backup_%1").arg(timestamp);
+    {
+        QSqlDatabase src = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+        src.setDatabaseName(dbFilePath);
+        if (!src.open()) {
+            error = src.lastError().text();
+        } else {
+            QSqlQuery query(src);
+            query.prepare(QStringLiteral("VACUUM INTO ?"));
+            query.bindValue(0, backupPath);
+            ok = query.exec();
+            if (!ok)
+                error = query.lastError().text();
+            src.close();
+        }
+    }
+    QSqlDatabase::removeDatabase(connName);
+
+    if (!ok) {
         if (errorOut)
-            *errorOut = QStringLiteral("Backup copy failed: %1").arg(backupPath);
+            *errorOut = QStringLiteral("Backup (VACUUM INTO) failed: %1").arg(error);
         return false;
     }
 

@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QFutureWatcher>
+#include <QPointer>
 #include <QProgressDialog>
 #include <QSet>
 #include <QtConcurrentRun>
@@ -39,12 +40,18 @@ void runImportPipeline(AppContext &context, QWidget *parent, const QString &file
     const DwrsEngine *engine = &context.dwrsEngine();
     const QString fmVersion = context.fmVersionId();
 
-    const auto stage = [dialog](const QString &text, int percent) {
+    // Guard against the dialog being destroyed (e.g. window closed) while the
+    // worker thread is still posting progress. qApp is a stable context object
+    // living on the GUI thread; the QPointer is re-checked there before use.
+    const auto stage = [dialogGuard = QPointer<QProgressDialog>(dialog)](const QString &text,
+                                                                         int percent) {
         QMetaObject::invokeMethod(
-            dialog,
-            [dialog, text, percent] {
-                dialog->setLabelText(text);
-                dialog->setValue(percent);
+            qApp,
+            [dialogGuard, text, percent] {
+                if (dialogGuard) {
+                    dialogGuard->setLabelText(text);
+                    dialogGuard->setValue(percent);
+                }
             },
             Qt::QueuedConnection);
     };

@@ -42,6 +42,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPointer>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -471,9 +472,9 @@ void MainWindow::startDwrsRecalc()
     // ran on the UI thread; calculateRole afterwards touches cached plans only.
     const DwrsEngine *engine = &m_context.dwrsEngine();
 
-    auto *dialog = m_recalcDialog;
     m_recalcWatcher.setFuture(QtConcurrent::run(
-        [dbFile, players = std::move(players), engine, validRoles, dialog] {
+        [dbFile, players = std::move(players), engine, validRoles,
+         dialogGuard = QPointer<QProgressDialog>(m_recalcDialog)] {
             Database db(QStringLiteral("recalc_worker"));
             if (!db.open(dbFile)) {
                 RatingsUpdater::Result result;
@@ -481,10 +482,15 @@ void MainWindow::startDwrsRecalc()
                 return result;
             }
             return RatingsUpdater::updateDwrsRatings(
-                db, players, *engine, validRoles, {}, [dialog](int current, int total) {
+                db, players, *engine, validRoles, {},
+                [dialogGuard](int current, int total) {
                     const int percent = total > 0 ? current * 100 / total : 0;
                     QMetaObject::invokeMethod(
-                        dialog, [dialog, percent] { dialog->setValue(percent); },
+                        qApp,
+                        [dialogGuard, percent] {
+                            if (dialogGuard)
+                                dialogGuard->setValue(percent);
+                        },
                         Qt::QueuedConnection);
                 });
         }));
@@ -555,6 +561,10 @@ void MainWindow::updateDbLabel()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // A background DWRS recalc still holds pointers into AppContext (the engine)
+    // and its progress dialog. Let it finish before teardown destroys them.
+    if (m_recalcWatcher.isRunning())
+        m_recalcWatcher.waitForFinished();
     m_context.paths().setWindowGeometry(saveGeometry());
     QMainWindow::closeEvent(event);
 }

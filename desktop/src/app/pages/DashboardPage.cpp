@@ -9,6 +9,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -78,6 +79,11 @@ inline QString retiredTag() { return QStringLiteral("Retired"); }
 // the user only unchecks the ones who stayed and edits the high-profile moves.
 class DepartureDialog : public QDialog
 {
+    // Not a Q_OBJECT (local class); this gives tr() a real translation context
+    // ("DepartureDialog") so its strings resolve at runtime instead of silently
+    // falling back to the QDialog context.
+    Q_DECLARE_TR_FUNCTIONS(DepartureDialog)
+
 public:
     DepartureDialog(const std::vector<const Player *> &missing, QWidget *parent)
         : QDialog(parent)

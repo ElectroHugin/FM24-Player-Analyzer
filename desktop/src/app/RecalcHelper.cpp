@@ -3,7 +3,9 @@
 #include "AppContext.h"
 #include "core/RatingsUpdater.h"
 
+#include <QCoreApplication>
 #include <QFutureWatcher>
+#include <QPointer>
 #include <QProgressDialog>
 #include <QSet>
 #include <QtConcurrentRun>
@@ -39,7 +41,8 @@ void recalcDwrsFor(AppContext &context, QWidget *parent, const QStringList &affe
                      });
 
     watcher->setFuture(QtConcurrent::run(
-        [dbFile, players = std::move(players), engine, validRoles, affected, dialog] {
+        [dbFile, players = std::move(players), engine, validRoles, affected,
+         dialogGuard = QPointer<QProgressDialog>(dialog)] {
             Database db(QStringLiteral("recalc_helper"));
             if (!db.open(dbFile)) {
                 RatingsUpdater::Result result;
@@ -53,10 +56,15 @@ void recalcDwrsFor(AppContext &context, QWidget *parent, const QStringList &affe
                     subset.push_back(static_cast<int>(i));
             }
             return RatingsUpdater::updateDwrsRatings(
-                db, players, *engine, validRoles, subset, [dialog](int current, int total) {
+                db, players, *engine, validRoles, subset,
+                [dialogGuard](int current, int total) {
                     const int percent = total > 0 ? current * 100 / total : 0;
                     QMetaObject::invokeMethod(
-                        dialog, [dialog, percent] { dialog->setValue(percent); },
+                        qApp,
+                        [dialogGuard, percent] {
+                            if (dialogGuard)
+                                dialogGuard->setValue(percent);
+                        },
                         Qt::QueuedConnection);
                 });
         }));

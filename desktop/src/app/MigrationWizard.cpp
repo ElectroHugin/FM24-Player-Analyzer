@@ -188,7 +188,12 @@ void MigrationWizard::migrationFinished()
                      QDir(m_context.paths().assetsDir()).filePath(QStringLiteral("flag.png")));
 
         // The files on disk changed under the running app — reload them.
-        m_context.reloadConfigAndDefinitions();
+        if (!m_context.reloadConfigAndDefinitions()) {
+            m_log->appendPlainText(
+                tr("WARNUNG: Die Definitionen konnten nach dem Import nicht geladen "
+                   "werden (%1). Die bisherigen Definitionen bleiben aktiv.")
+                    .arg(m_context.definitions().errorString()));
+        }
     }
 
     m_log->appendPlainText(tr("Import abgeschlossen. Die Datenbank '%1' kann jetzt "

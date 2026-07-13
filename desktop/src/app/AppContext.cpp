@@ -52,7 +52,17 @@ QStringList AppContext::availableDatabases() const
 
 bool AppContext::openDatabase(const QString &dbName, QString *errorOut)
 {
-    auto database = std::make_unique<Database>(QStringLiteral("main_%1").arg(dbName));
+    // Reopening the already-active database is a no-op: it would otherwise clash
+    // on the (name-derived) connection string with the live connection and cost
+    // a needless full reload.
+    if (m_database && m_database->isOpen() && dbName == m_config->dbName())
+        return true;
+
+    // A monotonic suffix keeps every connection name unique, so tearing down the
+    // previous Database never removes the connection the new one just opened.
+    static int connectionCounter = 0;
+    auto database = std::make_unique<Database>(
+        QStringLiteral("main_%1_%2").arg(++connectionCounter).arg(dbName));
     if (!database->open(m_paths.databaseFile(dbName))) {
         if (errorOut)
             *errorOut = database->errorString();
@@ -86,12 +96,15 @@ void AppContext::reloadEngines()
     m_squadBuilder->reloadConfig();
 }
 
-void AppContext::reloadConfigAndDefinitions()
+bool AppContext::reloadConfigAndDefinitions()
 {
     m_config->reload();
-    m_definitions->load(m_paths.definitionsFile());
+    // load() leaves the current definitions untouched if it fails, so a bad
+    // file after a migration/edit does not wipe the running configuration.
+    const bool definitionsOk = m_definitions->load(m_paths.definitionsFile());
     reloadEngines();
     emit dataChanged();
+    return definitionsOk;
 }
 
 } // namespace fm

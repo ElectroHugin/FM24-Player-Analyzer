@@ -302,7 +302,13 @@ void NewRolePage::createRole()
         return;
     }
     // Re-read from disk and refresh the engines/pages.
-    m_context.reloadConfigAndDefinitions();
+    if (!m_context.reloadConfigAndDefinitions()) {
+        QMessageBox::warning(this, tr("Neue Rolle"),
+                             tr("Die Rolle wurde gespeichert, aber die Definitionen konnten "
+                                "nicht neu geladen werden: %1")
+                                 .arg(m_context.definitions().errorString()));
+        return;
+    }
 
     QMessageBox::information(
         this, tr("Neue Rolle"),
