@@ -60,15 +60,22 @@ QString formatMillions(double value)
         .arg(QLocale().toString(value / 1'000'000.0, 'f', 2));
 }
 
-// One "player has left" resolution row.
+// One "player has left" resolution row. destination = new club, or the status
+// strings "FrA" (free agent) / "Retired".
 struct DepartureChoice {
     QString uid;
     bool left = false;
-    QString newClub;
+    QString destination;
 };
 
+// The most common outcome for a departed player: released as a free agent.
+inline QString freeAgentTag() { return QStringLiteral("FrA"); }
+inline QString retiredTag() { return QStringLiteral("Retired"); }
+
 // Modal dialog to resolve players missing from a full squad export
-// (legacy "Action Required: Player Departures" form).
+// (legacy "Action Required: Player Departures" form). Every detected player
+// defaults to "left → FrA" since that fits the yearly wave of departing youth;
+// the user only unchecks the ones who stayed and edits the high-profile moves.
 class DepartureDialog : public QDialog
 {
 public:
@@ -76,46 +83,68 @@ public:
         : QDialog(parent)
     {
         setWindowTitle(tr("Spieler-Abgänge klären"));
-        setMinimumWidth(620);
+        setMinimumWidth(640);
 
         auto *layout = new QVBoxLayout(this);
         auto *info = new QLabel(
             tr("Diese Spieler stehen in der Datenbank bei deinem Verein, waren aber "
-               "nicht in der hochgeladenen Kader-Datei. Bitte bestätige ihren Status."),
+               "nicht in der hochgeladenen Kader-Datei. Standardmäßig gelten alle als "
+               "gegangen und werden zu Free Agents (FrA) — hake die aus, die geblieben "
+               "sind, und trage bei den anderen bei Bedarf einen neuen Verein oder "
+               "'Retired' ein."),
             this);
         info->setWordWrap(true);
         layout->addWidget(info);
+
+        auto *toggleAll = new QCheckBox(tr("Alle als gegangen markieren"), this);
+        toggleAll->setChecked(true);
+        layout->addWidget(toggleAll);
 
         auto *scroll = new QScrollArea(this);
         scroll->setWidgetResizable(true);
         scroll->setFrameShape(QFrame::NoFrame);
         auto *content = new QWidget;
         auto *grid = new QGridLayout(content);
-        grid->setColumnStretch(3, 1);
+        grid->setColumnStretch(2, 1);
 
-        int row = 0;
+        auto *hName = new QLabel(QStringLiteral("<b>%1</b>").arg(tr("Spieler")), content);
+        auto *hGone = new QLabel(QStringLiteral("<b>%1</b>").arg(tr("Gegangen")), content);
+        auto *hDest = new QLabel(QStringLiteral("<b>%1</b>").arg(tr("Neuer Verein / Status")),
+                                 content);
+        grid->addWidget(hName, 0, 0);
+        grid->addWidget(hGone, 0, 1);
+        grid->addWidget(hDest, 0, 2);
+
+        int row = 1;
         for (const Player *player : missing) {
             auto *name = new QLabel(QStringLiteral("<b>%1</b> (%2)")
                                         .arg(player->name.toHtmlEscaped(),
                                              player->club.toHtmlEscaped()),
                                     content);
-            auto *keep = new QRadioButton(tr("Bleibt im Verein"), content);
-            auto *gone = new QRadioButton(tr("Hat den Verein verlassen"), content);
-            keep->setChecked(true);
-            auto *clubEdit = new QLineEdit(content);
-            clubEdit->setPlaceholderText(tr("Neuer Verein oder 'Retired'"));
-            clubEdit->setEnabled(false);
-            connect(gone, &QRadioButton::toggled, clubEdit, &QLineEdit::setEnabled);
+            auto *gone = new QCheckBox(content);
+            gone->setChecked(true);
+            auto *dest = new QComboBox(content);
+            dest->setEditable(true);
+            dest->addItem(freeAgentTag());
+            dest->addItem(retiredTag());
+            dest->setCurrentText(freeAgentTag());
+            dest->setToolTip(tr("Neuer Verein eintippen oder Status wählen "
+                                "(FrA = Free Agent, Retired = Karriereende)."));
+            connect(gone, &QCheckBox::toggled, dest, &QComboBox::setEnabled);
 
             grid->addWidget(name, row, 0);
-            grid->addWidget(keep, row, 1);
-            grid->addWidget(gone, row, 2);
-            grid->addWidget(clubEdit, row, 3);
-            m_rows.push_back({player->uid, gone, clubEdit});
+            grid->addWidget(gone, row, 1, Qt::AlignHCenter);
+            grid->addWidget(dest, row, 2);
+            m_rows.push_back({player->uid, gone, dest});
             ++row;
         }
         scroll->setWidget(content);
         layout->addWidget(scroll, 1);
+
+        connect(toggleAll, &QCheckBox::toggled, this, [this](bool checked) {
+            for (const Row &r : m_rows)
+                r.gone->setChecked(checked);
+        });
 
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                                              this);
@@ -129,15 +158,15 @@ public:
     {
         std::vector<DepartureChoice> result;
         for (const Row &row : m_rows)
-            result.push_back({row.uid, row.gone->isChecked(), row.clubEdit->text().trimmed()});
+            result.push_back({row.uid, row.gone->isChecked(), row.dest->currentText().trimmed()});
         return result;
     }
 
 private:
     struct Row {
         QString uid;
-        QRadioButton *gone;
-        QLineEdit *clubEdit;
+        QCheckBox *gone;
+        QComboBox *dest;
     };
     std::vector<Row> m_rows;
 };
@@ -816,13 +845,18 @@ void DashboardPage::resolveDepartures(const QSet<QString> &affectedUids)
 
     std::vector<Player> updates;
     for (const DepartureChoice &choice : dialog.choices()) {
-        if (!choice.left || choice.newClub.isEmpty())
-            continue;
+        if (!choice.left)
+            continue; // stayed at the club -> no change
         const Player *player = m_context.store().findByUid(choice.uid);
         if (!player)
             continue;
+        // Empty destination falls back to the free-agent default.
+        const QString destination = choice.destination.isEmpty() ? freeAgentTag()
+                                                                  : choice.destination;
+        if (destination == player->club)
+            continue;
         Player updated = *player;
-        updated.club = choice.newClub;
+        updated.club = destination;
         updates.push_back(std::move(updated));
     }
     if (updates.empty())
