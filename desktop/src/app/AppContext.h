@@ -54,6 +54,10 @@ public:
     // Re-reads players + ratings from the database into memory.
     void reloadFromDatabase();
 
+    // Re-reads only the DWRS ratings (players untouched). Cheaper than a full
+    // reload after a recalc, and keeps existing Player* references valid.
+    void reloadRatings();
+
     // Re-reads config-dependent engine state (after settings changes).
     void reloadEngines();
 
@@ -137,6 +141,9 @@ signals:
     void navigationRequested(const QString &pageId);
 
 private:
+    // Rebuilds m_latestRatings/m_ratings from dwrs_latest against the store.
+    void rebuildRatingsCache();
+
     AppPaths m_paths;
     std::unique_ptr<AppConfig> m_config;
     std::unique_ptr<Definitions> m_definitions;

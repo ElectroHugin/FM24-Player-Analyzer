@@ -656,38 +656,40 @@ void DashboardPage::rebuildSuggestions()
     };
     std::vector<Suggestion> suggestions;
 
-    const auto &players = m_context.store().players();
+    const PlayerStore &store = m_context.store();
     for (const QString &role : roles) {
         const auto roleRatings = ratings.constFind(role);
         if (roleRatings == ratings.constEnd())
             continue;
+        // Iterate only the players actually rated for this role (a few hundred),
+        // not the whole 35k store twice.
+        const QHash<QString, double> &rated = roleRatings.value();
 
         // Best rating for the role inside my own club.
         double myBest = 0.0;
+        for (auto it = rated.constBegin(); it != rated.constEnd(); ++it) {
+            const Player *player = store.findByUid(it.key());
+            if (player && player->club == userClub)
+                myBest = std::max(myBest, it.value());
+        }
+
         const Player *bestUpgrade = nullptr;
         double bestUpgradeRating = 0.0;
-        for (const Player &player : players) {
-            const auto ratingIt = roleRatings.value().constFind(player.uid);
-            if (ratingIt == roleRatings.value().constEnd())
+        for (auto it = rated.constBegin(); it != rated.constEnd(); ++it) {
+            const double rating = it.value();
+            if (rating <= myBest || rating <= bestUpgradeRating)
+                continue; // cheap numeric gate before the store lookup
+            const Player *player = store.findByUid(it.key());
+            if (!player)
                 continue;
-            if (player.club == userClub) {
-                myBest = std::max(myBest, ratingIt.value());
-            }
-        }
-        for (const Player &player : players) {
-            if (player.club == userClub || (!secondClub.isEmpty() && player.club == secondClub))
+            if (player->club == userClub || (!secondClub.isEmpty() && player->club == secondClub))
                 continue;
-            if (player.age <= 0 || player.age > maxAge)
+            if (player->age <= 0 || player->age > maxAge)
                 continue;
-            if (player.transferValue > maxValue)
+            if (player->transferValue > maxValue)
                 continue;
-            const auto ratingIt = roleRatings.value().constFind(player.uid);
-            if (ratingIt == roleRatings.value().constEnd())
-                continue;
-            if (ratingIt.value() > myBest && ratingIt.value() > bestUpgradeRating) {
-                bestUpgrade = &player;
-                bestUpgradeRating = ratingIt.value();
-            }
+            bestUpgrade = player;
+            bestUpgradeRating = rating;
         }
         if (bestUpgrade)
             suggestions.push_back({role, bestUpgrade, bestUpgradeRating, myBest});

@@ -92,6 +92,9 @@ public:
 
 private:
     bool initSchema();
+    bool createInitialSchema();          // fresh DB -> current shape
+    bool migrateV1ToV2();                 // add dwrs_latest, drop dead columns
+    static QString createDwrsLatestSql(); // shared by create + migrate paths
     bool exec(const QString &sql);
 
     QSqlDatabase m_db;

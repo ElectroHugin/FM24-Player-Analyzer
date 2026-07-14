@@ -14,12 +14,12 @@ class QListWidget;
 class QListWidgetItem;
 class QProgressDialog;
 class QStackedWidget;
-class QStandardItemModel;
 
 namespace fm {
 
 class AppContext;
 class PageBase;
+class PlayerSearchModel;
 class ThemeManager;
 
 class MainWindow : public QMainWindow
@@ -61,7 +61,7 @@ private:
     QProgressDialog *m_recalcDialog = nullptr;
 
     QCompleter *m_searchCompleter = nullptr;
-    QStandardItemModel *m_searchModel = nullptr;
+    PlayerSearchModel *m_searchModel = nullptr;
     bool m_searchModelDirty = true;
 };
 

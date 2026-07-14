@@ -22,6 +22,7 @@
 #include "pages/TacticExplorerPage.h"
 #include "pages/TransfersPage.h"
 #include "theming/ThemeManager.h"
+#include "widgets/PlayerSearchModel.h"
 #include "core/Database.h"
 #include "core/Version.h"
 
@@ -35,7 +36,6 @@
 #include <QMenuBar>
 #include <QPixmap>
 #include <QProcess>
-#include <QStandardItemModel>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -236,11 +236,12 @@ void MainWindow::buildSidebar()
     m_searchEdit->setClearButtonEnabled(true);
     layout->addWidget(m_searchEdit);
 
-    m_searchModel = new QStandardItemModel(this);
-    m_searchCompleter = new QCompleter(m_searchModel, this);
+    m_searchModel = new PlayerSearchModel(this);
+    m_searchCompleter = new FoldingCompleter(m_searchModel, this);
     m_searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);
     m_searchCompleter->setFilterMode(Qt::MatchContains);
     m_searchCompleter->setCompletionMode(QCompleter::PopupCompletion);
+    m_searchCompleter->setCompletionRole(PlayerSearchKeyRole); // fold umlauts/accents
     m_searchCompleter->setMaxVisibleItems(12);
     m_searchEdit->setCompleter(m_searchCompleter);
 
@@ -534,16 +535,16 @@ void MainWindow::updateHeader()
 
 void MainWindow::rebuildSearchModel()
 {
-    m_searchModel->clear();
     const auto &players = m_context.store().players();
-    m_searchModel->setRowCount(static_cast<int>(players.size()));
-    int row = 0;
+    std::vector<PlayerSearchModel::Entry> entries;
+    entries.reserve(players.size());
     for (const Player &player : players) {
-        auto *item = new QStandardItem(QStringLiteral("%1 — %2 · %3")
-                                           .arg(player.name, player.club, player.positionRaw));
-        item->setData(player.uid, Qt::UserRole);
-        m_searchModel->setItem(row++, 0, item);
+        entries.push_back(
+            {QStringLiteral("%1 — %2 · %3").arg(player.name, player.club, player.positionRaw),
+             player.uid,
+             foldForSearch(player.name + QLatin1Char(' ') + player.club)});
     }
+    m_searchModel->setEntries(std::move(entries));
     m_searchModelDirty = false;
 }
 

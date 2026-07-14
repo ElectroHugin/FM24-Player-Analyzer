@@ -79,7 +79,20 @@ bool AppContext::openDatabase(const QString &dbName, QString *errorOut)
 void AppContext::reloadFromDatabase()
 {
     m_store.reset(m_database->loadPlayers());
+    rebuildRatingsCache();
+    emit dataChanged();
+}
 
+void AppContext::reloadRatings()
+{
+    // Only the ratings changed (e.g. after a DWRS recalc) — the player rows are
+    // untouched, so skip reloading 35k players and just rebuild the caches.
+    rebuildRatingsCache();
+    emit dataChanged();
+}
+
+void AppContext::rebuildRatingsCache()
+{
     m_latestRatings = m_database->latestDwrsRatings();
     m_ratings.clear();
     for (auto it = m_latestRatings.constBegin(); it != m_latestRatings.constEnd(); ++it) {
@@ -87,7 +100,6 @@ void AppContext::reloadFromDatabase()
         if (row >= 0)
             m_ratings[it.key().second].insert(m_store.at(row).uid, it.value().second);
     }
-    emit dataChanged();
 }
 
 void AppContext::reloadEngines()

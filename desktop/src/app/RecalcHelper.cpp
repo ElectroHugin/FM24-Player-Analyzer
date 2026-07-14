@@ -35,7 +35,7 @@ void recalcDwrsFor(AppContext &context, QWidget *parent, const QStringList &affe
                          dialog->close();
                          dialog->deleteLater();
                          if (result.success)
-                             context.reloadFromDatabase();
+                             context.reloadRatings();
                          if (onDone)
                              onDone(result.success ? QString() : result.error);
                      });

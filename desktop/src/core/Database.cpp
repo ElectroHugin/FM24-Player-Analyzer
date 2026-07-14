@@ -18,7 +18,7 @@ namespace fm {
 
 namespace {
 
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 
 QString joinRolesForDb(const QStringList &roles)
 {
@@ -112,13 +112,32 @@ bool Database::initSchema()
     if (version >= kSchemaVersion)
         return true;
 
-    // Version 0 -> 1: initial schema.
+    if (!m_db.transaction()) {
+        m_error = m_db.lastError().text();
+        return false;
+    }
+
+    // Fresh database (version 0): create everything at the current shape.
+    // Existing v1 database: transform it in place (add dwrs_latest, drop the
+    // dead columns). The two paths never overlap — version is 0 xor 1 here.
+    const bool ok = version < 1 ? createInitialSchema() : migrateV1ToV2();
+    if (!ok || !exec(QStringLiteral("PRAGMA user_version = %1").arg(kSchemaVersion))) {
+        m_db.rollback();
+        return false;
+    }
+    return m_db.commit();
+}
+
+bool Database::createInitialSchema()
+{
     QString attrColumns;
     for (const QString &name : attrNames()) {
         const QString base = attrColumnName(name);
         attrColumns += QStringLiteral("  %1_lo INTEGER, %1_hi INTEGER,\n").arg(base);
     }
 
+    // Trailing attribute columns leave no dangling comma, so the last fixed
+    // column carries the comma and the attribute block closes the row.
     const QString createPlayers = QStringLiteral(
         "CREATE TABLE IF NOT EXISTS players (\n"
         "  id INTEGER PRIMARY KEY,\n"
@@ -146,11 +165,10 @@ bool Database::initSchema()
         "  natural_positions TEXT,\n"
         "  transfer_status INTEGER NOT NULL DEFAULT 0,\n"
         "  loan_status INTEGER NOT NULL DEFAULT 0,\n"
-        "  new_club TEXT,\n"
-        "%1"
-        "  registration TEXT,\n"
-        "  information TEXT\n"
-        ")").arg(attrColumns);
+        "  new_club TEXT%1\n"
+        ")").arg(attrColumns.isEmpty()
+                     ? QString()
+                     : QStringLiteral(",\n") + attrColumns.chopped(2)); // strip trailing ",\n"
 
     const QStringList statements = {
         createPlayers,
@@ -165,6 +183,7 @@ bool Database::initSchema()
                        " normalized REAL NOT NULL,"
                        " ts TEXT NOT NULL,"
                        " PRIMARY KEY (player_id, role, ts))"),
+        createDwrsLatestSql(),
         QStringLiteral("CREATE TABLE IF NOT EXISTS settings ("
                        " key TEXT PRIMARY KEY, value TEXT)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS national_squad ("
@@ -174,20 +193,49 @@ bool Database::initSchema()
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dwrs_history_role_ts ON dwrs_history(role, ts)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_player_roles_role ON player_roles(role)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_players_club ON players(club)"),
-        QStringLiteral("PRAGMA user_version = %1").arg(kSchemaVersion),
     };
-
-    if (!m_db.transaction()) {
-        m_error = m_db.lastError().text();
-        return false;
-    }
     for (const QString &sql : statements) {
-        if (!exec(sql)) {
-            m_db.rollback();
+        if (!exec(sql))
             return false;
-        }
     }
-    return m_db.commit();
+    return true;
+}
+
+QString Database::createDwrsLatestSql()
+{
+    // Materialized "latest rating per (player, role)": maintained on every
+    // append so latestDwrsRatings() is a plain scan instead of a MAX(ts)
+    // self-join over the whole history (v1.2.6 perf fix).
+    return QStringLiteral("CREATE TABLE IF NOT EXISTS dwrs_latest ("
+                          " player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,"
+                          " role TEXT NOT NULL,"
+                          " absolute REAL NOT NULL,"
+                          " normalized REAL NOT NULL,"
+                          " ts TEXT NOT NULL,"
+                          " PRIMARY KEY (player_id, role)) WITHOUT ROWID");
+}
+
+bool Database::migrateV1ToV2()
+{
+    // 1) Materialize the latest-ratings table and seed it from the existing
+    //    history (the one-time MAX(ts) self-join we are eliminating).
+    if (!exec(createDwrsLatestSql()))
+        return false;
+    if (!exec(QStringLiteral(
+            "INSERT INTO dwrs_latest (player_id, role, absolute, normalized, ts) "
+            "SELECT h.player_id, h.role, h.absolute, h.normalized, h.ts "
+            "FROM dwrs_history h "
+            "JOIN (SELECT player_id, role, MAX(ts) AS mt FROM dwrs_history "
+            "      GROUP BY player_id, role) m "
+            "ON h.player_id = m.player_id AND h.role = m.role AND h.ts = m.mt")))
+        return false;
+
+    // 2) Drop the never-read legacy columns (dead since the initial port).
+    if (!exec(QStringLiteral("ALTER TABLE players DROP COLUMN registration")))
+        return false;
+    if (!exec(QStringLiteral("ALTER TABLE players DROP COLUMN information")))
+        return false;
+    return true;
 }
 
 std::vector<Player> Database::loadPlayers()
@@ -461,6 +509,32 @@ bool Database::mergePlayerInto(int badPlayerId, int goodPlayerId)
         m_db.rollback();
         return false;
     }
+
+    // The good player's history just grew, so recompute its dwrs_latest rows
+    // from the merged history. The bad id's dwrs_latest is removed with its
+    // player row below (CASCADE).
+    query.prepare(QStringLiteral("DELETE FROM dwrs_latest WHERE player_id = ?"));
+    query.bindValue(0, goodPlayerId);
+    if (!query.exec()) {
+        m_error = query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
+    query.prepare(QStringLiteral(
+        "INSERT INTO dwrs_latest (player_id, role, absolute, normalized, ts) "
+        "SELECT h.player_id, h.role, h.absolute, h.normalized, h.ts "
+        "FROM dwrs_history h "
+        "JOIN (SELECT role, MAX(ts) AS mt FROM dwrs_history WHERE player_id = ? "
+        "      GROUP BY role) m ON h.role = m.role AND h.ts = m.mt "
+        "WHERE h.player_id = ?"));
+    query.bindValue(0, goodPlayerId);
+    query.bindValue(1, goodPlayerId);
+    if (!query.exec()) {
+        m_error = query.lastError().text();
+        m_db.rollback();
+        return false;
+    }
+
     query.prepare(QStringLiteral("DELETE FROM players WHERE id = ?"));
     query.bindValue(0, badPlayerId);
     if (!query.exec()) {
@@ -483,6 +557,18 @@ bool Database::appendDwrsRatings(const std::vector<DwrsEntry> &entries)
     query.prepare(QStringLiteral(
         "INSERT OR REPLACE INTO dwrs_history (player_id, role, absolute, normalized, ts) "
         "VALUES (?, ?, ?, ?, ?)"));
+
+    // Keep the materialized latest table in sync: overwrite the (player, role)
+    // row only when this entry is at least as new as the stored one, so an
+    // out-of-order append can never make dwrs_latest go backwards.
+    QSqlQuery latest(m_db);
+    latest.prepare(QStringLiteral(
+        "INSERT INTO dwrs_latest (player_id, role, absolute, normalized, ts) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(player_id, role) DO UPDATE SET "
+        "  absolute = excluded.absolute, normalized = excluded.normalized, ts = excluded.ts "
+        "WHERE excluded.ts >= dwrs_latest.ts"));
+
     for (const DwrsEntry &entry : entries) {
         query.bindValue(0, entry.playerId);
         query.bindValue(1, entry.role);
@@ -491,6 +577,16 @@ bool Database::appendDwrsRatings(const std::vector<DwrsEntry> &entries)
         query.bindValue(4, entry.timestamp);
         if (!query.exec()) {
             m_error = query.lastError().text();
+            m_db.rollback();
+            return false;
+        }
+        latest.bindValue(0, entry.playerId);
+        latest.bindValue(1, entry.role);
+        latest.bindValue(2, entry.absolute);
+        latest.bindValue(3, entry.normalized);
+        latest.bindValue(4, entry.timestamp);
+        if (!latest.exec()) {
+            m_error = latest.lastError().text();
             m_db.rollback();
             return false;
         }
@@ -503,13 +599,9 @@ LatestRatings Database::latestDwrsRatings()
     LatestRatings result;
     QSqlQuery query(m_db);
     query.setForwardOnly(true);
-    // Latest ts per (player, role), then join back — same shape as legacy.
-    query.exec(QStringLiteral(
-        "SELECT t1.player_id, t1.role, t1.absolute, t1.normalized "
-        "FROM dwrs_history t1 "
-        "INNER JOIN (SELECT player_id, role, MAX(ts) AS max_ts FROM dwrs_history "
-        "            GROUP BY player_id, role) t2 "
-        "ON t1.player_id = t2.player_id AND t1.role = t2.role AND t1.ts = t2.max_ts"));
+    // dwrs_latest already holds the latest row per (player, role), so this is a
+    // plain scan — the MAX(ts) self-join over the whole history is gone.
+    query.exec(QStringLiteral("SELECT player_id, role, absolute, normalized FROM dwrs_latest"));
     while (query.next()) {
         result.insert({query.value(0).toInt(), query.value(1).toString()},
                       {query.value(2).toDouble(), query.value(3).toDouble()});
