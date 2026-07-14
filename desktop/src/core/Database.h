@@ -3,6 +3,7 @@
 #include "Player.h"
 
 #include <QHash>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QString>
 #include <QStringList>
@@ -97,6 +98,14 @@ private:
     QString m_connectionName;
     QString m_filePath;
     QString m_error;
+
+    // In-memory cache of the settings table (queried several times per page
+    // refresh). m_settingsLoaded marks keys whose DB state is known; a loaded
+    // key absent from m_settingsCache means "no row" (returns the caller's
+    // default). Kept coherent through setSetting()/removeSetting(). Per-instance
+    // and therefore per-connection/thread, so no locking is needed.
+    QHash<QString, QString> m_settingsCache;
+    QSet<QString> m_settingsLoaded;
 };
 
 } // namespace fm

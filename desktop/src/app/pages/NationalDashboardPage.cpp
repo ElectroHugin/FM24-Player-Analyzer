@@ -3,6 +3,7 @@
 #include "../AppContext.h"
 #include "../PlayerActions.h"
 #include "../theming/ThemeManager.h"
+#include "../widgets/NumericTableItem.h"
 #include "../widgets/StrengthGridWidget.h"
 #include "PageHelpers.h"
 #include "core/Database.h"
@@ -28,29 +29,6 @@
 #include <algorithm>
 
 namespace fm {
-
-namespace {
-
-class NumericItem : public QTableWidgetItem
-{
-public:
-    NumericItem(const QString &text, double sortKey)
-        : QTableWidgetItem(text)
-        , m_key(sortKey)
-    {
-    }
-    bool operator<(const QTableWidgetItem &other) const override
-    {
-        if (const auto *numeric = dynamic_cast<const NumericItem *>(&other))
-            return m_key < numeric->m_key;
-        return QTableWidgetItem::operator<(other);
-    }
-
-private:
-    double m_key;
-};
-
-} // namespace
 
 NationalDashboardPage::NationalDashboardPage(AppContext &context, ThemeManager &theme,
                                              QWidget *parent)

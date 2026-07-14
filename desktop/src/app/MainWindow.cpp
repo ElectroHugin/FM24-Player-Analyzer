@@ -105,13 +105,6 @@ const QList<MenuEntry> &globalMenu()
     return entries;
 }
 
-// Every menu page is implemented; unknown ids fall back to a placeholder
-// that names the milestone (only reachable for future/unwired page ids).
-QString milestoneFor(const QString &)
-{
-    return QStringLiteral("M12");
-}
-
 } // namespace
 
 MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent)
@@ -416,7 +409,9 @@ PageBase *MainWindow::createPage(const QString &pageId)
         return page;
     }
 
-    // Fallback for unwired page ids (should not occur in normal use).
+    // Defensive guard: every menu page above is wired, so this is only reached
+    // for an unknown/misspelled page id. Show a neutral placeholder instead of
+    // returning nullptr (which navigateTo would dereference).
     QString label = pageId;
     for (const auto &entry : clubMenu() + nationalMenu() + globalMenu()) {
         if (entry.pageId == pageId) {
@@ -424,7 +419,7 @@ PageBase *MainWindow::createPage(const QString &pageId)
             break;
         }
     }
-    return new PlaceholderPage(m_context, label, milestoneFor(pageId), this);
+    return new PlaceholderPage(m_context, label, this);
 }
 
 void MainWindow::navigateTo(const QString &pageId)

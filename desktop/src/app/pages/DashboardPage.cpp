@@ -3,6 +3,7 @@
 #include "../AppContext.h"
 #include "../PlayerActions.h"
 #include "../theming/ThemeManager.h"
+#include "../widgets/NumericTableItem.h"
 #include "../widgets/StrengthGridWidget.h"
 #include "core/Database.h"
 #include "core/Utils.h"
@@ -34,26 +35,6 @@
 namespace fm {
 
 namespace {
-
-// Table item that displays text but sorts by a numeric key.
-class NumericItem : public QTableWidgetItem
-{
-public:
-    NumericItem(const QString &text, double sortKey)
-        : QTableWidgetItem(text)
-        , m_key(sortKey)
-    {
-    }
-    bool operator<(const QTableWidgetItem &other) const override
-    {
-        if (const auto *numeric = dynamic_cast<const NumericItem *>(&other))
-            return m_key < numeric->m_key;
-        return QTableWidgetItem::operator<(other);
-    }
-
-private:
-    double m_key;
-};
 
 QString formatMillions(double value)
 {

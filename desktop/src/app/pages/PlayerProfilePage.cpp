@@ -411,7 +411,8 @@ void PlayerProfilePage::showPlayer()
 
     // --- Top roles ---
     while (QLayoutItem *item = m_topRolesLayout->takeAt(0)) {
-        delete item->widget();
+        if (item->widget())
+            item->widget()->deleteLater();
         delete item;
     }
 
@@ -530,8 +531,7 @@ void PlayerProfilePage::showPlayer()
         LineChartWidget::Series series;
         series.name = topRoles[i].roleName;
         for (const DwrsEntry &entry : history) {
-            const QDateTime ts =
-                QDateTime::fromString(entry.timestamp, QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+            const QDateTime ts = parseDwrsTimestamp(entry.timestamp);
             if (ts.isValid())
                 series.points.append(
                     {static_cast<double>(ts.toMSecsSinceEpoch()), entry.normalized});

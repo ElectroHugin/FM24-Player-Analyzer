@@ -1965,9 +1965,9 @@ The original file is not modified.</translation>
 <context>
     <name>fm::PlaceholderPage</name>
     <message>
-        <location filename="../src/app/pages/PlaceholderPage.h" line="25"/>
-        <source>Diese Seite wird in Meilenstein %1 portiert.</source>
-        <translation>This page will be ported in milestone %1.</translation>
+        <location filename="../src/app/pages/PlaceholderPage.h" line="24"/>
+        <source>Diese Seite ist nicht verfügbar.</source>
+        <translation>This page is not available.</translation>
     </message>
 </context>
 <context>

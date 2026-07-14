@@ -106,6 +106,11 @@ QSet<QString> parsePositionString(const QString &posStr)
     return result;
 }
 
+QDateTime parseDwrsTimestamp(const QString &timestamp)
+{
+    return QDateTime::fromString(timestamp, QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+}
+
 double relativeLuminance(const QColor &color)
 {
     const auto channel = [](int v) {

@@ -64,6 +64,7 @@ add_executable(fmplayeranalyzer WIN32
     theming/ThemePresets.cpp
     widgets/CellStyleDelegate.h
     widgets/CellStyleDelegate.cpp
+    widgets/NumericTableItem.h
     widgets/Charts.h
     widgets/Charts.cpp
     widgets/PersonalityFilterWidget.h

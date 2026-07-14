@@ -558,11 +558,20 @@ std::vector<DwrsEntry> Database::dwrsHistory(const QList<int> &playerIds, const 
 
 QString Database::setting(const QString &key, const QString &defaultValue)
 {
+    if (m_settingsLoaded.contains(key))
+        return m_settingsCache.value(key, defaultValue);
+
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral("SELECT value FROM settings WHERE key = ?"));
     query.bindValue(0, key);
     query.exec();
-    return query.next() ? query.value(0).toString() : defaultValue;
+    m_settingsLoaded.insert(key);
+    if (query.next()) {
+        const QString value = query.value(0).toString();
+        m_settingsCache.insert(key, value);
+        return value;
+    }
+    return defaultValue;
 }
 
 bool Database::setSetting(const QString &key, const QString &value)
@@ -575,6 +584,8 @@ bool Database::setSetting(const QString &key, const QString &value)
         m_error = query.lastError().text();
         return false;
     }
+    m_settingsCache.insert(key, value);
+    m_settingsLoaded.insert(key);
     return true;
 }
 
@@ -583,7 +594,13 @@ bool Database::removeSetting(const QString &key)
     QSqlQuery query(m_db);
     query.prepare(QStringLiteral("DELETE FROM settings WHERE key = ?"));
     query.bindValue(0, key);
-    return query.exec();
+    if (!query.exec()) {
+        m_error = query.lastError().text();
+        return false;
+    }
+    m_settingsCache.remove(key);
+    m_settingsLoaded.insert(key); // known-absent: subsequent reads skip the DB
+    return true;
 }
 
 QList<int> Database::nationalSquadIds()

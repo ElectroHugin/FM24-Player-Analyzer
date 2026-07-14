@@ -25,8 +25,7 @@ enum Mode { SquadOverview = 0, PlayerVsPlayer = 1, Individual = 2 };
 
 qint64 toMsecs(const QString &timestamp)
 {
-    const QDateTime ts =
-        QDateTime::fromString(timestamp, QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+    const QDateTime ts = parseDwrsTimestamp(timestamp);
     return ts.isValid() ? ts.toMSecsSinceEpoch() : -1;
 }
 

@@ -2,6 +2,7 @@
 
 #include "../AppContext.h"
 #include "../widgets/CellStyleDelegate.h"
+#include "../widgets/NumericTableItem.h"
 #include "PageHelpers.h"
 #include "core/Utils.h"
 
@@ -40,25 +41,6 @@ QString stratumShort(const QString &stratum)
         {QStringLiteral("Strikers"), QStringLiteral("ST")}};
     return shorts.value(stratum, stratum);
 }
-
-class NumericItem : public QTableWidgetItem
-{
-public:
-    NumericItem(const QString &text, double sortKey)
-        : QTableWidgetItem(text)
-        , m_key(sortKey)
-    {
-    }
-    bool operator<(const QTableWidgetItem &other) const override
-    {
-        if (const auto *numeric = dynamic_cast<const NumericItem *>(&other))
-            return m_key < numeric->m_key;
-        return QTableWidgetItem::operator<(other);
-    }
-
-private:
-    double m_key;
-};
 
 // DWRS-colored cell for a 0-100 median/mean value; "–" for missing.
 NumericItem *dwrsItem(double value)

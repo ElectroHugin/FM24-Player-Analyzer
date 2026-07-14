@@ -2,6 +2,7 @@
 
 #include "../AppContext.h"
 #include "../PlayerActions.h"
+#include "../widgets/NumericTableItem.h"
 #include "../widgets/TacticPitchWidget.h"
 #include "PageHelpers.h"
 #include "core/Utils.h"
@@ -19,30 +20,6 @@
 #include <algorithm>
 
 namespace fm {
-
-namespace {
-
-// Table item that displays text but sorts by a numeric key.
-class NumericItem : public QTableWidgetItem
-{
-public:
-    NumericItem(const QString &text, double sortKey)
-        : QTableWidgetItem(text)
-        , m_key(sortKey)
-    {
-    }
-    bool operator<(const QTableWidgetItem &other) const override
-    {
-        if (const auto *numeric = dynamic_cast<const NumericItem *>(&other))
-            return m_key < numeric->m_key;
-        return QTableWidgetItem::operator<(other);
-    }
-
-private:
-    double m_key;
-};
-
-} // namespace
 
 NationalBestXiPage::NationalBestXiPage(AppContext &context, ThemeManager &theme,
                                        QWidget *parent)

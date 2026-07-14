@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QDateTime>
 #include <QSet>
 #include <QString>
 
@@ -25,6 +26,10 @@ QString foldForSearch(const QString &text);
 // 'AM (RL), ST (C)' -> {"AM (R)", "AM (L)", "ST (C)"}. Handles "D/WB (R)"
 // and side-less bases ("DM" stays "DM", bare "ST" becomes "ST (C)").
 QSet<QString> parsePositionString(const QString &posStr);
+
+// Parses a DWRS-history timestamp ("yyyy-MM-dd HH:mm:ss") into a QDateTime;
+// returns an invalid QDateTime for unparseable/empty input.
+QDateTime parseDwrsTimestamp(const QString &timestamp);
 
 // --- Color helpers (WCAG + cell styling), ported from utils.py ---
 
