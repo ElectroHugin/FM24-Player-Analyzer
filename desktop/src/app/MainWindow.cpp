@@ -170,8 +170,15 @@ MainWindow::MainWindow(AppContext &context, ThemeManager &theme, QWidget *parent
         m_searchModelDirty = true;
         updateDbLabel();
         updateHeader();
-        if (auto *page = qobject_cast<PageBase *>(m_stack->currentWidget()))
-            page->refresh();
+        // The store was just replaced; drop stale Player* held by hidden pages
+        // before anything can access them (they rebuild on next activation).
+        auto *current = qobject_cast<PageBase *>(m_stack->currentWidget());
+        for (PageBase *page : std::as_const(m_pages)) {
+            if (page != current)
+                page->releaseStoreRows();
+        }
+        if (current)
+            current->refresh();
     });
     connect(&m_recalcWatcher, &QFutureWatcher<RatingsUpdater::Result>::finished, this, [this] {
         const RatingsUpdater::Result result = m_recalcWatcher.result();

@@ -386,6 +386,15 @@ QList<PlayerColumn> SquadMatrixPage::buildColumns(bool clubTable, bool withShort
     return columns;
 }
 
+void SquadMatrixPage::releaseStoreRows()
+{
+    for (TableSection *section : {&m_clubSection, &m_secondSection, &m_scoutedSection}) {
+        if (section->model)
+            section->model->setRows({});
+    }
+    m_scoutedPool.clear(); // also caches raw Player*
+}
+
 void SquadMatrixPage::refresh()
 {
     m_updating = true;

@@ -170,6 +170,14 @@ QList<PlayerColumn> NationalSquadMatrixPage::buildColumns() const
     return columns;
 }
 
+void NationalSquadMatrixPage::releaseStoreRows()
+{
+    for (Section *section : {&m_squadSection, &m_poolSection}) {
+        if (section->model)
+            section->model->setRows({});
+    }
+}
+
 void NationalSquadMatrixPage::refresh()
 {
     m_updating = true;

@@ -28,6 +28,7 @@ public:
     explicit NationalSquadMatrixPage(AppContext &context, QWidget *parent = nullptr);
 
     void refresh() override;
+    void releaseStoreRows() override;
 
 private:
     struct Section {

@@ -28,6 +28,7 @@ public:
     explicit AssignRolesPage(AppContext &context, QWidget *parent = nullptr);
 
     void refresh() override;
+    void releaseStoreRows() override;
 
 private:
     void rebuildFilters();

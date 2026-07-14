@@ -44,7 +44,16 @@ void DwrsEngine::reloadConfig()
 
     const QStringList gkRoleList = m_definitions.gkRoles();
     m_gkRoles = QSet<QString>(gkRoleList.begin(), gkRoleList.end());
+
+    // Build every role's plan up front, on this (UI) thread. Import/recalc
+    // workers share this engine and call calculateRole() from their own thread;
+    // with the cache fully warmed they only ever *read* m_planCache, so the
+    // (previously racy) lazy cache-miss insert never happens under a worker.
     m_planCache.clear();
+    const QStringList roles = m_definitions.validRoles();
+    m_planCache.reserve(roles.size());
+    for (const QString &role : roles)
+        m_planCache.insert(role, buildPlan(role));
 }
 
 DwrsEngine::RolePlan DwrsEngine::buildPlan(const QString &role) const
@@ -110,6 +119,10 @@ DwrsEngine::RolePlan DwrsEngine::buildPlan(const QString &role) const
 
 const DwrsEngine::RolePlan &DwrsEngine::planFor(const QString &role) const
 {
+    // Every valid role is pre-built in reloadConfig(), so this is a pure lookup
+    // for anything a worker computes. The lazy insert only fires for a role
+    // outside validRoles() — an ad-hoc single-player calculate() on the UI
+    // thread, never concurrent with a worker.
     auto it = m_planCache.find(role);
     if (it == m_planCache.end())
         it = m_planCache.insert(role, buildPlan(role));

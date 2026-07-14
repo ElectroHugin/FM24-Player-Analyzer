@@ -151,6 +151,14 @@ QString RoleAnalysisPage::selectedRole() const
     return m_roleCombo->currentData().toString();
 }
 
+void RoleAnalysisPage::releaseStoreRows()
+{
+    for (Group *group : {&m_myClub, &m_secondTeam, &m_scouted}) {
+        if (group->model)
+            group->model->setRows({});
+    }
+}
+
 void RoleAnalysisPage::refresh()
 {
     m_updating = true;
