@@ -3,6 +3,7 @@
 #include "../AppContext.h"
 #include "../RecalcHelper.h"
 #include "../widgets/Charts.h"
+#include "../widgets/PlayerSearchModel.h"
 #include "core/Constants.h"
 #include "core/HtmlImporter.h"
 #include "core/RoleAnalysis.h"
@@ -24,7 +25,6 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollArea>
-#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -34,22 +34,6 @@ namespace fm {
 namespace {
 
 enum Scope { MyClub = 0, SecondTeam = 1, Scouted = 2, All = 3, NationalSquad = 4 };
-
-// Matching is done against a folded (accent-/umlaut-insensitive) key stored in
-// this role; the popup still shows the pretty DisplayRole name.
-constexpr int SearchKeyRole = Qt::UserRole + 1;
-
-// A completer whose typed query is folded the same way as the model keys, so
-// "Muller" matches "Müller" and vice versa.
-class FoldingCompleter : public QCompleter
-{
-public:
-    using QCompleter::QCompleter;
-    QStringList splitPath(const QString &path) const override
-    {
-        return {foldForSearch(path)};
-    }
-};
 
 QString pill(const QString &label, const QString &value, const QString &color,
              const QString &textColor = QStringLiteral("white"))
@@ -114,12 +98,12 @@ PlayerProfilePage::PlayerProfilePage(AppContext &context, ThemeManager &theme, Q
     m_searchEdit->setMinimumWidth(340);
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->setPlaceholderText(tr("🔎 Spieler suchen (Name eintippen)…"));
-    m_searchModel = new QStandardItemModel(this);
+    m_searchModel = new PlayerSearchModel(this);
     m_searchCompleter = new FoldingCompleter(m_searchModel, this);
     m_searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);
     m_searchCompleter->setFilterMode(Qt::MatchContains);
     m_searchCompleter->setCompletionMode(QCompleter::PopupCompletion);
-    m_searchCompleter->setCompletionRole(SearchKeyRole);
+    m_searchCompleter->setCompletionRole(PlayerSearchKeyRole);
     m_searchCompleter->setMaxVisibleItems(12);
     m_searchEdit->setCompleter(m_searchCompleter);
     selectRow->addWidget(m_searchEdit, 1);
@@ -343,15 +327,17 @@ void PlayerProfilePage::rebuildSearchModel()
         return getLastName(a->name).localeAwareCompare(getLastName(b->name)) < 0;
     });
 
-    m_searchModel->clear();
-    m_searchModel->setRowCount(static_cast<int>(pool.size()));
-    int row = 0;
+    // One model reset instead of one QStandardItem + dataChanged per player:
+    // the completer re-filters on every source-model change, so item-wise
+    // population froze the UI for tens of seconds on large saves.
+    std::vector<PlayerSearchModel::Entry> entries;
+    entries.reserve(pool.size());
     for (const Player *player : pool) {
-        auto *item = new QStandardItem(QStringLiteral("%1 (%2)").arg(player->name, player->club));
-        item->setData(player->uid, Qt::UserRole);
-        item->setData(foldForSearch(player->name + QLatin1Char(' ') + player->club), SearchKeyRole);
-        m_searchModel->setItem(row++, 0, item);
+        entries.push_back({QStringLiteral("%1 (%2)").arg(player->name, player->club),
+                           player->uid,
+                           foldForSearch(player->name + QLatin1Char(' ') + player->club)});
     }
+    m_searchModel->setEntries(std::move(entries));
     m_searchModelDirty = false;
 }
 

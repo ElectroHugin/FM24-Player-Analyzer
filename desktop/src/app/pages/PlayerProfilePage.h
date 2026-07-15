@@ -10,13 +10,13 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QCheckBox;
-class QStandardItemModel;
 class QWidget;
 
 namespace fm {
 
 struct Player;
 class LineChartWidget;
+class PlayerSearchModel;
 class ThemeManager;
 
 // Player profile: vitals, status tags, top roles, talent projection,
@@ -44,7 +44,7 @@ private:
     QButtonGroup *m_scopeGroup = nullptr;
     QLineEdit *m_searchEdit = nullptr;
     QCompleter *m_searchCompleter = nullptr;
-    QStandardItemModel *m_searchModel = nullptr;
+    PlayerSearchModel *m_searchModel = nullptr;
     QString m_currentUid;
     bool m_searchModelDirty = true;
 

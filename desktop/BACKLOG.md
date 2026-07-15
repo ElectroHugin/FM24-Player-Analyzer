@@ -40,6 +40,11 @@ Kurzfassung der Umsetzung:
   `registration`/`information` per `ALTER TABLE DROP COLUMN` entfernt.
 - **#20** Milestone-Placeholder → bewusster „unknown pageId"-Guard.
 - **#21** Widget-Aufräumen auf `deleteLater()` vereinheitlicht.
+- **Nachtrag zu #14 (v1.2.9):** Profilseiten-Suche ebenfalls auf
+  `PlayerSearchModel` umgestellt. Der alte `QStandardItemModel`-Aufbau feuerte
+  pro Spieler ein `dataChanged`, worauf der Completer jedes Mal mit dem alten
+  Suchtext neu filterte (O(n²) → 20–30+ s Freeze beim ersten Tippen nach
+  jedem Reload/Scope-Wechsel). Jetzt ein einziger Modell-Reset (<0,5 s).
 
 ---
 
