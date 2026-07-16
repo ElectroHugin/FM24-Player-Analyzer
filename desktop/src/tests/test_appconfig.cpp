@@ -62,6 +62,29 @@ private slots:
         QCOMPARE(reloaded.gapAnalysisSetting(QStringLiteral("dropoff_threshold")), 6.5);
     }
 
+    void htmlExportDirFallsBackToDefault()
+    {
+        QTemporaryDir dir;
+        AppConfig config(dir.filePath(QStringLiteral("config.ini")));
+
+        // Unset -> automatic default (Documents-based, never empty).
+        QCOMPARE(config.htmlExportDir(), QString());
+        QCOMPARE(config.effectiveHtmlExportDir(), AppConfig::defaultHtmlExportDir());
+        QVERIFY(!config.effectiveHtmlExportDir().isEmpty());
+
+        // Existing configured folder wins.
+        config.setHtmlExportDir(dir.path());
+        QCOMPARE(config.effectiveHtmlExportDir(), dir.path());
+
+        // A configured folder that does not exist falls back to the default.
+        config.setHtmlExportDir(dir.filePath(QStringLiteral("does-not-exist")));
+        QCOMPARE(config.effectiveHtmlExportDir(), AppConfig::defaultHtmlExportDir());
+
+        // Clearing removes the key again.
+        config.setHtmlExportDir(QString());
+        QCOMPARE(config.htmlExportDir(), QString());
+    }
+
     void readsLegacyStyleIni()
     {
         // A user's tuned legacy config.ini must be readable unchanged.

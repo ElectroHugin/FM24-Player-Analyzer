@@ -9,6 +9,7 @@
 
 #include <QColorDialog>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -27,6 +28,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -129,6 +131,45 @@ QWidget *SettingsPage::buildClubTab()
     versionHint->setWordWrap(true);
     versionHint->setObjectName(QStringLiteral("kpiCaption"));
     versionForm->addRow(versionHint);
+
+    m_importDirEdit = new QLineEdit;
+    m_importDirEdit->setMinimumWidth(260);
+    m_importDirEdit->setPlaceholderText(
+        QDir::toNativeSeparators(AppConfig::defaultHtmlExportDir()));
+    auto *importDirBrowse = new QPushButton(tr("Durchsuchen…"));
+    auto *importDirOpen = new QPushButton(tr("Im Explorer öffnen"));
+    auto *importDirButtons = new QHBoxLayout;
+    importDirButtons->addWidget(m_importDirEdit, 1);
+    importDirButtons->addWidget(importDirBrowse);
+    importDirButtons->addWidget(importDirOpen);
+    auto *importDirRow = new QWidget;
+    importDirRow->setLayout(importDirButtons);
+    versionForm->addRow(tr("Standardordner für HTML-Import:"), importDirRow);
+    auto *importDirHint = new QLabel(
+        tr("Startordner der Dateiauswahl beim Hochladen von HTML-Exporten. Leer = "
+           "automatisch: 'Sports Interactive\\Football Manager 2024' im "
+           "Dokumentenordner des aktuellen Nutzers (falls vorhanden)."),
+        versionGroup);
+    importDirHint->setWordWrap(true);
+    importDirHint->setObjectName(QStringLiteral("kpiCaption"));
+    versionForm->addRow(importDirHint);
+
+    // The effective folder right now: the (possibly unsaved) edit content when
+    // it points to an existing folder, otherwise the automatic default.
+    const auto currentImportDir = [this] {
+        const QString text = m_importDirEdit->text().trimmed();
+        return (!text.isEmpty() && QDir(text).exists()) ? text
+                                                        : AppConfig::defaultHtmlExportDir();
+    };
+    connect(importDirBrowse, &QPushButton::clicked, this, [this, currentImportDir] {
+        const QString dir = QFileDialog::getExistingDirectory(
+            this, tr("Standardordner für HTML-Import wählen"), currentImportDir());
+        if (!dir.isEmpty())
+            m_importDirEdit->setText(QDir::toNativeSeparators(dir));
+    });
+    connect(importDirOpen, &QPushButton::clicked, this, [currentImportDir] {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(currentImportDir()));
+    });
     layout->addWidget(versionGroup);
 
     auto *clubGroup = new QGroupBox(tr("Vereins-Zuordnung"), content);
@@ -570,6 +611,7 @@ void SettingsPage::refresh()
     // --- Club tab ---
     const int versionIndex = m_fmVersionCombo->findData(m_context.fmVersionId());
     m_fmVersionCombo->setCurrentIndex(versionIndex >= 0 ? versionIndex : 0);
+    m_importDirEdit->setText(QDir::toNativeSeparators(config.htmlExportDir()));
 
     QSet<QString> clubSet;
     for (const Player &player : m_context.store().players()) {
@@ -699,6 +741,7 @@ void SettingsPage::saveAll()
             db.setSetting(key, value);
     };
     saveSetting(QStringLiteral("fm_version"), m_fmVersionCombo->currentData().toString());
+    config.setHtmlExportDir(m_importDirEdit->text().trimmed());
     saveSetting(QStringLiteral("user_club"), m_userClubCombo->currentText());
     saveSetting(QStringLiteral("second_team_club"), m_secondClubCombo->currentText());
     saveSetting(QStringLiteral("club_country_code"),

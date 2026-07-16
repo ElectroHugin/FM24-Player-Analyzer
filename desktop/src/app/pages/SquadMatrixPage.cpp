@@ -173,12 +173,20 @@ SquadMatrixPage::SquadMatrixPage(AppContext &context, QWidget *parent)
         m_maxAgeLabel->setText(tr("%1 Jahre").arg(m_maxAgeSlider->value()));
         scoutedRebuild();
     });
-    connect(m_maxValueSlider, &QSlider::valueChanged, this, [this, scoutedRebuild] {
-        m_maxValueLabel->setText(millions(m_maxValueSlider->value() * 500'000.0));
-        scoutedRebuild();
-    });
+    const auto updateMaxValueLabel = [this] {
+        // Right end of the slider means "no cap" so that "Not for Sale"
+        // players (kUnbuyableValue) stay visible.
+        m_maxValueLabel->setText(m_maxValueSlider->value() >= m_maxValueSlider->maximum()
+                                     ? tr("Kein Limit")
+                                     : millions(m_maxValueSlider->value() * 500'000.0));
+    };
+    connect(m_maxValueSlider, &QSlider::valueChanged, this,
+            [updateMaxValueLabel, scoutedRebuild] {
+                updateMaxValueLabel();
+                scoutedRebuild();
+            });
     m_maxAgeLabel->setText(tr("%1 Jahre").arg(m_maxAgeSlider->value()));
-    m_maxValueLabel->setText(millions(m_maxValueSlider->value() * 500'000.0));
+    updateMaxValueLabel();
 }
 
 void SquadMatrixPage::buildSection(TableSection *section, const QString &title, QWidget *parent,
@@ -580,6 +588,9 @@ void SquadMatrixPage::rebuildScoutedOnly()
     const int minDwrs = m_dwrsMinSpin->value();
     const int maxDwrs = m_dwrsMaxSpin->value();
     const int maxAge = m_maxAgeSlider->value();
+    // Slider at the right end = no value cap; otherwise "Not for Sale"
+    // players (transferValue = kUnbuyableValue) could never pass the filter.
+    const bool noValueCap = m_maxValueSlider->value() >= m_maxValueSlider->maximum();
     const double maxValue = m_maxValueSlider->value() * 500'000.0;
 
     std::vector<const Player *> rows;
@@ -593,7 +604,8 @@ void SquadMatrixPage::rebuildScoutedOnly()
         const QHash<QString, double> roleRatings =
             roleFilter ? ratings.value(filterKey) : QHash<QString, double>();
         for (const Player *player : m_scoutedPool) {
-            if (player->age > maxAge || player->transferValue > maxValue)
+            if (player->age > maxAge
+                || (!noValueCap && player->transferValue > maxValue))
                 continue;
             if (roleFilter) {
                 const auto it = roleRatings.constFind(player->uid);

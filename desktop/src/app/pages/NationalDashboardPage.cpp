@@ -83,7 +83,7 @@ NationalDashboardPage::NationalDashboardPage(AppContext &context, ThemeManager &
     layout->addWidget(importBox);
     connect(browseButton, &QPushButton::clicked, this, [this] {
         const QString path = QFileDialog::getOpenFileName(
-            this, tr("FM-HTML-Export auswählen"), QString(),
+            this, tr("FM-HTML-Export auswählen"), m_context.config().effectiveHtmlExportDir(),
             tr("HTML-Dateien (*.html *.htm);;Alle Dateien (*)"));
         if (path.isEmpty())
             return;

@@ -62,6 +62,16 @@ public:
     QHash<QString, QString> themeSettings() const;
     void saveThemeSettings(const QHash<QString, QString> &settings);
 
+    // [Import] — user-configured default folder for the FM-HTML-export file
+    // dialogs. Empty = automatic default (see defaultHtmlExportDir).
+    QString htmlExportDir() const;
+    void setHtmlExportDir(const QString &dir);
+    // "<Documents>/Sports Interactive/Football Manager 2024" of the current
+    // user when that folder exists, otherwise the Documents folder itself.
+    static QString defaultHtmlExportDir();
+    // Configured folder if set and existing, otherwise defaultHtmlExportDir().
+    QString effectiveHtmlExportDir() const;
+
 private:
     void ensureDefaults();
     static QString iniKey(const QString &name); // "Star Player" -> "star_player"

@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
+#include <QStandardPaths>
 
 namespace fm {
 
@@ -283,6 +284,39 @@ void AppConfig::saveThemeSettings(const QHash<QString, QString> &settings)
         m_settings->setValue(it.key(), it.value());
     m_settings->endGroup();
     m_settings->sync();
+}
+
+QString AppConfig::htmlExportDir() const
+{
+    return m_settings->value(QStringLiteral("Import/html_export_dir")).toString();
+}
+
+void AppConfig::setHtmlExportDir(const QString &dir)
+{
+    // Empty means "automatic default"; keep the file clean in that case so the
+    // default stays dynamic (it depends on the current user's Documents dir).
+    if (dir.isEmpty())
+        m_settings->remove(QStringLiteral("Import/html_export_dir"));
+    else
+        m_settings->setValue(QStringLiteral("Import/html_export_dir"), dir);
+    m_settings->sync();
+}
+
+QString AppConfig::defaultHtmlExportDir()
+{
+    const QString documents =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    const QString fmDir =
+        documents + QStringLiteral("/Sports Interactive/Football Manager 2024");
+    return QDir(fmDir).exists() ? fmDir : documents;
+}
+
+QString AppConfig::effectiveHtmlExportDir() const
+{
+    const QString configured = htmlExportDir();
+    if (!configured.isEmpty() && QDir(configured).exists())
+        return configured;
+    return defaultHtmlExportDir();
 }
 
 } // namespace fm
